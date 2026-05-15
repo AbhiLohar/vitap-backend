@@ -205,6 +205,21 @@ async def profile(username: str):
         return {"profile": {}}
 
 
+# ─── Session Cookies ─────────────────────────────────────
+@app.get("/session-cookies")
+async def session_cookies(username: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        # Expose all cookies attached to the httpx client
+        cookies = dict(session.client.cookies)
+        return {"cookies": cookies}
+    except Exception as e:
+        print(f"Session Cookies Error: {e}")
+        return {"cookies": {}}
+
+
 # ─── Curriculum ──────────────────────────────────────────
 @app.get("/curriculum")
 async def curriculum(username: str):

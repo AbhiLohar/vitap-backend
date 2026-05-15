@@ -695,22 +695,39 @@ class VTOPSession:
         soup = BeautifulSoup(html, "lxml")
         data = []
         
+        last_course_code = ""
+        last_subject = ""
+        
         tables = soup.find_all("table")
         for table in tables:
             rows = table.find_all("tr")
             for row in rows:
-                cols = row.find_all("td")
-                if len(cols) >= 3:
-                    texts = [c.get_text(strip=True) for c in cols]
-                    if any(h in texts[0].lower() for h in ["sl", "serial", "sno", "course"]):
-                        continue
+                cols = row.find_all(["td", "th"])
+                texts = [c.get_text(separator=" ", strip=True) for c in cols]
+                
+                if not texts or len(texts) < 3:
+                    continue
                     
+                # Ignore header rows
+                if any(h in texts[0].lower() for h in ["sl", "serial", "sno"]):
+                    continue
+                
+                # Outer course row detection: [1, CSE1001, Intro to CS, ...]
+                if len(texts[1]) >= 4 and texts[1][:3].isalpha() and any(char.isdigit() for char in texts[1]):
+                    # It's a course code
+                    last_course_code = texts[1]
+                    last_subject = texts[2] if len(texts) > 2 else ""
+                    # Sometimes marks are directly in this row (very rare), but usually it's just course info
+                
+                # Inner marks row detection: [1, CAT-1, 50, 45, ...]
+                exam_types = ["CAT", "FAT", "QUIZ", "ASSESSMENT", "MID", "TERM", "LAB", "CHALLENGE", "PROJECT", "SEMINAR"]
+                if len(texts) >= 5 and any(ext in texts[1].upper() for ext in exam_types):
                     data.append({
-                        "course_code": texts[0] if len(texts) > 0 else "",
-                        "subject": texts[1] if len(texts) > 1 else "",
-                        "exam_type": texts[2] if len(texts) > 2 else "",
-                        "marks": texts[3] if len(texts) > 3 else "",
-                        "total": texts[4] if len(texts) > 4 else "",
+                        "course_code": last_course_code,
+                        "subject": last_subject,
+                        "exam_type": texts[1],
+                        "total": texts[2],
+                        "marks": texts[3],
                         "status": texts[5] if len(texts) > 5 else "",
                     })
         
@@ -819,15 +836,22 @@ class VTOPSession:
                 cols = row.find_all("td")
                 if len(cols) >= 6:
                     texts = [c.get_text(strip=True) for c in cols]
-                    # VTOP Exam Schedule Table can have varying columns (9 to 11)
-                    # We look at the columns from the end to find Venue and Times
-                    texts = [c.get_text(strip=True) for c in cols]
                     if any(h in texts[0].lower() for h in ["sl", "serial", "sno"]):
                         continue
                         
                     n = len(texts)
-                    # Common structure: SlNo(0), Code(1), Title(2), Type(3), ClassID(4), Slot(5), Date(6), Session(7)
-                    # Then remaining columns are: Reporting, [ExamTime], Venue
+                    raw_venue = texts[n-1] if n > 8 else "-"
+                    venue = raw_venue
+                    seat_no = "-"
+                    if "-" in raw_venue and len(raw_venue) > 5:
+                        parts = raw_venue.split("-")
+                        if len(parts) >= 3 and parts[-1].isdigit():
+                            if len(parts) >= 4 and len(parts[-2]) <= 2 and parts[-2].isalpha():
+                                seat_no = parts[-2] + "-" + parts[-1]
+                                venue = "-".join(parts[:-2])
+                            else:
+                                seat_no = parts[-1]
+                                venue = "-".join(parts[:-1])
                     
                     data.append({
                         "course_code": texts[1] if n > 1 else "",
@@ -837,8 +861,8 @@ class VTOPSession:
                         "slot": texts[5] if n > 5 else "",
                         "date": texts[6] if n > 6 else "-",
                         "session": texts[7] if n > 7 else "-",
-                        # Map from the end of the list
-                        "venue": texts[n-1] if n > 8 else "-",
+                        "venue": venue,
+                        "seat_no": seat_no,
                         "exam_time": texts[n-2] if n > 10 else "-",
                         "reporting_time": texts[n-2] if n == 10 else (texts[n-3] if n == 11 else (texts[8] if n > 8 else "-")),
                     })
@@ -848,9 +872,10 @@ class VTOPSession:
                     data.append({
                         "course_code": texts[0],
                         "subject": texts[1],
-                        "slot": texts[2],
-                        "date": texts[3],
-                        "time": texts[4],
+                        "date": texts[2],
+                        "session": texts[3],
+                        "venue": texts[4],
+                        "seat_no": "-"
                     })
         
         return data
