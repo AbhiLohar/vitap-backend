@@ -124,18 +124,25 @@ def _find_captcha_b64(html: str) -> str:
 def _find_login_error(html: str) -> str:
     """Extract login error message from error page."""
     soup = BeautifulSoup(html, "lxml")
-    # Look for common error containers
-    for sel in ["#errMsg", ".alert-danger", ".error-msg", "p.text-danger"]:
+    # Try common VTOP error containers first
+    for sel in ["#errMsg", "#errorMsg", ".alert-danger", ".error-msg", "p.text-danger"]:
         el = soup.select_one(sel)
         if el and el.get_text(strip=True):
-            return el.get_text(strip=True)
+            err_text = el.get_text(strip=True)
+            if "captcha" in err_text.lower():
+                return "Invalid Captcha"
+            return err_text
+            
     # Check body text for known errors
     text = soup.get_text(separator=" ", strip=True).lower()
     if "invalid captcha" in text:
         return "Invalid Captcha"
     if "invalid" in text and ("user" in text or "password" in text or "credential" in text):
         return "Invalid Credentials"
-    return "Login failed"
+    if "not available" in text and "user" in text:
+        return "User Id Not Available"
+        
+    return "Login failed (Unknown Error)"
 
 
 # ── VTOP Session Class ─────────────────────────────────────
