@@ -697,6 +697,7 @@ class VTOPSession:
         
         last_course_code = ""
         last_subject = ""
+        last_faculty = ""
         
         tables = soup.find_all("table")
         for table in tables:
@@ -713,11 +714,20 @@ class VTOPSession:
                     continue
                 
                 # Outer course row detection: [1, CSE1001, Intro to CS, ...]
+                # Typically has 11+ columns in the main table
                 if len(texts[1]) >= 4 and texts[1][:3].isalpha() and any(char.isdigit() for char in texts[1]):
                     # It's a course code
                     last_course_code = texts[1]
                     last_subject = texts[2] if len(texts) > 2 else ""
-                    # Sometimes marks are directly in this row (very rare), but usually it's just course info
+                    
+                    # Faculty name is usually in one of the last few columns of the course row
+                    # Sl.No(0), Code(1), Title(2), Type(3), Cat(4), Cred(5), Opt(6), ClassID(7), Slot(8), Venue(9), Faculty(10)
+                    if len(texts) >= 11:
+                        raw_faculty = texts[10]
+                        last_faculty = raw_faculty.split("-")[0].strip().upper()
+                    elif len(texts) >= 9:
+                        # Fallback for different VTOP versions
+                        last_faculty = texts[-1].split("-")[0].strip().upper()
                 
                 # Inner marks row detection: [1, CAT-1, 50, 45, ...]
                 exam_types = ["CAT", "FAT", "QUIZ", "ASSESSMENT", "MID", "TERM", "LAB", "CHALLENGE", "PROJECT", "SEMINAR"]
@@ -727,6 +737,7 @@ class VTOPSession:
                     data.append({
                         "course_code": last_course_code,
                         "subject": last_subject,
+                        "faculty": last_faculty or "FACULTY NAME",
                         "exam_type": texts[1],
                         "type": "Lab" if is_lab else "Theory",
                         "total": texts[2],
