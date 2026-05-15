@@ -283,20 +283,36 @@ class VTOPSession:
                 await asyncio.sleep(1)
         
         raise Exception("Login failed after maximum captcha retries. Please check your credentials or try again.")
-    
+        
     async def submit_otp(self, otp: str) -> str:
         """Submit OTP for two-factor auth."""
         try:
-            # Try common OTP submission endpoints
+            # Use the exact endpoint and parameters from VTOP's JS
             otp_data = {
-                "otp": otp, 
-                "OTP": otp,
-                "emailOTP": otp,
-                "authorizedID": self.registration_number,
+                "otpCode": otp,
                 "_csrf": self.csrf_token
             }
             
-            # VTOP OTP submission
+            # Primary VTOP security OTP endpoint
+            try:
+                resp = await self.client.post("/vtop/validateSecurityOtp", data=otp_data)
+                
+                # Check for JSON response (SUCCESS)
+                if resp.headers.get("content-type", "").startswith("application/json"):
+                    data = resp.json()
+                    if data.get("status") == "SUCCESS":
+                        # Fetch the redirectUrl to establish the session
+                        redirect_url = data.get("redirectUrl", ROUTES["content"])
+                        content_resp = await self.client.get(redirect_url)
+                        self.post_login_csrf = _find_csrf(content_resp.text)
+                        self.logged_in = True
+                        return "success"
+                    elif data.get("status") == "INVALID":
+                        return "failed"
+            except Exception as e:
+                print(f"Primary OTP endpoint failed: {e}")
+
+            # Fallback to older endpoints just in case
             for endpoint in ["/vtop/login/verify", "/vtop/verifyOTP", "/vtop/login"]:
                 try:
                     resp = await self.client.post(endpoint, data=otp_data)
@@ -312,8 +328,8 @@ class VTOPSession:
             
             return "failed"
         except Exception as e:
-            print(f"OTP error: {e}")
-            return "error"
+            print(f"OTP submission error: {e}")
+            return "failed"
     
     async def _post_authenticated(self, url: str, data: dict) -> httpx.Response:
         """Make an authenticated POST request."""
