@@ -722,10 +722,13 @@ class VTOPSession:
                 # Inner marks row detection: [1, CAT-1, 50, 45, ...]
                 exam_types = ["CAT", "FAT", "QUIZ", "ASSESSMENT", "MID", "TERM", "LAB", "CHALLENGE", "PROJECT", "SEMINAR"]
                 if len(texts) >= 5 and any(ext in texts[1].upper() for ext in exam_types):
+                    # Determine if it's Lab/Theory
+                    is_lab = "lab" in last_subject.lower() or "practical" in last_subject.lower() or "lab" in texts[1].lower()
                     data.append({
                         "course_code": last_course_code,
                         "subject": last_subject,
                         "exam_type": texts[1],
+                        "type": "Lab" if is_lab else "Theory",
                         "total": texts[2],
                         "marks": texts[3],
                         "status": texts[5] if len(texts) > 5 else "",
@@ -840,19 +843,23 @@ class VTOPSession:
                         continue
                         
                     n = len(texts)
+                    # Extract venue and seat_no from the last column which usually looks like "AB1-201-R1C1-12"
+                    # We want "AB1-201" as Venue and "R1C1-12" as Seat No
                     raw_venue = texts[n-1] if n > 8 else "-"
                     venue = raw_venue
                     seat_no = "-"
-                    if "-" in raw_venue and len(raw_venue) > 5:
-                        parts = raw_venue.split("-")
-                        if len(parts) >= 3 and parts[-1].isdigit():
-                            if len(parts) >= 4 and len(parts[-2]) <= 2 and parts[-2].isalpha():
-                                seat_no = parts[-2] + "-" + parts[-1]
-                                venue = "-".join(parts[:-2])
-                            else:
-                                seat_no = parts[-1]
-                                venue = "-".join(parts[:-1])
                     
+                    if "-" in raw_venue:
+                        parts = raw_venue.split("-")
+                        if len(parts) >= 4:
+                            # Typical: AB-1-201-R1C1-10 -> Venue: AB-1-201, Seat: R1C1-10
+                            # The seat part is usually the last two hyphenated segments like R1C1-10
+                            seat_no = "-".join(parts[-2:])
+                            venue = "-".join(parts[:-2])
+                        elif len(parts) >= 2:
+                            seat_no = parts[-1]
+                            venue = "-".join(parts[:-1])
+
                     data.append({
                         "course_code": texts[1] if n > 1 else "",
                         "subject": texts[2] if n > 2 else "",
@@ -867,7 +874,6 @@ class VTOPSession:
                         "reporting_time": texts[n-2] if n == 10 else (texts[n-3] if n == 11 else (texts[8] if n > 8 else "-")),
                     })
                 elif len(cols) == 5:
-                    # Fallback for simple tables
                     texts = [c.get_text(strip=True) for c in cols]
                     data.append({
                         "course_code": texts[0],
