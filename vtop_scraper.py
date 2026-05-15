@@ -134,15 +134,17 @@ def _find_login_error(html: str) -> str:
             return err_text
             
     # Check body text for known errors
-    text = soup.get_text(separator=" ", strip=True).lower()
-    if "invalid captcha" in text:
+    text = soup.get_text(separator=" ", strip=True)
+    text_lower = text.lower()
+    if "invalid captcha" in text_lower:
         return "Invalid Captcha"
-    if "invalid" in text and ("user" in text or "password" in text or "credential" in text):
+    if "invalid" in text_lower and ("user" in text_lower or "password" in text_lower or "credential" in text_lower):
         return "Invalid Credentials"
-    if "not available" in text and "user" in text:
+    if "not available" in text_lower and "user" in text_lower:
         return "User Id Not Available"
         
-    return "Login failed (Unknown Error)"
+    # Return a snippet of the page text so we can see what VTOP is complaining about
+    return f"Unknown Error: {text[:100]}"
 
 
 # ── VTOP Session Class ─────────────────────────────────────
@@ -221,6 +223,21 @@ class VTOPSession:
                 resp = await self.client.post(ROUTES["login"], data=login_data)
                 
                 final_url = str(resp.url)
+                text_lower = resp.text.lower()
+                
+                # Detect OTP requirement first
+                if "otp" in text_lower and ("sent" in text_lower or "mail" in text_lower or "enter" in text_lower):
+                    print("OTP required detected in page text")
+                    self._otp_required = True
+                    current_csrf = _find_csrf(resp.text)
+                    if current_csrf:
+                        self.csrf_token = current_csrf
+                    return "otp_required"
+                    
+                if "otp" in final_url.lower() or "twofactor" in final_url.lower():
+                    print("OTP required detected in URL")
+                    self._otp_required = True
+                    return "otp_required"
                 
                 if ROUTES["content"] in final_url or "/vtop/content" in final_url:
                     print("Login successful!")
@@ -245,17 +262,7 @@ class VTOPSession:
                     else:
                         raise Exception(f"Login failed: {error_msg}")
                 
-                elif "otp" in final_url.lower() or "twofactor" in final_url.lower():
-                    print("OTP required")
-                    self._otp_required = True
-                    return "otp_required"
-                
                 else:
-                    # Detect OTP from content
-                    if "otp" in resp.text.lower() and "enter" in resp.text.lower():
-                        self._otp_required = True
-                        return "otp_required"
-                    
                     print(f"Unexpected page: {final_url}")
                     # Update CSRF and retry
                     self.csrf_token = _find_csrf(resp.text)
@@ -281,7 +288,13 @@ class VTOPSession:
         """Submit OTP for two-factor auth."""
         try:
             # Try common OTP submission endpoints
-            otp_data = {"otp": otp, "_csrf": self.csrf_token}
+            otp_data = {
+                "otp": otp, 
+                "OTP": otp,
+                "emailOTP": otp,
+                "authorizedID": self.registration_number,
+                "_csrf": self.csrf_token
+            }
             
             # VTOP OTP submission
             for endpoint in ["/vtop/login/verify", "/vtop/verifyOTP", "/vtop/login"]:
