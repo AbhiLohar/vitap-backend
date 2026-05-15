@@ -1,7 +1,9 @@
 import asyncio
 import time
+import platform
 
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+if platform.system() == "Windows":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from fastapi import FastAPI, Form, HTTPException
 from typing import Optional
