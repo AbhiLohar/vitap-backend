@@ -36,6 +36,10 @@ ROUTES = {
     "view_exam":    "/vtop/examinations/doSearchExamScheduleForStudent",
     "profile":      "/vtop/studentsRecord/StudentProfileAllView",
     "curriculum":   "/vtop/academics/common/Curriculum",
+    "faculty":      "/vtop/hrms/EmployeeSearchForStudent",
+    "outing":       "/vtop/hostel/StudentGeneralOuting",
+    "da":           "/vtop/examinations/doDigitalAssignment",
+    "payments":     "/vtop/finance/listReceipts",
 }
 
 # Known semester IDs for VIT-AP (fallback when dropdown not found)
@@ -1173,6 +1177,209 @@ class VTOPSession:
             pass
             
         return {"summary": summary, "distribution": distribution}
+
+    async def get_faculty_details(self, search_term: str) -> list:
+        """Search for faculty details."""
+        try:
+            # Initialize page first
+            await self._post_menu(ROUTES["faculty"])
+            
+            resp = await self._post_authenticated(
+                ROUTES["faculty"],
+                {
+                    "empId": search_term,
+                    "authorizedID": self.registration_number,
+                }
+            )
+            
+            return self._parse_faculty_table(resp.text)
+        except Exception as e:
+            print(f"Faculty search error: {e}")
+            return []
+
+    def _parse_faculty_table(self, html: str) -> list:
+        """Parse faculty search results."""
+        soup = BeautifulSoup(html, "lxml")
+        data = []
+        
+        tables = soup.find_all("table")
+        for table in tables:
+            rows = table.find_all("tr")
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) >= 5:
+                    texts = [c.get_text(strip=True) for c in cols]
+                    if any(h in texts[0].lower() for h in ["sl", "sno"]):
+                        continue
+                    
+                    data.append({
+                        "name": texts[1],
+                        "school": texts[2],
+                        "designation": texts[3],
+                        "room": texts[4],
+                        "email": texts[5] if len(texts) > 5 else "",
+                    })
+        return data
+
+    async def get_digital_assignments(self, semester_id: str = None) -> list:
+        """Fetch digital assignments."""
+        try:
+            sem_id = semester_id or "AP2025262"
+            await self._post_menu(ROUTES["da"])
+            
+            resp = await self._post_authenticated(
+                ROUTES["da"],
+                {
+                    "semesterSubId": sem_id,
+                    "authorizedID": self.registration_number,
+                }
+            )
+            
+            return self._parse_da_table(resp.text)
+        except Exception as e:
+            print(f"DA error: {e}")
+            return []
+
+    def _parse_da_table(self, html: str) -> list:
+        """Parse DA table."""
+        soup = BeautifulSoup(html, "lxml")
+        data = []
+        
+        tables = soup.find_all("table")
+        for table in tables:
+            rows = table.find_all("tr")
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) >= 6:
+                    texts = [c.get_text(strip=True) for c in cols]
+                    if any(h in texts[0].lower() for h in ["sl", "sno"]):
+                        continue
+                    
+                    data.append({
+                        "course_code": texts[1],
+                        "subject": texts[2],
+                        "type": texts[3],
+                        "title": texts[4],
+                        "max_marks": texts[5],
+                        "weightage": texts[6] if len(texts) > 6 else "",
+                        "due_date": texts[7] if len(texts) > 7 else "",
+                        "status": texts[8] if len(texts) > 8 else "Pending",
+                    })
+        return data
+
+    async def get_outing_status(self) -> list:
+        """Fetch outing history and current status."""
+        try:
+            # Initialize page
+            await self._post_menu(ROUTES["outing"])
+            
+            resp = await self._post_authenticated(
+                ROUTES["outing"],
+                {
+                    "authorizedID": self.registration_number,
+                    "verifyMenu": "true"
+                }
+            )
+            
+            return self._parse_outing_table(resp.text)
+        except Exception as e:
+            print(f"Outing error: {e}")
+            return []
+
+    def _parse_outing_table(self, html: str) -> list:
+        """Parse outing table."""
+        soup = BeautifulSoup(html, "lxml")
+        data = []
+        
+        tables = soup.find_all("table")
+        for table in tables:
+            rows = table.find_all("tr")
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) >= 5:
+                    texts = [c.get_text(strip=True) for c in cols]
+                    if any(h in texts[0].lower() for h in ["sl", "sno"]):
+                        continue
+                    
+                    data.append({
+                        "id": texts[0],
+                        "type": texts[1],
+                        "place": texts[2],
+                        "out_date": texts[3],
+                        "in_date": texts[4],
+                        "status": texts[5] if len(texts) > 5 else "Pending",
+                    })
+        return data
+
+    async def get_payment_history(self) -> list:
+        """Fetch payment receipts and history."""
+        try:
+            await self._post_menu(ROUTES["payments"])
+            
+            resp = await self._post_authenticated(
+                ROUTES["payments"],
+                {
+                    "authorizedID": self.registration_number,
+                }
+            )
+            
+            return self._parse_payments_table(resp.text)
+        except Exception as e:
+            print(f"Payments error: {e}")
+            return []
+
+    def _parse_payments_table(self, html: str) -> list:
+        """Parse payments table."""
+        soup = BeautifulSoup(html, "lxml")
+        data = []
+        
+        tables = soup.find_all("table")
+        for table in tables:
+            rows = table.find_all("tr")
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) >= 5:
+                    texts = [c.get_text(strip=True) for c in cols]
+                    if any(h in texts[0].lower() for h in ["sl", "sno"]):
+                        continue
+                    
+                    data.append({
+                        "receipt_no": texts[1],
+                        "date": texts[2],
+                        "amount": texts[3],
+                        "payment_mode": texts[4],
+                        "status": texts[5] if len(texts) > 5 else "Success",
+                        "description": texts[6] if len(texts) > 6 else "",
+                    })
+        return data
+
+    async def get_courses(self, semester_id: str = None) -> list:
+        """Fetch courses for a specific semester (using attendance page)."""
+        try:
+            sem_id = semester_id or "AP2025262"
+            await self._post_menu(ROUTES["attendance"])
+            
+            resp = await self._post_authenticated(
+                ROUTES["view_attendance"],
+                {
+                    "semesterSubId": sem_id,
+                    "authorizedID": self.registration_number,
+                }
+            )
+            
+            # Reuse attendance parser but only return basic course info
+            attendance = self._parse_attendance(resp.text)
+            courses = []
+            for a in attendance:
+                courses.append({
+                    "course_code": a.get("course_code"),
+                    "subject": a.get("subject"),
+                    "type": a.get("type"),
+                })
+            return courses
+        except Exception as e:
+            print(f"Courses error: {e}")
+            return []
 
     async def close(self):
         """Close HTTP client."""

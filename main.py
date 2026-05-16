@@ -248,6 +248,76 @@ async def curriculum(username: str):
         }
 
 
+# ─── Faculty Search ──────────────────────────────────────
+@app.get("/faculty")
+async def faculty(username: str, search_term: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_faculty_details(search_term)
+        return {"faculty": data}
+    except Exception as e:
+        print(f"Faculty Error: {e}")
+        return {"faculty": []}
+
+
+# ─── Digital Assignments ───────────────────────────────
+@app.get("/digital-assignments")
+async def digital_assignments(username: str, semester_id: Optional[str] = None):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_digital_assignments(semester_id=semester_id)
+        return {"digital_assignments": data}
+    except Exception as e:
+        print(f"DA Error: {e}")
+        return {"digital_assignments": []}
+
+
+# ─── Outing ──────────────────────────────────────────────
+@app.get("/outing")
+async def outing(username: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_outing_status()
+        return {"outing": data}
+    except Exception as e:
+        print(f"Outing Error: {e}")
+        return {"outing": []}
+
+
+# ─── Payments ────────────────────────────────────────────
+@app.get("/payments")
+async def payments(username: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_payment_history()
+        return {"payments": data}
+    except Exception as e:
+        print(f"Payments Error: {e}")
+        return {"payments": []}
+
+
+# ─── Courses ─────────────────────────────────────────────
+@app.get("/courses")
+async def courses(username: str, semester_id: Optional[str] = None):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_courses(semester_id=semester_id)
+        return {"courses": data}
+    except Exception as e:
+        print(f"Courses Error: {e}")
+        return {"courses": []}
+
+
 # ─── Logout ──────────────────────────────────────────────
 @app.post("/logout")
 async def logout(username: str = Form(...)):
