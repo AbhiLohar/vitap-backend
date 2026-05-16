@@ -8,9 +8,10 @@ if platform.system() == "Windows":
 from fastapi import FastAPI, Form, HTTPException
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import UJSONResponse
 from vtop_scraper import VTOPSession
 
-app = FastAPI(title="VTOP API", version="3.0.0")
+app = FastAPI(title="VTOP API", version="3.0.0", default_response_class=UJSONResponse)
 
 # CORS
 app.add_middleware(
@@ -48,8 +49,16 @@ async def cleanup_session(username: str):
 
 # ─── Health ───────────────────────────────────────────────
 @app.get("/health")
-async def health():
-    return {"status": "ok", "active_sessions": len(client_store)}
+async def health(username: Optional[str] = None):
+    # If username provided, keep session alive
+    if username and username in client_store:
+        client_store[username]["last_active"] = time.time()
+        
+    return {
+        "status": "ok", 
+        "active_sessions": len(client_store),
+        "timestamp": time.time()
+    }
 
 
 # ─── Login (auto-solves captcha) ──────────────────────────

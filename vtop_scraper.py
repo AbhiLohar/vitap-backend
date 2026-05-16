@@ -164,6 +164,8 @@ class VTOPSession:
         self.registration_number = ""
         self.logged_in = False
         self._otp_required = False
+        self._initialized_pages = set()
+        self._cache = {} # Simple in-memory cache for frequently accessed data
     
     async def login(self, username: str, password: str, max_retries: int = 10) -> str:
         """
@@ -348,6 +350,10 @@ class VTOPSession:
 
     async def _post_menu(self, url: str) -> httpx.Response:
         """Initialize a VTOP page with verifyMenu — required for VTOP to load dropdowns."""
+        # Optimization: Only initialize if not already done in this session
+        if url in self._initialized_pages:
+            return await self.client.get(url)
+            
         import time
         data = {
             "verifyMenu": "true",
@@ -356,10 +362,16 @@ class VTOPSession:
             "nocache": str(int(round(time.time() * 1000))),
         }
         resp = await self.client.post(url, data=data, headers=HEADERS)
+        if resp.status_code == 200:
+            self._initialized_pages.add(url)
         return resp
     
     async def get_semesters(self) -> list:
-        """Fetch available semesters dynamically from VTOP pages."""
+        """Fetch available semesters dynamically from VTOP pages in parallel."""
+        # Check cache first
+        if "semesters" in self._cache:
+            return self._cache["semesters"]
+            
         all_semesters = {}  # id -> name, to deduplicate
         
         # Pages that contain semester dropdowns
@@ -372,31 +384,31 @@ class VTOPSession:
             ("curriculum", ROUTES["curriculum"]),
         ]
         
-        for page_name, route in semester_pages:
+        async def fetch_one(page_name, route):
             try:
-                # Use _post_menu to properly initialize the page (sends verifyMenu=true)
+                # Use _post_menu to properly initialize the page
                 resp = await self._post_menu(route)
                 found = self._extract_semesters_from_html(resp.text)
-                if found:
-                    print(f"Found {len(found)} semesters from {page_name} page")
-                    for sem in found:
-                        all_semesters[sem["id"]] = sem["name"]
-                    # If we already found semesters, no need to scan all pages
-                    # But continue to merge from all pages for completeness
-                else:
-                    print(f"No semesters found on {page_name} page")
+                return found
             except Exception as e:
                 print(f"Error fetching semesters from {page_name}: {e}")
-                continue
+                return []
+
+        # Run all fetches in parallel
+        results = await asyncio.gather(*(fetch_one(p, r) for p, r in semester_pages))
+        
+        for found in results:
+            for sem in found:
+                all_semesters[sem["id"]] = sem["name"]
         
         if all_semesters:
             semesters = [{"id": k, "name": v} for k, v in all_semesters.items()]
             semesters.sort(key=lambda x: x["id"], reverse=True)
-            print(f"Total unique semesters found: {len(semesters)}")
+            self._cache["semesters"] = semesters
             return semesters
         
-        # Fallback to known semesters (last resort)
-        print("WARNING: No semesters found from any VTOP page, using fallback known semesters")
+        # Fallback
+        print("WARNING: No semesters found from any VTOP page, using fallback")
         semesters = [{"id": v, "name": k} for k, v in KNOWN_SEMESTERS.items()]
         semesters.sort(key=lambda x: x["id"], reverse=True)
         return semesters
@@ -691,9 +703,9 @@ class VTOPSession:
             return []
     
     def _parse_marks(self, html: str) -> list:
-        """Parse marks table."""
+        """Parse marks table and group by subject."""
         soup = BeautifulSoup(html, "lxml")
-        data = []
+        grouped_data = {} # Key: (course_code, type)
         
         last_course_code = ""
         last_subject = ""
@@ -714,38 +726,57 @@ class VTOPSession:
                     continue
                 
                 # Outer course row detection: [1, CSE1001, Intro to CS, ...]
-                # Typically has 11+ columns in the main table
                 if len(texts[1]) >= 4 and texts[1][:3].isalpha() and any(char.isdigit() for char in texts[1]):
-                    # It's a course code
                     last_course_code = texts[1]
                     last_subject = texts[2] if len(texts) > 2 else ""
                     
-                    # Faculty name is usually in one of the last few columns of the course row
-                    # Sl.No(0), Code(1), Title(2), Type(3), Cat(4), Cred(5), Opt(6), ClassID(7), Slot(8), Venue(9), Faculty(10)
                     if len(texts) >= 11:
-                        raw_faculty = texts[10]
-                        last_faculty = raw_faculty.split("-")[0].strip().upper()
+                        last_faculty = texts[10].split("-")[0].strip().upper()
                     elif len(texts) >= 9:
-                        # Fallback for different VTOP versions
                         last_faculty = texts[-1].split("-")[0].strip().upper()
-                
-                # Inner marks row detection: [1, CAT-1, 50, 45, ...]
+                    continue
+
+                # Inner marks row detection
                 exam_types = ["CAT", "FAT", "QUIZ", "ASSESSMENT", "MID", "TERM", "LAB", "CHALLENGE", "PROJECT", "SEMINAR"]
                 if len(texts) >= 5 and any(ext in texts[1].upper() for ext in exam_types):
-                    # Determine if it's Lab/Theory
                     is_lab = "lab" in last_subject.lower() or "practical" in last_subject.lower() or "lab" in texts[1].lower()
-                    data.append({
-                        "course_code": last_course_code,
-                        "subject": last_subject,
-                        "faculty": last_faculty or "FACULTY NAME",
-                        "exam_type": texts[1],
-                        "type": "Lab" if is_lab else "Theory",
-                        "total": texts[2],
-                        "marks": texts[3],
-                        "status": texts[5] if len(texts) > 5 else "",
-                    })
-        
-        return data
+                    m_type = "Lab" if is_lab else "Theory"
+                    
+                    key = (last_course_code, m_type)
+                    if key not in grouped_data:
+                        grouped_data[key] = {
+                            "course_code": last_course_code,
+                            "subject": last_subject,
+                            "faculty": last_faculty or "FACULTY NAME",
+                            "type": m_type,
+                            "total_marks": 0.0,
+                            "max_marks": 0.0,
+                            "components": []
+                        }
+                    
+                    try:
+                        obtained = float(texts[3]) if texts[3] and texts[3] != "-" else 0.0
+                        total = float(texts[2]) if texts[2] and texts[2] != "-" else 0.0
+                        
+                        grouped_data[key]["total_marks"] += obtained
+                        grouped_data[key]["max_marks"] += total
+                        grouped_data[key]["components"].append({
+                            "name": texts[1],
+                            "marks": texts[3],
+                            "max": texts[2],
+                            "status": texts[5] if len(texts) > 5 else ""
+                        })
+                    except (ValueError, TypeError):
+                        pass
+
+        # Convert to list and format numbers
+        result = []
+        for item in grouped_data.values():
+            item["total_marks"] = round(item["total_marks"], 2)
+            item["max_marks"] = round(item["max_marks"], 2)
+            result.append(item)
+            
+        return result
     
     async def get_grades(self) -> list:
         """Fetch grade history."""
@@ -898,7 +929,10 @@ class VTOPSession:
         return data
     
     async def get_profile(self) -> dict:
-        """Fetch student profile."""
+        """Fetch student profile with caching."""
+        if "profile" in self._cache:
+            return self._cache["profile"]
+            
         try:
             resp = await self._post_authenticated(
                 ROUTES["profile"],
@@ -937,13 +971,17 @@ class VTOPSession:
                     elif "email" in label:
                         profile["email"] = value
             
+            self._cache["profile"] = profile
             return profile
         except Exception as e:
             print(f"Profile error: {e}")
             return {"name": "Student", "reg_no": self.registration_number}
     
     async def get_curriculum(self) -> dict:
-        """Fetch curriculum summary and distribution with multiple fallbacks."""
+        """Fetch curriculum with multiple fallbacks and caching."""
+        if "curriculum" in self._cache:
+            return self._cache["curriculum"]
+            
         try:
             print(f"Fetching curriculum for {self.registration_number}")
             # 1. Try Curriculum Page
@@ -983,6 +1021,7 @@ class VTOPSession:
                 data["summary"]["earned"] = str(earned)
                 # We can't easily get buckets from grades without a mapping
                 
+            self._cache["curriculum"] = data
             return data
         except Exception as e:
             print(f"Curriculum error: {e}")
