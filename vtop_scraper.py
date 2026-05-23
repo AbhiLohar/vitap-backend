@@ -823,6 +823,37 @@ class VTOPSession:
         
         return data
     
+    async def get_cgpa(self) -> dict:
+        """Calculate CGPA from grade history."""
+        grades = await self.get_grades()
+        total_credits = 0.0
+        earned_points = 0.0
+        
+        grade_points = {
+            "S": 10, "A": 9, "B": 8, "C": 7, "D": 6, "E": 5, "F": 0, "N": 0
+        }
+        
+        for g in grades:
+            grade = g.get("grade", "").strip().upper()
+            credits_str = str(g.get("credits", "0"))
+            
+            try:
+                nums = re.findall(r'\d+\.?\d*', credits_str)
+                if not nums: continue
+                c = float(nums[0])
+            except Exception:
+                continue
+                
+            if grade in grade_points:
+                total_credits += c
+                earned_points += c * grade_points[grade]
+                
+        cgpa = round(earned_points / total_credits, 2) if total_credits > 0 else 0.0
+        return {
+            "cgpa": cgpa,
+            "total_credits": total_credits
+        }
+
     async def get_exam_types(self, semester_id: str = None) -> list:
         """Fetch available exam types for a semester."""
         types = []
@@ -951,6 +982,7 @@ class VTOPSession:
                 "branch": "",
                 "school": "",
                 "email": "",
+                "mentor": "",
             }
             
             # Look for profile data in table rows
@@ -972,8 +1004,10 @@ class VTOPSession:
                         profile["branch"] = value
                     elif "school" in label:
                         profile["school"] = value
-                    elif "email" in label:
+                    elif "email" in label and "alternate" not in label:
                         profile["email"] = value
+                    elif any(k in label for k in ["mentor", "proctor", "faculty advisor", "faculty counselor"]):
+                        profile["mentor"] = value
             
             self._cache["profile"] = profile
             return profile

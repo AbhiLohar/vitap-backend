@@ -214,6 +214,34 @@ async def profile(username: str):
         return {"profile": {}}
 
 
+# ─── Mentor ──────────────────────────────────────────────
+@app.get("/mentor")
+async def mentor(username: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_profile()
+        return {"mentor": data.get("mentor", "")}
+    except Exception as e:
+        print(f"Mentor Error: {e}")
+        return {"mentor": ""}
+
+
+# ─── CGPA ────────────────────────────────────────────────
+@app.get("/cgpa")
+async def cgpa(username: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_cgpa()
+        return {"cgpa": data}
+    except Exception as e:
+        print(f"CGPA Error: {e}")
+        return {"cgpa": {"cgpa": 0.0, "total_credits": 0.0}}
+
+
 # ─── Session Cookies ─────────────────────────────────────
 @app.get("/session-cookies")
 async def session_cookies(username: str):
