@@ -1059,6 +1059,42 @@ class VTOPSession:
                 data["summary"]["earned"] = str(earned)
                 # We can't easily get buckets from grades without a mapping
                 
+            # Inject detailed courses into distribution using grades
+            try:
+                grades = await self.get_grades()
+                
+                # Map course types to bucket names
+                def match_category(c_type, cat_name):
+                    c = c_type.upper()
+                    n = cat_name.lower()
+                    if c == "PC" and "programme core" in n: return True
+                    if c == "PE" and "programme elective" in n: return True
+                    if c == "UC" and "university core" in n: return True
+                    if c == "UE" and "university elective" in n: return True
+                    if c == "NC" and "non credit" in n: return True
+                    if c == "BRIDGE" and "bridge" in n: return True
+                    if c == "ECA" and ("extra" in n or "co-curric" in n): return True
+                    return False
+
+                for dist in data["distribution"]:
+                    dist["courses"] = []
+                    cat_name = dist["category"]
+                    
+                    for g in grades:
+                        # Only add passed/completed courses
+                        grade = g.get("grade", "").upper()
+                        if grade in ["F", "N", "W", "FAIL", ""]: continue
+                        
+                        if match_category(g.get("type", ""), cat_name):
+                            dist["courses"].append({
+                                "course_code": g.get("course_code", ""),
+                                "subject": g.get("subject", ""),
+                                "credits": g.get("credits", ""),
+                                "grade": grade
+                            })
+            except Exception as ex:
+                print(f"Error enriching curriculum courses: {ex}")
+
             self._cache["curriculum"] = data
             return data
         except Exception as e:
@@ -1414,6 +1450,160 @@ class VTOPSession:
         except Exception as e:
             print(f"Courses error: {e}")
             return []
+
+
+    async def get_general_outing_pdf(self, leave_id: str) -> bytes:
+        """Download General Outing PDF pass."""
+        if not self.logged_in: raise Exception("Not logged in")
+        import urllib.parse
+        from datetime import datetime, timezone
+        x_time = urllib.parse.quote(datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"))
+        url = f"/vtop/hostel/downloadLeavePass/{leave_id}?authorizedID={self.registration_number}&_csrf={self.post_login_csrf}&x={x_time}"
+        resp = await self._get_authenticated(url)
+        if resp.status_code == 200 and resp.content:
+            return resp.content
+        raise Exception("Failed to download PDF")
+
+    async def get_weekend_outing_pdf(self, booking_id: str) -> bytes:
+        """Download Weekend Outing PDF pass."""
+        if not self.logged_in: raise Exception("Not logged in")
+        import urllib.parse
+        from datetime import datetime, timezone
+        x_time = urllib.parse.quote(datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"))
+        url = f"/vtop/hostel/downloadOutingForm/{booking_id}?authorizedID={self.registration_number}&_csrf={self.post_login_csrf}&x={x_time}"
+        resp = await self._get_authenticated(url)
+        if resp.status_code == 200 and resp.content:
+            return resp.content
+        raise Exception("Failed to download PDF")
+
+    async def _fetch_outing_form_hidden_fields(self, is_weekend=False) -> dict:
+        """Helper to fetch pre-filled student details from the outing application page."""
+        url = ROUTES["outing"] if not is_weekend else "/vtop/hostel/StudentWeekendOuting"
+        resp = await self._post_menu(url)
+        soup = BeautifulSoup(resp.text, "lxml")
+        fields = {}
+        for inp in soup.find_all("input"):
+            id_val = inp.get("id") or inp.get("name")
+            if id_val:
+                fields[id_val] = inp.get("value", "")
+        if not fields.get("applicationNo"):
+            raise Exception("Could not parse outing form fields")
+        return fields
+
+    async def apply_general_outing(self, out_place: str, purpose: str, out_date: str, out_time: str, in_date: str, in_time: str) -> str:
+        """Submit a General Outing."""
+        try:
+            fields = await self._fetch_outing_form_hidden_fields(is_weekend=False)
+            
+            # Times come as HH:MM
+            out_parts = out_time.split(":")
+            in_parts = in_time.split(":")
+            
+            data = {
+                "authorizedID": self.registration_number,
+                "LeaveId": "",
+                "regNo": fields.get("regNo", self.registration_number),
+                "name": fields.get("name", ""),
+                "applicationNo": fields.get("applicationNo", ""),
+                "gender": fields.get("gender", ""),
+                "hostelBlock": fields.get("hostelBlock", ""),
+                "roomNo": fields.get("roomNo", ""),
+                "placeOfVisit": out_place,
+                "purposeOfVisit": purpose,
+                "outDate": out_date,
+                "outTimeHr": out_parts[0],
+                "outTimeMin": out_parts[1],
+                "inDate": in_date,
+                "inTimeHr": in_parts[0],
+                "inTimeMin": in_parts[1],
+                "parentContactNumber": fields.get("parentContactNumber", ""),
+            }
+            resp = await self._post_authenticated("/vtop/hostel/saveGeneralOutingForm", data)
+            
+            # Check response for success message
+            text_lower = resp.text.lower()
+            if "success" in text_lower or "submitted" in text_lower:
+                return "Successfully applied for General Outing"
+            
+            # Extract error message if any
+            soup = BeautifulSoup(resp.text, "lxml")
+            msg = soup.get_text(strip=True)[:100]
+            return f"Failed: {msg}"
+        except Exception as e:
+            raise Exception(f"Failed to apply for general outing: {e}")
+
+    async def apply_weekend_outing(self, out_place: str, purpose: str, out_date: str, out_time: str, contact_number: str) -> str:
+        """Submit a Weekend Outing."""
+        try:
+            fields = await self._fetch_outing_form_hidden_fields(is_weekend=True)
+            
+            data = {
+                "authorizedID": self.registration_number,
+                "BookingId": "",
+                "regNo": fields.get("regNo", self.registration_number),
+                "name": fields.get("name", ""),
+                "applicationNo": fields.get("applicationNo", ""),
+                "gender": fields.get("gender", ""),
+                "hostelBlock": fields.get("hostelBlock", ""),
+                "roomNo": fields.get("roomNo", ""),
+                "outPlace": out_place,
+                "purposeOfVisit": purpose,
+                "outingDate": out_date,
+                "outTime": out_time,
+                "contactNumber": contact_number,
+                "parentContactNumber": fields.get("parentContactNumber", ""),
+            }
+            resp = await self._post_authenticated("/vtop/hostel/saveOutingForm", data)
+            
+            text_lower = resp.text.lower()
+            if "success" in text_lower or "booked" in text_lower:
+                return "Successfully applied for Weekend Outing"
+                
+            soup = BeautifulSoup(resp.text, "lxml")
+            msg = soup.get_text(strip=True)[:100]
+            return f"Failed: {msg}"
+        except Exception as e:
+            raise Exception(f"Failed to apply for weekend outing: {e}")
+
+    async def delete_general_outing(self, leave_id: str) -> str:
+        data = {"LeaveId": leave_id, "authorizedID": self.registration_number}
+        resp = await self._post_authenticated("/vtop/hostel/deleteGeneralOutingInfo", data)
+        return "Deleted successfully" if "success" in resp.text.lower() else "Failed to delete"
+
+    async def delete_weekend_outing(self, booking_id: str) -> str:
+        data = {"BookingId": booking_id, "authorizedID": self.registration_number}
+        resp = await self._post_authenticated("/vtop/hostel/deleteBookingInfo", data)
+        return "Deleted successfully" if "success" in resp.text.lower() else "Failed to delete"
+
+    async def get_weekend_outing_status(self) -> list:
+        """Fetch weekend outings (distinct from general outings)."""
+        try:
+            url = "/vtop/hostel/StudentWeekendOuting"
+            await self._post_menu(url)
+            resp = await self._post_authenticated(url, {"authorizedID": self.registration_number, "verifyMenu": "true"})
+            
+            soup = BeautifulSoup(resp.text, "lxml")
+            data = []
+            tables = soup.find_all("table")
+            for table in tables:
+                for row in table.find_all("tr"):
+                    cols = row.find_all("td")
+                    if len(cols) >= 5:
+                        texts = [c.get_text(strip=True) for c in cols]
+                        if "sno" in texts[0].lower() or "sl" in texts[0].lower(): continue
+                        data.append({
+                            "id": texts[0],
+                            "type": "Weekend",
+                            "place": texts[2] if len(texts) > 2 else "",
+                            "out_date": texts[3] if len(texts) > 3 else "",
+                            "in_date": texts[4] if len(texts) > 4 else "",
+                            "status": texts[5] if len(texts) > 5 else "Pending",
+                        })
+            return data
+        except Exception as e:
+            print(f"Weekend outing error: {e}")
+            return []
+
 
     async def close(self):
         """Close HTTP client."""

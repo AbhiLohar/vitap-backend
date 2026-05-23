@@ -346,6 +346,97 @@ async def courses(username: str, semester_id: Optional[str] = None):
         return {"courses": []}
 
 
+
+# ─── New Outing Methods ──────────────────────────────────
+@app.get("/outing/weekend")
+async def outing_weekend(username: str):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_weekend_outing_status()
+        return {"outing": data}
+    except Exception as e:
+        print(f"Weekend Outing Error: {e}")
+        return {"outing": []}
+
+@app.post("/outing/apply/general")
+async def outing_apply_general(
+    username: str = Form(...),
+    place: str = Form(...),
+    purpose: str = Form(...),
+    outDate: str = Form(...),
+    outTime: str = Form(...),
+    inDate: str = Form(...),
+    inTime: str = Form(...)
+):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        msg = await session.apply_general_outing(place, purpose, outDate, outTime, inDate, inTime)
+        return {"status": "success" if "success" in msg.lower() else "failed", "message": msg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/outing/apply/weekend")
+async def outing_apply_weekend(
+    username: str = Form(...),
+    place: str = Form(...),
+    purpose: str = Form(...),
+    outDate: str = Form(...),
+    outTime: str = Form(...),
+    contact: str = Form(...)
+):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        msg = await session.apply_weekend_outing(place, purpose, outDate, outTime, contact)
+        return {"status": "success" if "success" in msg.lower() else "failed", "message": msg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/outing/delete/general")
+async def outing_delete_general(username: str = Form(...), leaveId: str = Form(...)):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        msg = await session.delete_general_outing(leaveId)
+        return {"status": "success" if "success" in msg.lower() else "failed", "message": msg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/outing/delete/weekend")
+async def outing_delete_weekend(username: str = Form(...), bookingId: str = Form(...)):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        msg = await session.delete_weekend_outing(bookingId)
+        return {"status": "success" if "success" in msg.lower() else "failed", "message": msg}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+from fastapi.responses import Response
+
+@app.get("/outing/pdf/general")
+async def outing_pdf_general(username: str, leaveId: str):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        pdf_bytes = await session.get_general_outing_pdf(leaveId)
+        return Response(content=pdf_bytes, media_type="application/pdf")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/outing/pdf/weekend")
+async def outing_pdf_weekend(username: str, bookingId: str):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        pdf_bytes = await session.get_weekend_outing_pdf(bookingId)
+        return Response(content=pdf_bytes, media_type="application/pdf")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─── Logout ──────────────────────────────────────────────
 @app.post("/logout")
 async def logout(username: str = Form(...)):
