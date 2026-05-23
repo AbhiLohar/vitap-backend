@@ -912,55 +912,51 @@ class VTOPSession:
         tables = soup.find_all("table")
         for table in tables:
             rows = table.find_all("tr")
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) >= 6:
-                    texts = [c.get_text(strip=True) for c in cols]
-                    if any(h in texts[0].lower() for h in ["sl", "serial", "sno"]):
-                        continue
+            if not rows: continue
+            
+            header = rows[0]
+            th_cells = [th.get_text(strip=True).lower() for th in header.find_all(["th", "td"])]
+            
+            col_map = {
+                "course_code": -1, "subject": -1, "date": -1, "session": -1, "venue": -1, "seat": -1, "time": -1, "type": -1
+            }
+            
+            for i, text in enumerate(th_cells):
+                if "course code" in text: col_map["course_code"] = i
+                elif "course title" in text or "subject" in text: col_map["subject"] = i
+                elif "date" in text and "exam" in text: col_map["date"] = i
+                elif "date" in text: col_map["date"] = i
+                elif "session" in text: col_map["session"] = i
+                elif "venue" in text or "room" in text: col_map["venue"] = i
+                elif "seat" in text: col_map["seat"] = i
+                elif "time" in text and "exam" in text: col_map["time"] = i
+                elif "type" in text: col_map["type"] = i
+                
+            if col_map["course_code"] == -1: continue
+            
+            for row in rows[1:]:
+                cols = [c.get_text(strip=True) for c in row.find_all("td")]
+                if len(cols) <= col_map["course_code"]: continue
+                
+                venue_val = cols[col_map["venue"]] if col_map["venue"] != -1 and col_map["venue"] < len(cols) else "-"
+                seat_val = cols[col_map["seat"]] if col_map["seat"] != -1 and col_map["seat"] < len(cols) else "-"
+                
+                if col_map["seat"] == -1 and "-" in venue_val:
+                    parts = venue_val.split("-")
+                    if len(parts) >= 2:
+                        seat_val = parts[-1]
+                        venue_val = "-".join(parts[:-1])
                         
-                    n = len(texts)
-                    # Extract venue and seat_no from the last column which usually looks like "AB1-201-R1C1-12"
-                    # We want "AB1-201" as Venue and "R1C1-12" as Seat No
-                    raw_venue = texts[n-1] if n > 8 else "-"
-                    venue = raw_venue
-                    seat_no = "-"
-                    
-                    if "-" in raw_venue:
-                        parts = raw_venue.split("-")
-                        if len(parts) >= 4:
-                            # Typical: AB-1-201-R1C1-10 -> Venue: AB-1-201, Seat: R1C1-10
-                            # The seat part is usually the last two hyphenated segments like R1C1-10
-                            seat_no = "-".join(parts[-2:])
-                            venue = "-".join(parts[:-2])
-                        elif len(parts) >= 2:
-                            seat_no = parts[-1]
-                            venue = "-".join(parts[:-1])
-
-                    data.append({
-                        "course_code": texts[1] if n > 1 else "",
-                        "subject": texts[2] if n > 2 else "",
-                        "type": texts[3] if n > 3 else "",
-                        "class_id": texts[4] if n > 4 else "",
-                        "slot": texts[5] if n > 5 else "",
-                        "date": texts[6] if n > 6 else "-",
-                        "session": texts[7] if n > 7 else "-",
-                        "venue": venue,
-                        "seat_no": seat_no,
-                        "exam_time": texts[n-2] if n > 10 else "-",
-                        "reporting_time": texts[n-2] if n == 10 else (texts[n-3] if n == 11 else (texts[8] if n > 8 else "-")),
-                    })
-                elif len(cols) == 5:
-                    texts = [c.get_text(strip=True) for c in cols]
-                    data.append({
-                        "course_code": texts[0],
-                        "subject": texts[1],
-                        "date": texts[2],
-                        "session": texts[3],
-                        "venue": texts[4],
-                        "seat_no": "-"
-                    })
-        
+                data.append({
+                    "course_code": cols[col_map["course_code"]] if col_map["course_code"] != -1 else "",
+                    "subject": cols[col_map["subject"]] if col_map["subject"] != -1 else "",
+                    "type": cols[col_map["type"]] if col_map["type"] != -1 else "",
+                    "date": cols[col_map["date"]] if col_map["date"] != -1 else "-",
+                    "session": cols[col_map["session"]] if col_map["session"] != -1 else "-",
+                    "venue": venue_val,
+                    "seat_no": seat_val,
+                    "exam_time": cols[col_map["time"]] if col_map["time"] != -1 else "-",
+                })
         return data
     
     async def get_profile(self) -> dict:
@@ -1144,12 +1140,16 @@ class VTOPSession:
                     elif "left" in h_lower or "remaining" in h_lower or "pending" in h_lower:
                         idx_left = i
                 
-                # If no explicit category column, try first text column
+                # If no explicit category column, try to guess based on 'basket' or skip
                 if idx_cat == -1:
                     for i, h in enumerate(header_texts):
-                        if not any(c.isdigit() for c in h):
+                        if "basket" in h.lower() or "title" in h.lower():
                             idx_cat = i
                             break
+                            
+                # Strict check: skip if we still couldn't confidently find category and required columns
+                if idx_cat == -1:
+                    continue
                 
                 if idx_cat != -1:
                     total_earned = 0.0
@@ -1430,7 +1430,7 @@ class VTOPSession:
             await self._post_menu(ROUTES["attendance"])
             
             resp = await self._post_authenticated(
-                ROUTES["view_attendance"],
+                ROUTES["view_attend"],
                 {
                     "semesterSubId": sem_id,
                     "authorizedID": self.registration_number,
