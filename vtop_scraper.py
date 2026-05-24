@@ -494,56 +494,100 @@ class VTOPSession:
             return []
     
     def _parse_attendance_table(self, html: str) -> list:
-        """Parse attendance HTML table."""
+        """Parse attendance HTML table - matches vitap_student_app Rust parser logic.
+        
+        VTOP attendance table (skip first header row):
+        Rows with > 9 cells are data rows:
+          cells[2] = "CourseCode - CourseName - CourseType" (split by " - ")
+          cells[3] = "ClassNumber - Slot - ..." (split by " - ")
+          cells[4] = Faculty
+          cells[5] = Attended classes
+          cells[6] = Total classes  
+          cells[7] = Attendance percentage
+        """
         soup = BeautifulSoup(html, "lxml")
         data = []
         
-        tables = soup.find_all("table")
-        for table in tables:
-            rows = table.find_all("tr")
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) >= 6:
-                    texts = [c.get_text(strip=True) for c in cols]
-                    # Skip header-like rows
-                    if any(h in texts[0].lower() for h in ["sl.no", "serial", "sno"]):
-                        continue
-                    if any(h in texts[1].lower() for h in ["course", "subject", "title"]):
-                        continue
-                    
-                    # Find the percentage column
-                    attendance_pct = ""
-                    for t in texts:
-                        if "%" in t:
-                            attendance_pct = t
-                            break
-                    
-                    # Standard VTOP attendance table columns:
-                    # Sl.No | Course Code | Course Title | Type | Category | FAT Type | Attended | Total | Percentage
-                    if len(cols) >= 8:
-                        subject = texts[2] if len(texts) > 2 else ""
-                        is_lab = "lab" in subject.lower() or "practical" in subject.lower()
-                        
-                        data.append({
-                            "course_code": texts[1] if len(texts) > 1 else "",
-                            "subject": subject,
-                            "type": "Lab" if is_lab else "Theory",
-                            "present": texts[6] if len(texts) > 6 else "",
-                            "total_classes": texts[7] if len(texts) > 7 else "",
-                            "attendance": attendance_pct or (texts[8] if len(texts) > 8 else "0%"),
-                        })
-                    elif len(cols) >= 6:
-                        subject = texts[1] if len(texts) > 1 else ""
-                        is_lab = "lab" in subject.lower() or "practical" in subject.lower()
-                        
-                        data.append({
-                            "course_code": texts[0],
-                            "subject": subject,
-                            "type": "Lab" if is_lab else "Theory",
-                            "present": texts[4],
-                            "total_classes": texts[5],
-                            "attendance": attendance_pct or texts[3],
-                        })
+        all_rows = soup.find_all("tr")
+        
+        # Skip first row (header) - matching Rust: .skip(1)
+        for row in all_rows[1:]:
+            cells = row.find_all("td")
+            
+            if len(cells) > 9:
+                def clean(cell):
+                    return cell.get_text(strip=True).replace("\t", "").replace("\n", "")
+                
+                # Parse course name field: "MAT1001 - Calculus for Engineers - Embedded Lab"
+                raw_course = clean(cells[2])
+                course_parts = raw_course.split(" - ")
+                course_code = course_parts[0] if len(course_parts) > 0 else ""
+                course_name = course_parts[1] if len(course_parts) > 1 else ""
+                course_type = course_parts[-1] if len(course_parts) > 2 else ""
+                
+                # Parse slot info: "AP2024258000131 - L27+L28+L39+L40 - 119"
+                raw_code = clean(cells[3])
+                code_parts = raw_code.split(" - ")
+                course_slot = code_parts[1] if len(code_parts) > 1 else ""
+                
+                # Faculty
+                faculty = clean(cells[4])
+                
+                # Attendance numbers
+                attended = clean(cells[5])
+                total = clean(cells[6])
+                percentage = clean(cells[7]).replace("%", "")
+                
+                # Extract course_type_code from onclick in last cell
+                course_type_code = ""
+                info_cell = cells[10] if len(cells) >= 11 else cells[-1]
+                info_html = str(info_cell)
+                import re as _re
+                onclick_match = _re.search(
+                    r"callStudentAttendanceDetailDisplay\s*\(\s*'[^']*'\s*,\s*'[^']*'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)", 
+                    info_html
+                )
+                course_id = ""
+                if onclick_match:
+                    course_id = onclick_match.group(1)
+                    course_type_code = onclick_match.group(2)
+                
+                # Determine type label
+                type_label = course_type
+                if not type_label:
+                    if course_type_code == "TH":
+                        type_label = "Theory"
+                    elif course_type_code == "LO":
+                        type_label = "Lab"
+                    elif course_type_code == "ETH":
+                        type_label = "Embedded Theory"
+                    elif course_type_code == "ELA":
+                        type_label = "Embedded Lab"
+                    elif course_type_code == "PJT":
+                        type_label = "Project"
+                    elif "lab" in course_name.lower():
+                        type_label = "Lab"
+                    else:
+                        type_label = "Theory"
+                
+                # Add percentage sign for display
+                if percentage and "%" not in percentage:
+                    display_pct = percentage + "%"
+                else:
+                    display_pct = percentage
+                
+                data.append({
+                    "course_code": course_code,
+                    "subject": course_name,
+                    "type": type_label,
+                    "present": attended,
+                    "total_classes": total,
+                    "attendance": display_pct,
+                    "slot": course_slot,
+                    "faculty": faculty,
+                    "course_id": course_id,
+                    "course_type_code": course_type_code,
+                })
         
         return data
     
@@ -905,62 +949,59 @@ class VTOPSession:
             return []
     
     def _parse_exam_schedule(self, html: str) -> list:
-        """Parse exam schedule table."""
+        """Parse exam schedule table - matches vitap_student_app Rust parser logic.
+        
+        VTOP exam schedule table structure (after skip 2 header rows):
+        - Rows with < 3 cells = exam type header (e.g. "CAT-1", "FAT")
+        - Rows with > 12 cells = actual exam data:
+          [0]=Serial, [1]=CourseCode, [2]=CourseName, [3]=CourseType, 
+          [4]=CourseID, [5]=Slot, [6]=ExamDate, [7]=ExamSession,
+          [8]=ReportingTime, [9]=ExamTime, [10]=Venue, [11]=SeatLocation, [12]=SeatNumber
+        """
         soup = BeautifulSoup(html, "lxml")
         data = []
         
-        tables = soup.find_all("table")
-        for table in tables:
-            rows = table.find_all("tr")
-            if not rows: continue
+        all_rows = soup.find_all("tr")
+        if len(all_rows) < 3:
+            return data
+        
+        current_exam_type = ""
+        
+        # Skip first 2 rows (headers) - matching Rust: .skip(2)
+        for row in all_rows[2:]:
+            cells = row.find_all("td")
             
-            header = rows[0]
-            th_cells = [th.get_text(strip=True).lower() for th in header.find_all(["th", "td"])]
+            if len(cells) < 3:
+                # This is an exam type header row (e.g. "CAT-1", "FAT")
+                if len(cells) >= 1:
+                    current_exam_type = cells[0].get_text(strip=True).replace("\t", "").replace("\n", "")
+                continue
             
-            col_map = {
-                "course_code": -1, "subject": -1, "date": -1, "session": -1, "venue": -1, "seat": -1, "time": -1, "type": -1
-            }
-            
-            for i, text in enumerate(th_cells):
-                if "course code" in text: col_map["course_code"] = i
-                elif "course title" in text or "subject" in text: col_map["subject"] = i
-                elif "date" in text and "exam" in text: col_map["date"] = i
-                elif "date" in text: col_map["date"] = i
-                elif "session" in text: col_map["session"] = i
-                elif "venue" in text or "room" in text: col_map["venue"] = i
-                elif "seat" in text: col_map["seat"] = i
-                elif "time" in text and "exam" in text: col_map["time"] = i
-                elif "type" in text: col_map["type"] = i
+            if len(cells) > 12:
+                # This is an actual exam data row
+                def clean(cell):
+                    return cell.get_text(strip=True).replace("\t", "").replace("\n", "")
                 
-            if col_map["course_code"] == -1: continue
-            
-            for row in rows[1:]:
-                cols = [c.get_text(strip=True) for c in row.find_all("td")]
-                if len(cols) <= col_map["course_code"]: continue
-                
-                venue_val = cols[col_map["venue"]] if col_map["venue"] != -1 and col_map["venue"] < len(cols) else "-"
-                seat_val = cols[col_map["seat"]] if col_map["seat"] != -1 and col_map["seat"] < len(cols) else "-"
-                
-                if col_map["seat"] == -1 and "-" in venue_val:
-                    parts = venue_val.split("-")
-                    if len(parts) >= 2:
-                        seat_val = parts[-1]
-                        venue_val = "-".join(parts[:-1])
-                        
                 data.append({
-                    "course_code": cols[col_map["course_code"]] if col_map["course_code"] != -1 else "",
-                    "subject": cols[col_map["subject"]] if col_map["subject"] != -1 else "",
-                    "type": cols[col_map["type"]] if col_map["type"] != -1 else "",
-                    "date": cols[col_map["date"]] if col_map["date"] != -1 else "-",
-                    "session": cols[col_map["session"]] if col_map["session"] != -1 else "-",
-                    "venue": venue_val,
-                    "seat_no": seat_val,
-                    "exam_time": cols[col_map["time"]] if col_map["time"] != -1 else "-",
+                    "course_code": clean(cells[1]),
+                    "subject": clean(cells[2]),
+                    "type": clean(cells[3]),
+                    "course_id": clean(cells[4]),
+                    "slot": clean(cells[5]),
+                    "date": clean(cells[6]),
+                    "session": clean(cells[7]),
+                    "reporting_time": clean(cells[8]),
+                    "exam_time": clean(cells[9]),
+                    "venue": clean(cells[10]),
+                    "seat_location": clean(cells[11]),
+                    "seat_no": clean(cells[12]),
+                    "exam_type": current_exam_type,
                 })
+        
         return data
     
     async def get_profile(self) -> dict:
-        """Fetch student profile with caching."""
+        """Fetch student profile with caching - matches vitap_student_app Rust parser logic."""
         if "profile" in self._cache:
             return self._cache["profile"]
             
@@ -971,39 +1012,86 @@ class VTOPSession:
             )
             
             soup = BeautifulSoup(resp.text, "lxml")
+            
+            def extract_table_value(label_text):
+                """Search for a table row whose first cell contains the label and return second cell value."""
+                for row in soup.find_all("tr"):
+                    tds = row.find_all("td")
+                    if len(tds) >= 2:
+                        label = tds[0].get_text(strip=True).upper()
+                        if label_text.upper() in label:
+                            return tds[1].get_text(strip=True)
+                return ""
+            
+            # Extract base64 profile picture
+            base64_pfp = ""
+            img = soup.find("img", class_=lambda c: c and "border" in c if c else False)
+            if img:
+                src = img.get("src", "")
+                if "base64," in src:
+                    base64_pfp = src.split("base64,", 1)[1]
+            
+            # Extract main profile fields
             profile = {
-                "name": "",
+                "name": extract_table_value("STUDENT NAME"),
                 "reg_no": self.registration_number,
-                "program": "",
-                "branch": "",
-                "school": "",
-                "email": "",
-                "mentor": "",
+                "application_number": extract_table_value("APPLICATION NUMBER"),
+                "dob": extract_table_value("DATE OF BIRTH"),
+                "gender": extract_table_value("GENDER"),
+                "blood_group": extract_table_value("BLOOD GROUP"),
+                "email": extract_table_value("EMAIL"),
+                "program": extract_table_value("PROGRAMME"),
+                "branch": extract_table_value("BRANCH"),
+                "school": extract_table_value("SCHOOL"),
+                "base64_pfp": base64_pfp,
             }
             
-            # Look for profile data in table rows
-            for row in soup.find_all("tr"):
-                cols = row.find_all("td")
-                if len(cols) >= 2:
-                    label = cols[0].get_text(strip=True).lower()
-                    value = cols[1].get_text(strip=True)
-                    
-                    if "name" in label and "student" in label:
-                        profile["name"] = value
-                    elif "name" in label and not profile["name"]:
-                        profile["name"] = value
-                    elif "register" in label or "reg" in label:
-                        profile["reg_no"] = value
-                    elif "program" in label:
-                        profile["program"] = value
-                    elif "branch" in label:
-                        profile["branch"] = value
-                    elif "school" in label:
-                        profile["school"] = value
-                    elif "email" in label and "alternate" not in label:
-                        profile["email"] = value
-                    elif any(k in label for k in ["mentor", "proctor", "faculty advisor", "faculty counselor"]):
-                        profile["mentor"] = value
+            # If name wasn't found with "STUDENT NAME", try just "NAME"
+            if not profile["name"]:
+                profile["name"] = extract_table_value("NAME")
+            
+            # Extract Mentor/Proctor details from the "PROCTOR INFORMATION" accordion section
+            mentor = {
+                "faculty_id": "",
+                "faculty_name": "",
+                "faculty_designation": "",
+                "school": "",
+                "cabin": "",
+                "faculty_department": "",
+                "faculty_email": "",
+                "faculty_intercom": "",
+                "faculty_mobile": "",
+            }
+            
+            # Look for the proctor information section
+            proctor_section = None
+            for div in soup.find_all("div", class_="accordion-item"):
+                if "PROCTOR" in div.get_text().upper():
+                    proctor_section = div
+                    break
+            
+            if proctor_section:
+                def extract_mentor_value(label_text):
+                    for row in proctor_section.find_all("tr"):
+                        tds = row.find_all("td")
+                        if len(tds) >= 2:
+                            label = tds[0].get_text(strip=True).upper()
+                            if label_text.upper() in label:
+                                return tds[1].get_text(strip=True)
+                    return ""
+                
+                mentor["faculty_id"] = extract_mentor_value("FACULTY ID")
+                mentor["faculty_name"] = extract_mentor_value("FACULTY NAME")
+                mentor["faculty_designation"] = extract_mentor_value("FACULTY DESIGNATION")
+                mentor["school"] = extract_mentor_value("SCHOOL")
+                mentor["cabin"] = extract_mentor_value("CABIN")
+                mentor["faculty_department"] = extract_mentor_value("FACULTY DEPARTMENT")
+                mentor["faculty_email"] = extract_mentor_value("FACULTY EMAIL")
+                mentor["faculty_intercom"] = extract_mentor_value("FACULTY INTERCOM")
+                mentor["faculty_mobile"] = extract_mentor_value("FACULTY MOBILE")
+            
+            profile["mentor"] = mentor["faculty_name"]
+            profile["mentor_details"] = mentor
             
             self._cache["profile"] = profile
             return profile
@@ -1268,27 +1356,60 @@ class VTOPSession:
             return []
 
     def _parse_faculty_table(self, html: str) -> list:
-        """Parse faculty search results."""
+        """Parse faculty search results - matches vitap_student_app Rust parser logic.
+        
+        VTOP faculty table: skip first header row, then for each data row:
+        - cells[0] = Faculty Name
+        - cells[1] = Designation
+        - cells[2] = School/Centre
+        - Extract emp_id from <button> element's id attribute or onclick attribute
+        """
         soup = BeautifulSoup(html, "lxml")
         data = []
         
-        tables = soup.find_all("table")
-        for table in tables:
-            rows = table.find_all("tr")
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) >= 5:
-                    texts = [c.get_text(strip=True) for c in cols]
-                    if any(h in texts[0].lower() for h in ["sl", "sno"]):
-                        continue
-                    
-                    data.append({
-                        "name": texts[1],
-                        "school": texts[2],
-                        "designation": texts[3],
-                        "room": texts[4],
-                        "email": texts[5] if len(texts) > 5 else "",
-                    })
+        all_rows = soup.find_all("tr")
+        
+        # Skip first header row - matching Rust: .skip(1)
+        for row in all_rows[1:]:
+            cells = row.find_all("td")
+            if len(cells) < 4:
+                continue
+            
+            # Extract emp_id from button in the row
+            emp_id = ""
+            button = row.find("button")
+            if button:
+                # Prefer the 'id' attribute on the button (e.g. id="70447")
+                btn_id = button.get("id", "").strip()
+                if btn_id:
+                    emp_id = btn_id
+                else:
+                    # Fallback: extract from onclick attribute
+                    onclick = button.get("onclick", "")
+                    if "&quot;" in onclick:
+                        parts = onclick.split("&quot;")
+                        emp_id = parts[1] if len(parts) > 1 else ""
+                    elif '"' in onclick:
+                        parts = onclick.split('"')
+                        emp_id = parts[1] if len(parts) > 1 else ""
+                    else:
+                        # Last fallback: extract digits
+                        import re as _re
+                        emp_id = "".join(c for c in onclick if c.isdigit())
+            
+            if not emp_id:
+                continue  # Skip rows without a valid employee button
+            
+            def clean(cell):
+                return cell.get_text(strip=True).replace("\t", "").replace("\n", "")
+            
+            data.append({
+                "name": clean(cells[0]),
+                "designation": clean(cells[1]),
+                "school": clean(cells[2]),
+                "emp_id": emp_id,
+            })
+        
         return data
 
     async def get_digital_assignments(self, semester_id: str = None) -> list:
@@ -1438,7 +1559,7 @@ class VTOPSession:
             )
             
             # Reuse attendance parser but only return basic course info
-            attendance = self._parse_attendance(resp.text)
+            attendance = self._parse_attendance_table(resp.text)
             courses = []
             for a in attendance:
                 courses.append({
