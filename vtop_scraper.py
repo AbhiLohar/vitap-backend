@@ -1586,20 +1586,19 @@ class VTOPSession:
         tables = soup.find_all("table")
         for table in tables:
             rows = table.find_all("tr")
-            for row in rows:
+            for row in rows[1:]:  # skip header
                 cols = row.find_all("td")
-                if len(cols) >= 5:
+                if len(cols) >= 10:
                     texts = [c.get_text(strip=True) for c in cols]
-                    if any(h in texts[0].lower() for h in ["sl", "sno"]):
-                        continue
                     
                     data.append({
                         "id": texts[0],
-                        "type": texts[1],
+                        "type": "General",
                         "place": texts[2],
-                        "out_date": texts[3],
-                        "in_date": texts[4],
-                        "status": texts[5] if len(texts) > 5 else "Pending",
+                        "purpose": texts[3],
+                        "out_date": f"{texts[4]} {texts[5]}",
+                        "in_date": f"{texts[6]} {texts[7]}",
+                        "status": texts[9],
                     })
         return data
 
@@ -1842,18 +1841,28 @@ class VTOPSession:
             data = []
             tables = soup.find_all("table")
             for table in tables:
-                for row in table.find_all("tr"):
+                for row in table.find_all("tr")[1:]:  # skip header
                     cols = row.find_all("td")
-                    if len(cols) >= 5:
+                    if len(cols) >= 11:
                         texts = [c.get_text(strip=True) for c in cols]
-                        if "sno" in texts[0].lower() or "sl" in texts[0].lower(): continue
+                        
+                        is_weekend_format = len(cols) >= 14
+                        
+                        if is_weekend_format:
+                            date_val = texts[9]
+                            status_val = texts[12]
+                        else:
+                            date_val = texts[7]
+                            status_val = texts[9]
+                            
                         data.append({
                             "id": texts[0],
                             "type": "Weekend",
-                            "place": texts[2] if len(texts) > 2 else "",
-                            "out_date": texts[3] if len(texts) > 3 else "",
-                            "in_date": texts[4] if len(texts) > 4 else "",
-                            "status": texts[5] if len(texts) > 5 else "Pending",
+                            "place": texts[4] if len(texts) > 4 else "",
+                            "purpose": texts[5] if len(texts) > 5 else "",
+                            "out_date": date_val,
+                            "in_date": date_val,  # weekend outing is same day
+                            "status": status_val,
                         })
             return data
         except Exception as e:
