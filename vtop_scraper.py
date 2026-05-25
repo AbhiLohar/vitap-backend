@@ -1322,12 +1322,12 @@ class VTOPSession:
                     h_lower = h.lower()
                     if any(k in h_lower for k in ["category", "component", "bucket", "type", "credit type"]):
                         idx_cat = i
-                    elif any(k in h_lower for k in ["required", "minimum", "curriculum", "total credit", "total"]) and "earned" not in h_lower:
-                        idx_req = i
-                    elif any(k in h_lower for k in ["earned", "completed", "done"]):
+                    elif any(k in h_lower for k in ["earned", "completed", "done", "acquired"]):
                         idx_earned = i
-                    elif "left" in h_lower or "remaining" in h_lower or "pending" in h_lower:
+                    elif any(k in h_lower for k in ["left", "remaining", "pending"]):
                         idx_left = i
+                    elif any(k in h_lower for k in ["required", "minimum", "curriculum", "total credit", "total", "credits"]) and not any(x in h_lower for x in ["earned", "registered", "completed", "done", "left"]):
+                        idx_req = i
                 
                 # If no explicit category column, try to guess based on 'basket' or skip
                 if idx_cat == -1:
