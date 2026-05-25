@@ -793,22 +793,41 @@ class VTOPSession:
         
         content_rows = soup.find_all("tr", class_="tableContent")
         
-        bmarks = False
         current_course = {
             "serial_number": "", "course_code": "", "subject": "",
-            "type": "", "faculty": "", "slot": "", "details": []
+            "type": "", "faculty": "", "slot": "", "details": [],
+            "total_marks": 0.0, "max_marks": 0.0,
         }
         
+        # Group rows by course
         for row in content_rows:
             cells = row.find_all("td", recursive=False)
             
-            if bmarks:
-                # This row contains marks details as nested sub-rows
+            if len(cells) > 3:
+                # This is a course info row
+                if current_course["course_code"]:
+                    courses.append(current_course.copy())
+                
+                texts = [clean(c.get_text()) for c in cells]
+                current_course = {
+                    "serial_number": texts[0] if len(texts) > 0 else "",
+                    "course_code": texts[2] if len(texts) > 2 else "",
+                    "subject": texts[3] if len(texts) > 3 else "",
+                    "type": texts[4] if len(texts) > 4 else "",
+                    "faculty": texts[6] if len(texts) > 6 else "",
+                    "slot": texts[7] if len(texts) > 7 else "",
+                    "details": [],
+                    "total_marks": 0.0,
+                    "max_marks": 0.0,
+                }
+            elif len(cells) == 1 and current_course["course_code"]:
+                # This is a marks detail row for the current course
                 detail_rows = row.find_all("tr", class_="tableContent-level1")
                 details = []
                 for drow in detail_rows:
                     dcells = drow.find_all("td")
                     dtexts = [clean(c.get_text()) for c in dcells]
+                    if len(dtexts) < 5: continue
                     
                     details.append({
                         "serial_number": dtexts[0] if len(dtexts) > 0 else "",
@@ -839,29 +858,10 @@ class VTOPSession:
                 
                 current_course["total_marks"] = round(total_scored, 2)
                 current_course["max_marks"] = round(total_max, 2)
-                
-                courses.append(current_course.copy())
-                current_course = {
-                    "serial_number": "", "course_code": "", "subject": "",
-                    "type": "", "faculty": "", "slot": "", "details": []
-                }
-            else:
-                # This is a course info row
-                texts = [clean(c.get_text()) for c in cells]
-                current_course = {
-                    "serial_number": texts[0] if len(texts) > 0 else "",
-                    "course_code": texts[2] if len(texts) > 2 else "",
-                    "subject": texts[3] if len(texts) > 3 else "",
-                    "type": texts[4] if len(texts) > 4 else "",
-                    "faculty": texts[6] if len(texts) > 6 else "",
-                    "slot": texts[7] if len(texts) > 7 else "",
-                    "details": [],
-                    "total_marks": 0.0,
-                    "max_marks": 0.0,
-                }
-            
-            bmarks = not bmarks
         
+        if current_course["course_code"]:
+            courses.append(current_course.copy())
+            
         return courses
     
     async def get_grades(self) -> list:
