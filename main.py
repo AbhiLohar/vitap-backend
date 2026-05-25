@@ -100,6 +100,21 @@ async def verify_otp(username: str = Form(...), otp: str = Form(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ─── Resend OTP ──────────────────────────────────────────
+@app.post("/resend-otp")
+async def resend_otp(username: str = Form(...)):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Session expired. Please login again.")
+
+    try:
+        result = await session.resend_otp()
+        return {"status": result}
+    except Exception as e:
+        print(f"Resend OTP Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─── Semesters ───────────────────────────────────────────
 @app.get("/semesters")
 async def semesters(username: str):

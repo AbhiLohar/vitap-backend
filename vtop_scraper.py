@@ -337,6 +337,33 @@ class VTOPSession:
             print(f"OTP submission error: {e}")
             return "failed"
     
+    async def resend_otp(self) -> str:
+        """Resend OTP to user's registered email — matches reference app's resendSecurityOtp endpoint."""
+        try:
+            otp_data = {
+                "_csrf": self.csrf_token,
+            }
+            resp = await self.client.post("/vtop/resendSecurityOtp", data=otp_data)
+            
+            if resp.headers.get("content-type", "").startswith("application/json"):
+                data = resp.json()
+                status = data.get("status", "")
+                if status == "SUCCESS":
+                    print("OTP resent successfully")
+                    return "success"
+                else:
+                    print(f"Resend OTP failed: {data}")
+                    return "failed"
+            
+            # Non-JSON response
+            if "success" in resp.text.lower() or "sent" in resp.text.lower():
+                return "success"
+            
+            return "failed"
+        except Exception as e:
+            print(f"Resend OTP error: {e}")
+            return "failed"
+    
     async def _post_authenticated(self, url: str, data: dict) -> httpx.Response:
         """Make an authenticated POST request."""
         if not self.logged_in:
