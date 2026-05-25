@@ -751,80 +751,91 @@ class VTOPSession:
             return []
     
     def _parse_marks(self, html: str) -> list:
-        """Parse marks table and group by subject."""
+        """Parse marks table - matches vitap_student_app Rust parser logic.
+        
+        VTOP marks table uses alternating tr.tableContent rows:
+        - Odd rows (bmarks=False): course info at cells[0]=serial, [2]=code, [3]=title, [4]=type, [6]=faculty, [7]=slot
+        - Even rows (bmarks=True): single cell containing nested tr.tableContent-level1 rows for marks details
+          Each detail row: [0]=serial, [1]=mark_title, [2]=max_mark, [3]=weightage, [4]=status, [5]=scored_mark, [6]=weightage_mark, [7]=remark
+        """
         soup = BeautifulSoup(html, "lxml")
-        grouped_data = {} # Key: (course_code, type)
+        courses = []
         
-        last_course_code = ""
-        last_subject = ""
-        last_faculty = ""
+        def clean(text):
+            return text.strip().replace("\t", "").replace("\n", "")
         
-        tables = soup.find_all("table")
-        for table in tables:
-            rows = table.find_all("tr")
-            for row in rows:
-                cols = row.find_all(["td", "th"])
-                texts = [c.get_text(separator=" ", strip=True) for c in cols]
+        content_rows = soup.find_all("tr", class_="tableContent")
+        
+        bmarks = False
+        current_course = {
+            "serial_number": "", "course_code": "", "subject": "",
+            "type": "", "faculty": "", "slot": "", "details": []
+        }
+        
+        for row in content_rows:
+            cells = row.find_all("td", recursive=False)
+            
+            if bmarks:
+                # This row contains marks details as nested sub-rows
+                detail_rows = row.find_all("tr", class_="tableContent-level1")
+                details = []
+                for drow in detail_rows:
+                    dcells = drow.find_all("td")
+                    dtexts = [clean(c.get_text()) for c in dcells]
+                    
+                    details.append({
+                        "serial_number": dtexts[0] if len(dtexts) > 0 else "",
+                        "mark_title": dtexts[1] if len(dtexts) > 1 else "",
+                        "max_mark": dtexts[2] if len(dtexts) > 2 else "",
+                        "weightage": dtexts[3] if len(dtexts) > 3 else "",
+                        "status": dtexts[4] if len(dtexts) > 4 else "",
+                        "scored_mark": dtexts[5] if len(dtexts) > 5 else "",
+                        "weightage_mark": dtexts[6] if len(dtexts) > 6 else "",
+                        "remark": dtexts[7] if len(dtexts) > 7 else "",
+                    })
                 
-                if not texts or len(texts) < 3:
-                    continue
-                    
-                # Ignore header rows
-                if any(h in texts[0].lower() for h in ["sl", "serial", "sno"]):
-                    continue
+                current_course["details"] = details
                 
-                # Outer course row detection: [1, CSE1001, Intro to CS, ...]
-                if len(texts[1]) >= 4 and texts[1][:3].isalpha() and any(char.isdigit() for char in texts[1]):
-                    last_course_code = texts[1]
-                    last_subject = texts[2] if len(texts) > 2 else ""
-                    
-                    if len(texts) >= 11:
-                        last_faculty = texts[10].split("-")[0].strip().upper()
-                    elif len(texts) >= 9:
-                        last_faculty = texts[-1].split("-")[0].strip().upper()
-                    continue
-
-                # Inner marks row detection
-                exam_types = ["CAT", "FAT", "QUIZ", "ASSESSMENT", "MID", "TERM", "LAB", "CHALLENGE", "PROJECT", "SEMINAR"]
-                if len(texts) >= 5 and any(ext in texts[1].upper() for ext in exam_types):
-                    is_lab = "lab" in last_subject.lower() or "practical" in last_subject.lower() or "lab" in texts[1].lower()
-                    m_type = "Lab" if is_lab else "Theory"
-                    
-                    key = (last_course_code, m_type)
-                    if key not in grouped_data:
-                        grouped_data[key] = {
-                            "course_code": last_course_code,
-                            "subject": last_subject,
-                            "faculty": last_faculty or "FACULTY NAME",
-                            "type": m_type,
-                            "total_marks": 0.0,
-                            "max_marks": 0.0,
-                            "components": []
-                        }
-                    
+                # Calculate totals
+                total_scored = 0.0
+                total_max = 0.0
+                for d in details:
                     try:
-                        obtained = float(texts[3]) if texts[3] and texts[3] != "-" else 0.0
-                        total = float(texts[2]) if texts[2] and texts[2] != "-" else 0.0
-                        
-                        grouped_data[key]["total_marks"] += obtained
-                        grouped_data[key]["max_marks"] += total
-                        grouped_data[key]["components"].append({
-                            "name": texts[1],
-                            "marks": texts[3],
-                            "max": texts[2],
-                            "status": texts[5] if len(texts) > 5 else ""
-                        })
+                        scored = d.get("scored_mark", "")
+                        max_m = d.get("max_mark", "")
+                        if scored and scored != "-" and scored.replace(".", "").isdigit():
+                            total_scored += float(scored)
+                        if max_m and max_m != "-" and max_m.replace(".", "").isdigit():
+                            total_max += float(max_m)
                     except (ValueError, TypeError):
                         pass
-
-        # Convert to list and format numbers
-        result = []
-        for item in grouped_data.values():
-            item["total_marks"] = round(item["total_marks"], 2)
-            item["max_marks"] = round(item["max_marks"], 2)
-            result.append(item)
+                
+                current_course["total_marks"] = round(total_scored, 2)
+                current_course["max_marks"] = round(total_max, 2)
+                
+                courses.append(current_course.copy())
+                current_course = {
+                    "serial_number": "", "course_code": "", "subject": "",
+                    "type": "", "faculty": "", "slot": "", "details": []
+                }
+            else:
+                # This is a course info row
+                texts = [clean(c.get_text()) for c in cells]
+                current_course = {
+                    "serial_number": texts[0] if len(texts) > 0 else "",
+                    "course_code": texts[2] if len(texts) > 2 else "",
+                    "subject": texts[3] if len(texts) > 3 else "",
+                    "type": texts[4] if len(texts) > 4 else "",
+                    "faculty": texts[6] if len(texts) > 6 else "",
+                    "slot": texts[7] if len(texts) > 7 else "",
+                    "details": [],
+                    "total_marks": 0.0,
+                    "max_marks": 0.0,
+                }
             
-        return result
+            bmarks = not bmarks
+        
+        return courses
     
     async def get_grades(self) -> list:
         """Fetch grade history."""
@@ -842,34 +853,87 @@ class VTOPSession:
             print(f"Grades error: {e}")
             return []
     
-    def _parse_grades(self, html: str) -> list:
-        """Parse grades table."""
+    def _parse_grades(self, html: str) -> dict:
+        """Parse grades table - matches vitap_student_app Rust parser logic.
+        
+        Returns dict with:
+        - credits_registered, credits_earned, cgpa (from CGPA summary table)
+        - courses: list of {course_code, course_title, course_type, credits, grade, exam_month, course_distribution}
+        """
         soup = BeautifulSoup(html, "lxml")
-        data = []
         
-        tables = soup.find_all("table")
-        for table in tables:
-            rows = table.find_all("tr")
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) >= 4:
-                    texts = [c.get_text(strip=True) for c in cols]
-                    if any(h in texts[0].lower() for h in ["sl", "serial", "sno", "course code"]):
-                        continue
-                    
-                    data.append({
-                        "course_code": texts[0] if len(texts) > 0 else "",
-                        "subject": texts[1] if len(texts) > 1 else "",
-                        "type": texts[2] if len(texts) > 2 else "",
-                        "credits": texts[3] if len(texts) > 3 else "",
-                        "grade": texts[4] if len(texts) > 4 else "",
-                    })
+        # 1. Parse CGPA summary table
+        credits_registered = "N/A"
+        credits_earned = "N/A"
+        cgpa = "N/A"
         
-        return data
+        # Find table with "CGPA" text
+        for table in soup.find_all("table", class_="table"):
+            if "CGPA" in table.get_text():
+                tbody_rows = table.find("tbody")
+                if tbody_rows:
+                    first_row = tbody_rows.find("tr")
+                    if first_row:
+                        tds = first_row.find_all("td")
+                        if len(tds) >= 3:
+                            credits_registered = tds[0].get_text(strip=True)
+                            credits_earned = tds[1].get_text(strip=True)
+                            cgpa = tds[2].get_text(strip=True)
+                break
+        
+        # 2. Parse course grade rows from customTable
+        courses = []
+        for table in soup.find_all("table", class_="customTable"):
+            if "Course Code" not in table.get_text():
+                continue
+            
+            for row in table.find_all("tr", class_="tableContent"):
+                tds = row.find_all("td")
+                if len(tds) < 10:
+                    continue
+                
+                def clean(cell):
+                    return cell.get_text(strip=True)
+                
+                course_code = clean(tds[1])
+                # Skip header rows
+                if course_code == "Course Code" or not course_code:
+                    continue
+                
+                courses.append({
+                    "course_code": course_code,
+                    "subject": clean(tds[2]),
+                    "type": clean(tds[3]),
+                    "credits": clean(tds[4]),
+                    "grade": clean(tds[5]),
+                    "exam_month": clean(tds[6]) if len(tds) > 6 else "",
+                    "course_distribution": clean(tds[8]) if len(tds) > 8 else "",
+                })
+        
+        return {
+            "credits_registered": credits_registered,
+            "credits_earned": credits_earned,
+            "cgpa": cgpa,
+            "courses": courses,
+        }
     
     async def get_cgpa(self) -> dict:
         """Calculate CGPA from grade history."""
-        grades = await self.get_grades()
+        grade_data = await self.get_grades()
+        
+        # If the grades parser already extracted CGPA from the summary table, use it
+        if isinstance(grade_data, dict) and grade_data.get("cgpa", "N/A") != "N/A":
+            try:
+                return {
+                    "cgpa": float(grade_data["cgpa"]),
+                    "total_credits": float(grade_data.get("credits_earned", "0") or "0"),
+                    "credits_registered": float(grade_data.get("credits_registered", "0") or "0"),
+                }
+            except (ValueError, TypeError):
+                pass
+        
+        # Fallback: calculate from courses
+        courses = grade_data.get("courses", []) if isinstance(grade_data, dict) else grade_data
         total_credits = 0.0
         earned_points = 0.0
         
@@ -877,7 +941,7 @@ class VTOPSession:
             "S": 10, "A": 9, "B": 8, "C": 7, "D": 6, "E": 5, "F": 0, "N": 0
         }
         
-        for g in grades:
+        for g in courses:
             grade = g.get("grade", "").strip().upper()
             credits_str = str(g.get("credits", "0"))
             
@@ -892,9 +956,9 @@ class VTOPSession:
                 total_credits += c
                 earned_points += c * grade_points[grade]
                 
-        cgpa = round(earned_points / total_credits, 2) if total_credits > 0 else 0.0
+        cgpa_val = round(earned_points / total_credits, 2) if total_credits > 0 else 0.0
         return {
-            "cgpa": cgpa,
+            "cgpa": cgpa_val,
             "total_credits": total_credits
         }
 
@@ -925,25 +989,35 @@ class VTOPSession:
             ]
         return types
 
-    async def get_exam_schedule(self, semester_id: str = None, exam_type: str = "FAT") -> list:
-        """Fetch exam schedule for a specific type."""
+    async def get_exam_schedule(self, semester_id: str = None, exam_type: str = None) -> list:
+        """Fetch exam schedule - fetches ALL exam types at once (matching reference app).
+        The parser extracts exam_type from header rows embedded in the response.
+        If exam_type is provided, filter results client-side.
+        """
         try:
             sem_id = semester_id or "AP2025262"
             
             # Initialize page with verifyMenu
             await self._post_menu(ROUTES["exam_sched"])
             
-            # Fetch schedule
+            # Fetch schedule - NO examType param (matches reference app: only semesterSubId + authorizedID)
             resp = await self._post_authenticated(
                 ROUTES["view_exam"],
                 {
                     "semesterSubId": sem_id,
-                    "examType": exam_type,
                     "authorizedID": self.registration_number,
                 }
             )
             
-            return self._parse_exam_schedule(resp.text)
+            all_data = self._parse_exam_schedule(resp.text)
+            
+            # Filter by exam_type if specified
+            if exam_type and all_data:
+                filtered = [d for d in all_data if d.get("exam_type", "").upper() == exam_type.upper()]
+                if filtered:
+                    return filtered
+            
+            return all_data
         except Exception as e:
             print(f"Exam schedule error: {e}")
             return []
@@ -1520,28 +1594,62 @@ class VTOPSession:
             return []
 
     def _parse_payments_table(self, html: str) -> list:
-        """Parse payments table."""
+        """Parse payments table - matches vitap_student_app Rust parser logic.
+        
+        VTOP payment receipts table (table.table-bordered):
+        Skip header row, then for each data row with >= 5 cells:
+        cells[0]=receipt_number, [1]=date, [2]=amount, [3]=campus_code, [4]=button with onclick
+        """
         soup = BeautifulSoup(html, "lxml")
         data = []
         
-        tables = soup.find_all("table")
-        for table in tables:
-            rows = table.find_all("tr")
-            for row in rows:
-                cols = row.find_all("td")
-                if len(cols) >= 5:
-                    texts = [c.get_text(strip=True) for c in cols]
-                    if any(h in texts[0].lower() for h in ["sl", "sno"]):
-                        continue
-                    
-                    data.append({
-                        "receipt_no": texts[1],
-                        "date": texts[2],
-                        "amount": texts[3],
-                        "payment_mode": texts[4],
-                        "status": texts[5] if len(texts) > 5 else "Success",
-                        "description": texts[6] if len(texts) > 6 else "",
-                    })
+        # Find the main receipts table
+        table = soup.find("table", class_="table-bordered")
+        if not table:
+            # Fallback: try any table
+            table = soup.find("table")
+        
+        if not table:
+            return data
+        
+        rows = table.find_all("tr")
+        
+        # Skip first row (header)
+        for row in rows[1:]:
+            cells = row.find_all("td")
+            if len(cells) >= 5:
+                def clean(cell):
+                    return cell.get_text(strip=True)
+                
+                receipt_number = clean(cells[0])
+                date = clean(cells[1])
+                amount = clean(cells[2])
+                campus_code = clean(cells[3])
+                
+                # Extract receipt_no from button onclick
+                receipt_no = ""
+                button = cells[4].find("button") if len(cells) > 4 else None
+                if button:
+                    onclick = button.get("onclick", "")
+                    # Example: javascript:doDuplicateReceipt('27640/26/AMR');
+                    prefix = "doDuplicateReceipt('"
+                    suffix = "')"
+                    if prefix in onclick:
+                        start = onclick.index(prefix) + len(prefix)
+                        rest = onclick[start:]
+                        if suffix in rest:
+                            end = rest.index(suffix)
+                            receipt_no = rest[:end]
+                
+                data.append({
+                    "receipt_no": receipt_number,
+                    "date": date,
+                    "amount": amount,
+                    "payment_mode": campus_code,
+                    "status": "Paid",
+                    "receipt_id": receipt_no,
+                })
+        
         return data
 
     async def get_courses(self, semester_id: str = None) -> list:

@@ -164,10 +164,13 @@ async def grades(username: str):
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         data = await session.get_grades()
-        return {"grades": data}
+        # New parser returns dict with {cgpa, credits_registered, credits_earned, courses}
+        if isinstance(data, dict):
+            return {"grades": data}
+        return {"grades": {"courses": data, "cgpa": "N/A", "credits_registered": "N/A", "credits_earned": "N/A"}}
     except Exception as e:
         print(f"Grades Error: {e}")
-        return {"grades": []}
+        return {"grades": {"courses": [], "cgpa": "N/A", "credits_registered": "N/A", "credits_earned": "N/A"}}
 
 
 # ─── Exam Types ──────────────────────────────────────────
