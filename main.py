@@ -209,9 +209,8 @@ async def exam_schedule(username: str, semester_id: Optional[str] = None, exam_t
     if not session:
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        # If exam_type is not provided, we could fetch it first or use a default
-        e_type = exam_type or "FAT" 
-        data = await session.get_exam_schedule(semester_id=semester_id, exam_type=e_type)
+        # Pass None to get ALL exam types; parser extracts type from header rows
+        data = await session.get_exam_schedule(semester_id=semester_id, exam_type=exam_type)
         return {"exam_schedule": data}
     except Exception as e:
         print(f"Exam Schedule Error: {e}")

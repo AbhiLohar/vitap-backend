@@ -1322,7 +1322,7 @@ class VTOPSession:
                     h_lower = h.lower()
                     if any(k in h_lower for k in ["category", "component", "bucket", "type", "credit type"]):
                         idx_cat = i
-                    elif any(k in h_lower for k in ["required", "minimum", "curriculum"]) and "earned" not in h_lower:
+                    elif any(k in h_lower for k in ["required", "minimum", "curriculum", "total credit", "total"]) and "earned" not in h_lower:
                         idx_req = i
                     elif any(k in h_lower for k in ["earned", "completed", "done"]):
                         idx_earned = i
