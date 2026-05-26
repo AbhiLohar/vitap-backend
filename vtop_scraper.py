@@ -1640,8 +1640,14 @@ class VTOPSession:
     async def get_payment_history(self) -> list:
         """Fetch payment receipts and history."""
         try:
-            # For getReceiptsApplno, the response is directly returned when verifyMenu=true is passed
-            resp = await self._post_menu(ROUTES["payments"])
+            import time
+            data = {
+                "verifyMenu": "true",
+                "authorizedID": self.registration_number,
+                "_csrf": self.post_login_csrf,
+                "nocache": str(int(round(time.time() * 1000))),
+            }
+            resp = await self.client.post(ROUTES["payments"], data=data, headers=HEADERS)
             return self._parse_payments_table(resp.text)
         except Exception as e:
             print(f"Payments error: {e}")
