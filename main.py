@@ -90,10 +90,14 @@ async def login(username: str = Form(...), password: str = Form(...)):
 async def verify_otp(username: str = Form(...), otp: str = Form(...)):
     session = get_session(username)
     if not session:
-        raise HTTPException(status_code=401, detail="Session expired")
+        raise HTTPException(status_code=401, detail="Session expired. Please login again.")
 
     try:
         result = await session.submit_otp(otp)
+        if result == "invalid_otp":
+            return {"status": "failed", "detail": "Invalid OTP. Please check and try again."}
+        elif result == "otp_expired":
+            return {"status": "failed", "detail": "OTP has expired. Please resend."}
         return {"status": result}
     except Exception as e:
         print(f"OTP Error: {e}")

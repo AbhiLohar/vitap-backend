@@ -291,68 +291,76 @@ class VTOPSession:
         raise Exception("Login failed after maximum captcha retries. Please check your credentials or try again.")
         
     async def submit_otp(self, otp: str) -> str:
-        """Submit OTP for two-factor auth."""
+        """Submit OTP for two-factor auth using multipart/form-data (required by VTOP)."""
         try:
-            # Use the exact endpoint and parameters from VTOP's JS
-            otp_data = {
-                "otpCode": otp,
-                "_csrf": self.csrf_token
+            # VTOP requires multipart/form-data for OTP validation
+            # (confirmed by reference app's Rust implementation using Form::new().text().multipart())
+            multipart_files = {
+                "otpCode": (None, otp),
+                "_csrf": (None, self.csrf_token),
             }
             
-            # Primary VTOP security OTP endpoint
-            try:
-                resp = await self.client.post("/vtop/validateSecurityOtp", data=otp_data)
-                
-                # Check for JSON response (SUCCESS)
-                if resp.headers.get("content-type", "").startswith("application/json"):
-                    data = resp.json()
-                    if data.get("status") == "SUCCESS":
-                        # Fetch the redirectUrl to establish the session
-                        redirect_url = data.get("redirectUrl", ROUTES["content"])
-                        content_resp = await self.client.get(redirect_url)
-                        self.post_login_csrf = _find_csrf(content_resp.text)
-                        self.logged_in = True
-                        return "success"
-                    elif data.get("status") == "INVALID":
-                        return "failed"
-            except Exception as e:
-                print(f"Primary OTP endpoint failed: {e}")
-
-            # Fallback to older endpoints just in case
-            for endpoint in ["/vtop/login/verify", "/vtop/verifyOTP", "/vtop/login"]:
-                try:
-                    resp = await self.client.post(endpoint, data=otp_data)
-                    final_url = str(resp.url)
-                    
-                    if "/vtop/content" in final_url or "/vtop/home" in final_url:
-                        content_resp = await self.client.get(ROUTES["content"])
-                        self.post_login_csrf = _find_csrf(content_resp.text)
-                        self.logged_in = True
-                        return "success"
-                except httpx.RequestError:
-                    continue
+            print(f"Submitting OTP to /vtop/validateSecurityOtp (multipart, csrf={self.csrf_token[:20]}...)")
+            resp = await self.client.post("/vtop/validateSecurityOtp", files=multipart_files)
             
+            print(f"OTP response status: {resp.status_code}, content-type: {resp.headers.get('content-type', 'unknown')}")
+            print(f"OTP response body: {resp.text[:200]}")
+            
+            # Check for JSON response
+            if resp.headers.get("content-type", "").startswith("application/json"):
+                data = resp.json()
+                status = data.get("status", "UNKNOWN")
+                print(f"OTP validation status: {status}")
+                
+                if status == "SUCCESS":
+                    redirect_url = data.get("redirectUrl", ROUTES["content"])
+                    content_resp = await self.client.get(redirect_url)
+                    self.post_login_csrf = _find_csrf(content_resp.text)
+                    self.logged_in = True
+                    return "success"
+                elif status == "INVALID":
+                    return "invalid_otp"
+                elif status == "EXPIRED":
+                    return "otp_expired"
+                else:
+                    message = data.get("message", "Unknown error")
+                    print(f"OTP unexpected status: {status} - {message}")
+                    return "failed"
+            
+            # Non-JSON response — check if redirected to content page
+            final_url = str(resp.url)
+            if "/vtop/content" in final_url or "/vtop/home" in final_url:
+                self.post_login_csrf = _find_csrf(resp.text)
+                self.logged_in = True
+                return "success"
+            
+            print(f"OTP: Unexpected non-JSON response at {final_url}")
             return "failed"
         except Exception as e:
             print(f"OTP submission error: {e}")
             return "failed"
     
     async def resend_otp(self) -> str:
-        """Resend OTP to user's registered email — matches reference app's resendSecurityOtp endpoint."""
+        """Resend OTP using multipart/form-data (required by VTOP)."""
         try:
-            otp_data = {
-                "_csrf": self.csrf_token,
+            # VTOP requires multipart/form-data for resendSecurityOtp
+            multipart_files = {
+                "_csrf": (None, self.csrf_token),
             }
-            resp = await self.client.post("/vtop/resendSecurityOtp", data=otp_data)
+            
+            print(f"Resending OTP to /vtop/resendSecurityOtp (multipart, csrf={self.csrf_token[:20]}...)")
+            resp = await self.client.post("/vtop/resendSecurityOtp", files=multipart_files)
+            
+            print(f"Resend OTP response: {resp.status_code}, body: {resp.text[:200]}")
             
             if resp.headers.get("content-type", "").startswith("application/json"):
                 data = resp.json()
                 status = data.get("status", "")
+                message = data.get("message", "")
+                print(f"Resend OTP status: {status}, message: {message}")
                 if status == "SUCCESS":
-                    print("OTP resent successfully")
                     return "success"
                 else:
-                    print(f"Resend OTP failed: {data}")
                     return "failed"
             
             # Non-JSON response
