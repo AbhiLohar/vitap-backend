@@ -1132,21 +1132,17 @@ class VTOPSession:
                             return tds[1].get_text(strip=True)
                 return ""
             
-            # Find the main table containing university profile details
-            main_table = None
-            for table in soup.find_all("table"):
-                if "STUDENT NAME" in table.get_text().upper():
-                    main_table = table
-                    break
-                    
-            def extract_from_main_table(label_text):
-                if not main_table: return ""
-                for row in main_table.find_all("tr"):
-                    tds = row.find_all("td")
-                    if len(tds) >= 2:
-                        label = tds[0].get_text(strip=True).upper()
-                        if label_text.upper() in label:
-                            return tds[1].get_text(strip=True)
+            # University details are usually in the first few tables. 
+            # High school details (which mistakenly match "Branch" and "School") are further down.
+            top_tables = soup.find_all("table")[:3]
+            def extract_from_top_tables(label_text):
+                for table in top_tables:
+                    for row in table.find_all("tr"):
+                        tds = row.find_all("td")
+                        if len(tds) >= 2:
+                            label = tds[0].get_text(strip=True).upper()
+                            if label_text.upper() in label:
+                                return tds[1].get_text(strip=True)
                 return ""
             
             # Extract base64 profile picture
@@ -1166,9 +1162,9 @@ class VTOPSession:
                 "gender": extract_table_value("GENDER"),
                 "blood_group": extract_table_value("BLOOD GROUP"),
                 "email": extract_table_value("EMAIL"),
-                "program": extract_from_main_table("PROGRAMME") or extract_from_main_table("DEGREE") or extract_from_main_table("PROGRAM"),
-                "branch": extract_from_main_table("SPECIALIZATION") or extract_from_main_table("CORE") or extract_from_main_table("BRANCH"),
-                "school": extract_from_main_table("SCHOOL") or extract_from_main_table("INSTITUTE"),
+                "program": extract_from_top_tables("PROGRAMME") or extract_from_top_tables("DEGREE") or extract_from_top_tables("PROGRAM"),
+                "branch": extract_from_top_tables("SPECIALIZATION") or extract_from_top_tables("CORE") or extract_from_top_tables("BRANCH"),
+                "school": extract_from_top_tables("SCHOOL") or extract_from_top_tables("INSTITUTE"),
                 "base64_pfp": base64_pfp,
             }
             
