@@ -234,6 +234,31 @@ async def profile(username: str):
         print(f"Profile Error: {e}")
         return {"profile": {}}
 
+@app.get("/debug_profile")
+async def debug_profile(username: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        from bs4 import BeautifulSoup
+        await session._post_menu("/vtop/studentsRecord/StudentProfileAllView")
+        resp = await session._post_authenticated(
+            "/vtop/studentsRecord/StudentProfileAllView",
+            {"authorizedID": session.registration_number}
+        )
+        soup = BeautifulSoup(resp.text, "lxml")
+        labels = []
+        for row in soup.find_all("tr"):
+            tds = row.find_all("td")
+            if len(tds) >= 2:
+                labels.append({
+                    "label": tds[0].get_text(strip=True),
+                    "value": tds[1].get_text(strip=True)
+                })
+        return {"labels": labels}
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # ─── Mentor ──────────────────────────────────────────────
 @app.get("/mentor")
