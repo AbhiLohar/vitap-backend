@@ -39,7 +39,7 @@ ROUTES = {
     "faculty":      "/vtop/hrms/EmployeeSearchForStudent",
     "outing":       "/vtop/hostel/StudentGeneralOuting",
     "da":           "/vtop/examinations/doDigitalAssignment",
-    "payments":     "/vtop/finance/listReceipts",
+    "payments":     "/vtop/p2p/getReceiptsApplno",
 }
 
 # Known semester IDs for VIT-AP (fallback when dropdown not found)
@@ -376,7 +376,7 @@ class VTOPSession:
         """Make an authenticated POST request."""
         if not self.logged_in:
             raise Exception("Not logged in")
-        data["_csrf"] = self.post_login_csrf
+        data["_csrf"] = self.post_login_csrf or self.csrf_token
         resp = await self.client.post(url, data=data)
         return resp
 
@@ -389,20 +389,13 @@ class VTOPSession:
 
     async def _post_menu(self, url: str) -> httpx.Response:
         """Initialize a VTOP page with verifyMenu — required for VTOP to load dropdowns."""
-        # Optimization: Only initialize if not already done in this session
-        if url in self._initialized_pages:
-            return await self.client.get(url)
-            
-        import time
         data = {
             "verifyMenu": "true",
             "authorizedID": self.registration_number,
-            "_csrf": getattr(self, 'csrf_token', self.post_login_csrf),
+            "_csrf": self.post_login_csrf or self.csrf_token,
             "nocache": "@(new Date().getTime())",
         }
         resp = await self.client.post(url, data=data, headers=HEADERS)
-        if resp.status_code == 200:
-            self._initialized_pages.add(url)
         return resp
     
     async def get_semesters(self) -> list:
@@ -765,22 +758,49 @@ class VTOPSession:
         return data
     
     async def get_marks(self, semester_id: str = None) -> list:
-        """Fetch marks data."""
+        """Fetch marks data. Tries requested semester, then falls back to recent semesters."""
         try:
-            sem_id = semester_id or "AP2025262"
+            # Initialize page first to get semester list and updated CSRF
+            menu_resp = await self._post_menu(ROUTES["marks"])
             
-            # Initialize page first
-            await self._post_menu(ROUTES["marks"])
+            # Extract CSRF from the marks page (VTOP updates it per page)
+            menu_csrf = _find_csrf(menu_resp.text)
+            if menu_csrf:
+                self.post_login_csrf = menu_csrf
             
-            resp = await self._post_authenticated(
-                ROUTES["view_marks"],
-                {
-                    "semesterSubId": sem_id,
-                    "authorizedID": self.registration_number,
-                }
-            )
+            # Build list of semesters to try
+            semesters_to_try = []
+            if semester_id:
+                semesters_to_try.append(semester_id)
             
-            return self._parse_marks(resp.text)
+            # Parse available semesters from the menu page
+            soup = BeautifulSoup(menu_resp.text, "lxml")
+            select = soup.find("select", {"id": "semesterSubId"})
+            if select:
+                for opt in select.find_all("option"):
+                    val = opt.get("value", "").strip()
+                    if val and val not in semesters_to_try:
+                        semesters_to_try.append(val)
+            
+            # Fallback if no semesters found from page
+            if not semesters_to_try:
+                semesters_to_try = [semester_id or "AP2025262"]
+            
+            # Try each semester until we find one with marks
+            for sem_id in semesters_to_try[:5]:  # Try up to 5 semesters
+                resp = await self._post_authenticated(
+                    ROUTES["view_marks"],
+                    {
+                        "semesterSubId": sem_id,
+                        "authorizedID": self.registration_number,
+                    }
+                )
+                
+                marks = self._parse_marks(resp.text)
+                if marks:
+                    return marks
+            
+            return []
         except Exception as e:
             print(f"Marks error: {e}")
             return []
@@ -1636,13 +1656,10 @@ class VTOPSession:
     async def get_payment_history(self) -> list:
         """Fetch payment receipts and history."""
         try:
-            # First hit the menu to update session state and CSRF
-            await self._post_menu(ROUTES["payments"])
-            
             data = {
                 "verifyMenu": "true",
                 "authorizedID": self.registration_number,
-                "_csrf": getattr(self, 'csrf_token', self.post_login_csrf),
+                "_csrf": self.post_login_csrf or self.csrf_token,
                 "nocache": "@(new Date().getTime())",
             }
             resp = await self.client.post(ROUTES["payments"], data=data, headers=HEADERS)
