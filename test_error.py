@@ -1,3 +1,4 @@
+import os
 import asyncio
 from vtop_scraper import VTOPSession, _find_login_error
 from bs4 import BeautifulSoup
@@ -11,8 +12,8 @@ async def main():
     
     login_data = {
         "_csrf": csrf,
-        "username": "23BCE7356",
-        "password": "Quntum@2004",
+        "username": os.environ.get("VTOP_USERNAME"),
+        "password": os.environ.get("VTOP_PASSWORD"),
         "captchaStr": "",
         "gResponse": ""
     }

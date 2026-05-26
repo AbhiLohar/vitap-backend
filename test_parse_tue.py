@@ -1,10 +1,11 @@
+import os
 import asyncio
 from vtop_scraper import VTOPSession
 
 async def main():
     session = VTOPSession()
     try:
-        await session.login("23BCE7356", "Quntum@2004")
+        await session.login(os.environ.get("VTOP_USERNAME"), os.environ.get("VTOP_PASSWORD"))
         with open("timetable_structure.html", "r", encoding="utf-8") as f:
             html = f.read()
         
