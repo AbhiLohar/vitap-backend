@@ -397,8 +397,8 @@ class VTOPSession:
         data = {
             "verifyMenu": "true",
             "authorizedID": self.registration_number,
-            "_csrf": self.post_login_csrf,
-            "nocache": str(int(round(time.time() * 1000))),
+            "_csrf": getattr(self, 'csrf_token', self.post_login_csrf),
+            "nocache": "@(new Date().getTime())",
         }
         resp = await self.client.post(url, data=data, headers=HEADERS)
         if resp.status_code == 200:
@@ -1636,12 +1636,14 @@ class VTOPSession:
     async def get_payment_history(self) -> list:
         """Fetch payment receipts and history."""
         try:
-            import time
+            # First hit the menu to update session state and CSRF
+            await self._post_menu(ROUTES["payments"])
+            
             data = {
                 "verifyMenu": "true",
                 "authorizedID": self.registration_number,
-                "_csrf": self.post_login_csrf,
-                "nocache": str(int(round(time.time() * 1000))),
+                "_csrf": getattr(self, 'csrf_token', self.post_login_csrf),
+                "nocache": "@(new Date().getTime())",
             }
             resp = await self.client.post(ROUTES["payments"], data=data, headers=HEADERS)
             return self._parse_payments_table(resp.text)
