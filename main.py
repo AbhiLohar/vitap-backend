@@ -241,11 +241,7 @@ async def debug_profile(username: str):
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         from bs4 import BeautifulSoup
-        await session._post_menu("/vtop/studentsRecord/StudentProfileAllView")
-        resp = await session._post_authenticated(
-            "/vtop/studentsRecord/StudentProfileAllView",
-            {"authorizedID": session.registration_number}
-        )
+        resp = await session.client.get("/vtop/studentsRecord/StudentProfileAllView")
         soup = BeautifulSoup(resp.text, "lxml")
         labels = []
         for row in soup.find_all("tr"):
@@ -257,7 +253,34 @@ async def debug_profile(username: str):
                 })
         return {"labels": labels}
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/debug_html")
+async def debug_html(username: str, target: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        if target == "payments":
+            data = {
+                "verifyMenu": "true",
+                "authorizedID": session.registration_number,
+                "_csrf": session.post_login_csrf,
+                "nocache": "@(new Date().getTime())"
+            }
+            resp = await session.client.post("/vtop/p2p/getReceiptsApplno", data=data, headers=HEADERS)
+            return {"html": resp.text}
+        elif target == "marks":
+            resp = await session.client.post("/vtop/examinations/doStudentMarkView", data={
+                "verifyMenu": "true",
+                "authorizedID": session.registration_number,
+                "_csrf": session.post_login_csrf,
+                "semesterSubId": "AP24251" # Hardcoded for debugging
+            }, headers=HEADERS)
+            return {"html": resp.text}
+        return {"error": "Invalid target"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Mentor ──────────────────────────────────────────────
