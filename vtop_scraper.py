@@ -835,7 +835,7 @@ class VTOPSession:
                 for drow in detail_rows:
                     dcells = drow.find_all("td")
                     dtexts = [clean(c.get_text()) for c in dcells]
-                    if len(dtexts) < 5: continue
+                    if len(dtexts) == 0: continue
                     
                     details.append({
                         "serial_number": dtexts[0] if len(dtexts) > 0 else "",
@@ -1209,17 +1209,16 @@ class VTOPSession:
             return {"name": "Student", "reg_no": self.registration_number}
     
     async def get_curriculum(self) -> dict:
-        """Fetch curriculum with multiple fallbacks and caching."""
-        if "curriculum" in self._cache:
-            return self._cache["curriculum"]
-            
+        """Fetch curriculum and credit distribution."""
         try:
-            print(f"Fetching curriculum for {self.registration_number}")
-            # 1. Try Curriculum Page
+            # Try to fetch curriculum
+            await self._post_menu(ROUTES["curriculum"])
+            
             resp = await self._post_authenticated(
                 ROUTES["curriculum"],
                 {"authorizedID": self.registration_number}
             )
+            
             data = self._parse_curriculum(resp.text)
             
             print(f"Initial parse: {data['summary']}")
@@ -1237,25 +1236,36 @@ class VTOPSession:
                 if not data["distribution"]:
                     data["distribution"] = gh_data["distribution"]
 
-            # 3. If still nothing, calculate from Grade History table
+            # 3. If still nothing, extract from Grade History table
+            grades_data = await self.get_grades()
+            grades_list = grades_data.get("courses", []) if isinstance(grades_data, dict) else []
+            
             if data["summary"]["earned"] == "0":
                 print("Summary still 0, calculating from grades...")
-                grades = await self.get_grades()
-                earned = 0.0
-                for g in grades:
+                if isinstance(grades_data, dict):
+                    earned_str = grades_data.get("credits_earned", "0")
+                    if earned_str and earned_str != "N/A":
+                        data["summary"]["earned"] = str(earned_str)
+                    else:
+                        earned = 0.0
+                        for g in grades_list:
+                            try:
+                                grade = g.get("grade", "").upper()
+                                if grade and grade not in ["F", "N", "W", "E", "FAIL"]:
+                                    earned += float(g.get("credits", 0))
+                            except: continue
+                        data["summary"]["earned"] = str(earned)
+                        
                     try:
-                        # Only count if grade is passed (not F, N, W, etc.)
-                        grade = g.get("grade", "").upper()
-                        if grade and grade not in ["F", "N", "W", "E", "FAIL"]:
-                            earned += float(g.get("credits", 0))
-                    except: continue
-                data["summary"]["earned"] = str(earned)
-                # We can't easily get buckets from grades without a mapping
+                        e = float(data["summary"]["earned"])
+                        t = float(data["summary"]["total"])
+                        if t == 0: t = 160.0
+                        data["summary"]["total"] = str(t)
+                        data["summary"]["left"] = str(round(max(0.0, t - e), 2))
+                    except: pass
                 
             # Inject detailed courses into distribution using grades
             try:
-                grades = await self.get_grades()
-                
                 # Map course types to bucket names
                 def match_category(c_type, cat_name):
                     c = c_type.upper()
@@ -1273,7 +1283,7 @@ class VTOPSession:
                     dist["courses"] = []
                     cat_name = dist["category"]
                     
-                    for g in grades:
+                    for g in grades_list:
                         # Only add passed/completed courses
                         grade = g.get("grade", "").upper()
                         if grade in ["F", "N", "W", "FAIL", ""]: continue
