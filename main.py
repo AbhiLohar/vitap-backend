@@ -24,7 +24,7 @@ app.add_middleware(
 
 # Active sessions per user
 client_store: dict[str, dict] = {}
-SESSION_TIMEOUT = 1800  # 30 minutes
+SESSION_TIMEOUT = 7200  # 2 hours
 
 
 def get_session(username: str) -> VTOPSession | None:
