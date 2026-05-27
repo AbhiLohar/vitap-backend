@@ -1296,7 +1296,43 @@ class VTOPSession:
                         data["summary"]["total"] = str(t)
                         data["summary"]["left"] = str(round(max(0.0, t - e), 2))
                     except: pass
+            if not data["distribution"] and grades_list:
+                print("Synthesizing distribution from grades...")
+                synth = {
+                    "PC": {"category": "Programme Core", "required": 40.0, "earned": 0.0},
+                    "PE": {"category": "Programme Elective", "required": 22.0, "earned": 0.0},
+                    "UC": {"category": "University Core", "required": 89.0, "earned": 0.0},
+                    "UE": {"category": "University Elective", "required": 9.0, "earned": 0.0},
+                    "NC": {"category": "Non Credit", "required": 0.0, "earned": 0.0},
+                    "BRIDGE": {"category": "Bridge Course", "required": 0.0, "earned": 0.0},
+                    "ECA": {"category": "Extra Curricular", "required": 0.0, "earned": 0.0},
+                }
                 
+                for g in grades_list:
+                    grade = g.get("grade", "").upper()
+                    if grade in ["F", "N", "W", "FAIL", ""]: continue
+                    
+                    c_type = g.get("type", "").upper()
+                    if not c_type: continue
+                    
+                    if c_type not in synth:
+                        synth[c_type] = {"category": c_type, "required": 0.0, "earned": 0.0}
+                        
+                    try:
+                        synth[c_type]["earned"] += float(g.get("credits", 0))
+                    except: pass
+                
+                dist_list = []
+                for k, v in synth.items():
+                    if v["earned"] > 0 or v["required"] > 0:
+                        dist_list.append({
+                            "category": v["category"],
+                            "required": str(v["required"]),
+                            "earned": str(v["earned"]),
+                            "left": str(max(0.0, v["required"] - v["earned"]))
+                        })
+                data["distribution"] = dist_list
+
             # Inject detailed courses into distribution using grades
             try:
                 # Map course types to bucket names
