@@ -1296,6 +1296,17 @@ class VTOPSession:
                         data["summary"]["total"] = str(t)
                         data["summary"]["left"] = str(round(max(0.0, t - e), 2))
                     except: pass
+            def normalize_type(raw_type):
+                rt = raw_type.strip().upper()
+                if rt == "PC" or "PROGRAMME CORE" in rt: return "PC"
+                if rt == "PE" or "PROGRAMME ELECTIVE" in rt: return "PE"
+                if rt == "UC" or "UNIVERSITY CORE" in rt: return "UC"
+                if rt == "UE" or "UNIVERSITY ELECTIVE" in rt: return "UE"
+                if rt == "NC" or "NON CREDIT" in rt: return "NC"
+                if rt == "BRIDGE" or "BRIDGE" in rt: return "BRIDGE"
+                if rt == "ECA" or "EXTRA" in rt or "CO-CURRIC" in rt: return "ECA"
+                return rt
+
             if not data["distribution"] and grades_list:
                 print("Synthesizing distribution from grades...")
                 synth = {
@@ -1312,11 +1323,13 @@ class VTOPSession:
                     grade = g.get("grade", "").upper()
                     if grade in ["F", "N", "W", "FAIL", ""]: continue
                     
-                    c_type = g.get("type", "").upper()
-                    if not c_type: continue
+                    raw_c_type = g.get("type", "")
+                    if not raw_c_type: continue
+                    
+                    c_type = normalize_type(raw_c_type)
                     
                     if c_type not in synth:
-                        synth[c_type] = {"category": c_type, "required": 0.0, "earned": 0.0}
+                        synth[c_type] = {"category": raw_c_type.title(), "required": 0.0, "earned": 0.0}
                         
                     try:
                         synth[c_type]["earned"] += float(g.get("credits", 0))
@@ -1337,7 +1350,7 @@ class VTOPSession:
             try:
                 # Map course types to bucket names
                 def match_category(c_type, cat_name):
-                    c = c_type.upper()
+                    c = normalize_type(c_type)
                     n = cat_name.lower()
                     if c == "PC" and "programme core" in n: return True
                     if c == "PE" and "programme elective" in n: return True
@@ -1346,7 +1359,7 @@ class VTOPSession:
                     if c == "NC" and "non credit" in n: return True
                     if c == "BRIDGE" and "bridge" in n: return True
                     if c == "ECA" and ("extra" in n or "co-curric" in n): return True
-                    return False
+                    return c.lower() in n or n in c.lower()
 
                 for dist in data["distribution"]:
                     dist["courses"] = []
