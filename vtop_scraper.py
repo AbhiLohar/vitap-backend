@@ -171,7 +171,7 @@ class VTOPSession:
         self._initialized_pages = set()
         self._cache = {} # Simple in-memory cache for frequently accessed data
     
-    async def login(self, username: str, password: str, max_retries: int = 10) -> str:
+    async def login(self, username: str, password: str, max_retries: int = 20) -> str:
         """
         Full login flow with improved resilience for captcha retries.
         """
