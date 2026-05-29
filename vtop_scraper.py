@@ -228,29 +228,44 @@ class VTOPSession:
                 }
                 resp = await self.client.post(ROUTES["login"], data=login_data)
                 
-                # 1. Check for explicit login error URL
-                if ROUTES["login_error"] in final_url:
-                    print(f"Login error detected in URL: {resp.url}")
-                    error_msg = "Invalid username, password, or captcha"
-                    if "maximum fail attempts" in text_lower:
-                        error_msg = "Maximum login attempts reached. Use Forgot Password."
-                    elif "invalid" in text_lower and "captcha" in text_lower:
-                        error_msg = "Invalid captcha."
-                    return error_msg
+                final_url = str(resp.url)
+                text_lower = resp.text.lower()
                 
-                # 2. Check for successful login
+                # 1. Check for successful login
                 if ROUTES["content"] in final_url or "/vtop/content" in final_url:
                     print("Login successful, redirected to content page")
                     self.post_login_csrf = _find_csrf(resp.text)
                     if not self.post_login_csrf:
                         content_resp = await self.client.get(ROUTES["content"])
                         self.post_login_csrf = _find_csrf(content_resp.text)
-                    
                     self.logged_in = True
                     return "success"
                 
+                # 2. Check for explicit login error URL
+                elif ROUTES["login_error"] in final_url or "/vtop/login/error" in final_url:
+                    error_msg = "Invalid username, password, or captcha"
+                    if "maximum fail attempts" in text_lower:
+                        error_msg = "Maximum login attempts reached. Use Forgot Password."
+                    elif "invalid" in text_lower and "captcha" in text_lower:
+                        error_msg = "Invalid captcha."
+                    else:
+                        try:
+                            error_msg = _find_login_error(resp.text)
+                        except:
+                            pass
+                            
+                    print(f"Login error detected: {error_msg}")
+                    
+                    if "captcha" in error_msg.lower():
+                        # Update CSRF from error page for next attempt
+                        self.csrf_token = _find_csrf(resp.text)
+                        await asyncio.sleep(0.5)
+                        continue
+                    else:
+                        return error_msg
+                
                 # 3. Check for explicit OTP URL
-                if "otp" in final_url.lower() or "twofactor" in final_url.lower():
+                elif "otp" in final_url.lower() or "twofactor" in final_url.lower():
                     print("OTP required detected in URL")
                     self._otp_required = True
                     print("Force triggering OTP email delivery...")
@@ -270,28 +285,10 @@ class VTOPSession:
                     await self.resend_otp()
                     return "otp_required"
                 
-                # Fallback error if we didn't hit content or OTP
-                print("Unknown login response, returning error")
-                return "Failed to login. Please check credentials or VTOP status."
-                
-                elif ROUTES["login_error"] in final_url or "/vtop/login/error" in final_url:
-                    error_msg = _find_login_error(resp.text)
-                    print(f"Login error: {error_msg}")
-                    
-                    if "captcha" in error_msg.lower():
-                        # Update CSRF from error page for next attempt
-                        self.csrf_token = _find_csrf(resp.text)
-                        await asyncio.sleep(0.5)
-                        continue
-                    else:
-                        raise Exception(f"Login failed: {error_msg}")
-                
+                # Fallback error if we didn't hit content, error, or OTP
                 else:
-                    print(f"Unexpected page: {final_url}")
-                    # Update CSRF and retry
-                    self.csrf_token = _find_csrf(resp.text)
-                    await asyncio.sleep(1)
-                    continue
+                    print(f"Unknown login response: {final_url}")
+                    return "Failed to login. Please check credentials or VTOP status."
                     
             except httpx.RequestError as e:
                 print(f"Network error: {e}")
