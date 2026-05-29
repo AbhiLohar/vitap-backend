@@ -238,11 +238,18 @@ class VTOPSession:
                     current_csrf = _find_csrf(resp.text)
                     if current_csrf:
                         self.csrf_token = current_csrf
+                    
+                    # Force trigger the OTP to ensure the user receives the email
+                    print("Force triggering OTP email delivery...")
+                    await self.resend_otp()
+                    
                     return "otp_required"
                     
                 if "otp" in final_url.lower() or "twofactor" in final_url.lower():
                     print("OTP required detected in URL")
                     self._otp_required = True
+                    print("Force triggering OTP email delivery...")
+                    await self.resend_otp()
                     return "otp_required"
                 
                 if ROUTES["content"] in final_url or "/vtop/content" in final_url:
@@ -341,33 +348,42 @@ class VTOPSession:
             return "failed"
     
     async def resend_otp(self) -> str:
-        """Resend OTP using multipart/form-data (required by VTOP)."""
+        """Resend OTP using multiple methods to ensure delivery."""
         try:
-            # VTOP requires multipart/form-data for resendSecurityOtp
-            multipart_files = {
-                "_csrf": (None, self.csrf_token),
-            }
+            print(f"Resending OTP. CSRF: {self.csrf_token[:10]}...")
+            success = False
             
-            print(f"Resending OTP to /vtop/resendSecurityOtp (multipart, csrf={self.csrf_token[:20]}...)")
-            resp = await self.client.post("/vtop/resendSecurityOtp", files=multipart_files)
-            
-            print(f"Resend OTP response: {resp.status_code}, body: {resp.text[:200]}")
-            
-            if resp.headers.get("content-type", "").startswith("application/json"):
-                data = resp.json()
-                status = data.get("status", "")
-                message = data.get("message", "")
-                print(f"Resend OTP status: {status}, message: {message}")
-                if status == "SUCCESS":
-                    return "success"
-                else:
-                    return "failed"
-            
-            # Non-JSON response
-            if "success" in resp.text.lower() or "sent" in resp.text.lower():
-                return "success"
-            
-            return "failed"
+            # Method 1: Regular form data (most common for VTOP)
+            try:
+                resp1 = await self.client.post("/vtop/resendSecurityOtp", data={"_csrf": self.csrf_token})
+                print(f"Resend Method 1 (data) status: {resp1.status_code}, body: {resp1.text[:100]}")
+                if "success" in resp1.text.lower() or "sent" in resp1.text.lower() or "true" in resp1.text.lower():
+                    success = True
+            except Exception as e:
+                print(f"Method 1 failed: {e}")
+
+            # Method 2: Multipart form data (fallback)
+            if not success:
+                try:
+                    multipart_files = {"_csrf": (None, self.csrf_token)}
+                    resp2 = await self.client.post("/vtop/resendSecurityOtp", files=multipart_files)
+                    print(f"Resend Method 2 (multipart) status: {resp2.status_code}, body: {resp2.text[:100]}")
+                    if "success" in resp2.text.lower() or "sent" in resp2.text.lower() or "true" in resp2.text.lower():
+                        success = True
+                except Exception as e:
+                    print(f"Method 2 failed: {e}")
+                    
+            # Method 3: GET request (fallback)
+            if not success:
+                try:
+                    resp3 = await self.client.get("/vtop/resendSecurityOtp")
+                    print(f"Resend Method 3 (GET) status: {resp3.status_code}")
+                    if resp3.status_code == 200 or "success" in resp3.text.lower() or "sent" in resp3.text.lower():
+                        success = True
+                except Exception as e:
+                    print(f"Method 3 failed: {e}")
+
+            return "success" if success else "failed"
         except Exception as e:
             print(f"Resend OTP error: {e}")
             return "failed"
