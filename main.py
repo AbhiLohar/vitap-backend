@@ -73,12 +73,16 @@ async def login(username: str = Form(...), password: str = Form(...)):
         session = VTOPSession()
         result = await session.login(username, password)
 
-        client_store[username] = {
-            "session": session,
-            "last_active": time.time(),
-        }
-
-        return {"status": result}
+        if result in ["success", "otp_required"]:
+            client_store[username] = {
+                "session": session,
+                "last_active": time.time(),
+            }
+            return {"status": result}
+        else:
+            # It's an error message string
+            await session.close()
+            raise HTTPException(status_code=401, detail=result)
 
     except Exception as e:
         print(f"Login Error: {e}")
