@@ -268,6 +268,10 @@ class VTOPSession:
                 elif "otp" in final_url.lower() or "twofactor" in final_url.lower():
                     print("OTP required detected in URL")
                     self._otp_required = True
+                    # Update CSRF token from OTP page before resending or submitting
+                    new_csrf = _find_csrf(resp.text)
+                    if new_csrf:
+                        self.csrf_token = new_csrf
                     print("Force triggering OTP email delivery...")
                     await self.resend_otp()
                     return "otp_required"
@@ -1567,11 +1571,15 @@ class VTOPSession:
             # Initialize page first
             await self._post_menu(ROUTES["faculty"])
             
+            import datetime
+            x_val = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            
             resp = await self._post_authenticated(
                 ROUTES["faculty"],
                 {
                     "empId": search_term,
                     "authorizedID": self.registration_number,
+                    "x": x_val
                 }
             )
             
@@ -1636,6 +1644,66 @@ class VTOPSession:
             })
         
         return data
+
+    async def get_faculty_data(self, emp_id: str) -> dict:
+        """Fetch detailed info for a single faculty member."""
+        try:
+            import datetime
+            x_val = datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            resp = await self._post_authenticated(
+                "/vtop/hrms/EmployeeSearch1ForStudent",
+                {
+                    "empId": emp_id,
+                    "authorizedID": self.registration_number,
+                    "x": x_val
+                }
+            )
+            return self._parse_faculty_data(resp.text)
+        except Exception as e:
+            print(f"Faculty data error: {e}")
+            return {}
+
+    def _parse_faculty_data(self, html: str) -> dict:
+        """Parse EmployeeSearch1ForStudent response."""
+        soup = BeautifulSoup(html, "lxml")
+        tables = soup.find_all("table", class_="table-bordered")
+        
+        details = {
+            "name": "",
+            "designation": "",
+            "department": "",
+            "school_centre": "",
+            "email": "",
+            "cabin_number": "",
+            "office_hours": []
+        }
+        
+        if not tables:
+            tables = soup.find_all("table")
+            
+        if len(tables) > 0:
+            for row in tables[0].find_all("tr"):
+                cells = row.find_all("td")
+                if len(cells) >= 2:
+                    label = cells[0].get_text(strip=True).lower()
+                    val = cells[1].get_text(strip=True)
+                    if "name of the faculty" in label: details["name"] = val
+                    elif "designation" in label: details["designation"] = val
+                    elif "name of department" in label: details["department"] = val
+                    elif "school" in label or "centre" in label: details["school_centre"] = val
+                    elif "e-mail" in label: details["email"] = val
+                    elif "cabin number" in label: details["cabin_number"] = val
+
+        if len(tables) > 1:
+            for row in tables[1].find_all("tr")[1:]:
+                cells = row.find_all("td")
+                if len(cells) >= 2:
+                    day = cells[0].get_text(strip=True)
+                    timings = cells[1].get_text(strip=True)
+                    if day and timings and "open hours" not in day.lower() and "week day" not in day.lower():
+                        details["office_hours"].append({"day": day, "timings": timings})
+
+        return details
 
     async def get_digital_assignments(self, semester_id: str = None) -> list:
         """Fetch digital assignments."""

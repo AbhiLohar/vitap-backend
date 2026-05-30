@@ -351,7 +351,7 @@ async def curriculum(username: str):
 
 # ─── Faculty Search ──────────────────────────────────────
 @app.get("/faculty")
-async def faculty(username: str, search_term: str):
+async def faculty(username: str, search_term: str = ""):
     session = get_session(username)
     if not session:
         raise HTTPException(status_code=401, detail="Not logged in")
@@ -361,6 +361,18 @@ async def faculty(username: str, search_term: str):
     except Exception as e:
         print(f"Faculty Error: {e}")
         return {"faculty": []}
+
+@app.get("/faculty/details")
+async def faculty_details(username: str, emp_id: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_faculty_data(emp_id)
+        return {"details": data}
+    except Exception as e:
+        print(f"Faculty Details Error: {e}")
+        return {"details": {}}
 
 
 # ─── Digital Assignments ───────────────────────────────
