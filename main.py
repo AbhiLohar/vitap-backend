@@ -9,7 +9,7 @@ from fastapi import FastAPI, Form, HTTPException
 from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import UJSONResponse
-from vtop_scraper import VTOPSession
+from vtop_scraper import VTOPSession, HEADERS
 
 app = FastAPI(title="VTOP API", version="3.0.0", default_response_class=UJSONResponse)
 
@@ -259,32 +259,7 @@ async def debug_profile(username: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/debug_html")
-async def debug_html(username: str, target: str):
-    session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    try:
-        if target == "payments":
-            data = {
-                "verifyMenu": "true",
-                "authorizedID": session.registration_number,
-                "_csrf": session.post_login_csrf,
-                "nocache": "@(new Date().getTime())"
-            }
-            resp = await session.client.post("/vtop/p2p/getReceiptsApplno", data=data, headers=HEADERS)
-            return {"html": resp.text}
-        elif target == "marks":
-            resp = await session.client.post("/vtop/examinations/doStudentMarkView", data={
-                "verifyMenu": "true",
-                "authorizedID": session.registration_number,
-                "_csrf": session.post_login_csrf,
-                "semesterSubId": "AP24251" # Hardcoded for debugging
-            }, headers=HEADERS)
-            return {"html": resp.text}
-        return {"error": "Invalid target"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Debug endpoints removed for production safety
 
 
 # ─── Mentor ──────────────────────────────────────────────

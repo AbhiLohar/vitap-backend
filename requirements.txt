@@ -7,4 +7,4 @@ lxml
 Pillow
 ddddocr
 ujson
-uvloop
+uvloop; sys_platform != "win32"
