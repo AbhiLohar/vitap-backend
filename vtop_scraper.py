@@ -16,6 +16,8 @@ VTOP_BASE = "https://vtop.vitap.ac.in"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Connection": "close",
+    "Origin": "https://vtop.vitap.ac.in",
+    "Referer": "https://vtop.vitap.ac.in/vtop/",
 }
 
 ROUTES = {
@@ -225,6 +227,7 @@ class VTOPSession:
                     "username": self.registration_number,
                     "password": password,
                     "captchaStr": solved,
+                    "gResponse": "",
                 }
                 resp = await self.client.post(ROUTES["login"], data=login_data)
                 
@@ -292,6 +295,7 @@ class VTOPSession:
                 # Fallback error if we didn't hit content, error, or OTP
                 else:
                     print(f"Unknown login response: {final_url}")
+                    print(resp.text[:5000])  # Print first 5000 chars of HTML to debug
                     return "Failed to login. Please check credentials or VTOP status."
                     
             except httpx.RequestError as e:
