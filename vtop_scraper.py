@@ -78,19 +78,12 @@ KNOWN_SEMESTERS = {
 # ── Captcha Solver ─────────────────────────────────────────
 def _solve_captcha_image(b64_data: str) -> str:
     """
-    Solve VTOP captcha using ddddocr.
+    Solve VTOP captcha using custom ML model.
+    VTOP captchas are always 6 alphanumeric characters.
     """
     try:
-        import ddddocr
-        if "," in b64_data:
-            b64_data = b64_data.split(",")[1]
-        img_bytes = base64.b64decode(b64_data)
-        
-        ocr = ddddocr.DdddOcr(show_ad=False)
-        text = ocr.classification(img_bytes)
-        
-        # Clean up
-        text = re.sub(r'[^A-Za-z0-9]', '', text)
+        from vtop_captcha import solve_vtop_captcha
+        text = solve_vtop_captcha(b64_data)
         return text
     except Exception as e:
         print(f"Captcha solve error: {e}")
@@ -203,20 +196,37 @@ class VTOPSession:
                 if current_csrf:
                     self.csrf_token = current_csrf
                 
-                captcha_b64 = _find_captcha_b64(resp.text)
-                if not captcha_b64:
-                    # Try dedicated endpoint if not on page
-                    captcha_resp = await self.client.get("/vtop/get/new/captcha")
-                    captcha_b64 = _find_captcha_b64(captcha_resp.text)
+                # Check if VTOP assigned Google ReCaptcha (captchaType=2) or Image (captchaType=1)
+                import re as regex
+                m = regex.search(r'var\s+captchaType\s*=\s*(\d+)', resp.text)
+                c_type = m.group(1) if m else "unknown"
+                
+                if c_type == "2":
+                    print(f"VTOP requested Google reCaptcha, refreshing session... (attempt {attempt + 1})")
+                    # Must re-initialize
+                    try:
+                        resp = await self.client.get(ROUTES["open_page"])
+                        self.csrf_token = _find_csrf(resp.text)
+                        pre_data = {"_csrf": self.csrf_token, "flag": "VTOP"}
+                        await self.client.post(ROUTES["prelogin"], data=pre_data)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(1)
+                    continue
+                
+                # For captchaType=1, fetch the image via AJAX endpoint
+                captcha_resp = await self.client.get("/vtop/get/new/captcha")
+                captcha_b64 = _find_captcha_b64(captcha_resp.text)
                 
                 if not captcha_b64:
-                    print("Captcha not found, retrying...")
+                    print("Captcha not found even for captchaType=1, retrying...")
                     await asyncio.sleep(1)
                     continue
                 
                 # Solve captcha
                 solved = _solve_captcha_image(captcha_b64)
-                if not solved:
+                if not solved or len(solved) != 6:
+                    print(f"Bad captcha result '{solved}' (len={len(solved) if solved else 0}), retrying...")
                     await asyncio.sleep(0.5)
                     continue
                 print(f"Captcha solved: {solved}")
@@ -244,28 +254,34 @@ class VTOPSession:
                     self.logged_in = True
                     return "success"
                 
-                # 2. Check for explicit login error URL
+                # 2. Check for explicit login error URL (also used for OTP prompts sometimes)
                 elif ROUTES["login_error"] in final_url or "/vtop/login/error" in final_url:
-                    error_msg = "Invalid username, password, or captcha"
-                    if "maximum fail attempts" in text_lower:
-                        error_msg = "Maximum login attempts reached. Use Forgot Password."
-                    elif "invalid" in text_lower and "captcha" in text_lower:
-                        error_msg = "Invalid captcha."
-                    else:
-                        try:
-                            error_msg = _find_login_error(resp.text)
-                        except:
-                            pass
-                            
-                    print(f"Login error detected: {error_msg}")
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(resp.text, 'lxml')
+                    error_div = soup.find('div', class_='alert')
+                    error_msg = error_div.text.strip().lower() if error_div else "unknown error"
                     
-                    if "captcha" in error_msg.lower():
-                        # Update CSRF from error page for next attempt
+                    if "otp has been sent" in error_msg or "otp" in error_msg:
+                        print(f"Login successful: OTP required. Msg: {error_msg}")
+                        self._otp_required = True
+                        new_csrf = _find_csrf(resp.text)
+                        if new_csrf:
+                            self.csrf_token = new_csrf
+                        return "otp_required"
+                    elif "invalid" in error_msg and "captcha" not in error_msg:
+                        print(f"Login error detected: Invalid credentials. Msg: {error_msg}")
+                        return "invalid_credentials"
+                    elif "invalid" in error_msg and "captcha" in error_msg:
+                        print(f"Login error detected: Invalid captcha. Msg: {error_msg}")
                         self.csrf_token = _find_csrf(resp.text)
                         await asyncio.sleep(0.5)
                         continue
                     else:
-                        return error_msg
+                        print(f"Unknown login error/alert: {error_msg}")
+                        # Fallback to retry if we don't know what it is (could be a missing captcha)
+                        self.csrf_token = _find_csrf(resp.text)
+                        await asyncio.sleep(0.5)
+                        continue
                 
                 # 3. Check for explicit OTP URL
                 elif "otp" in final_url.lower() or "twofactor" in final_url.lower():
@@ -292,10 +308,38 @@ class VTOPSession:
                     await self.resend_otp()
                     return "otp_required"
                 
-                # Fallback error if we didn't hit content, error, or OTP
+                # Fallback: Check for 404/Tomcat error page (happens with bad captcha or expired session)
+                elif resp.status_code == 404 or "HTTP Status 404" in resp.text or "Apache Tomcat" in resp.text:
+                    print(f"VTOP returned 404/Tomcat error, re-initializing session... (attempt {attempt + 1})")
+                    # Session is corrupted after 404 — must re-establish
+                    try:
+                        resp = await self.client.get(ROUTES["open_page"])
+                        self.csrf_token = _find_csrf(resp.text)
+                        pre_data = {"_csrf": self.csrf_token, "flag": "VTOP"}
+                        await self.client.post(ROUTES["prelogin"], data=pre_data)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(1)
+                    continue
+                
+                # If we're back on the login page itself, session/CSRF was invalid — retry
+                elif final_url.rstrip('/').endswith('/vtop/login'):
+                    print(f"Redirected back to login page, refreshing session... (attempt {attempt + 1})")
+                    # Re-initialize the session
+                    try:
+                        resp = await self.client.get(ROUTES["open_page"])
+                        self.csrf_token = _find_csrf(resp.text)
+                        pre_data = {"_csrf": self.csrf_token, "flag": "VTOP"}
+                        await self.client.post(ROUTES["prelogin"], data=pre_data)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(1)
+                    continue
+                
+                # True unknown response — fail
                 else:
                     print(f"Unknown login response: {final_url}")
-                    print(resp.text[:5000])  # Print first 5000 chars of HTML to debug
+                    print(resp.text[:2000])
                     return "Failed to login. Please check credentials or VTOP status."
                     
             except httpx.RequestError as e:
