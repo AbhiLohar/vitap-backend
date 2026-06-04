@@ -2126,14 +2126,20 @@ class VTOPSession:
 
     async def get_payment_receipt_details(self, receipt_id: str) -> dict:
         """Fetch full receipt HTML and parse it."""
-        from urllib.parse import quote_plus
         from email.utils import formatdate
+        import time
         try:
-            timestamp = quote_plus(formatdate(localtime=False, usegmt=True))
-            receit_no_encoded = quote_plus(receipt_id)
-            url = f"/vtop/finance/dupReceiptNewP2P?receitNo={receit_no_encoded}&authorizedID={self.registration_number}&_csrf={self.post_login_csrf}&x={timestamp}&registerNumber={self.registration_number}&applno="
+            timestamp = formatdate(localtime=False, usegmt=True)
+            params = {
+                "receitNo": receipt_id,
+                "authorizedID": self.registration_number,
+                "_csrf": self.post_login_csrf,
+                "x": timestamp,
+                "registerNumber": self.registration_number,
+                "applno": ""
+            }
             
-            resp = await self.client.get(url, headers=HEADERS)
+            resp = await self.client.get("/vtop/finance/dupReceiptNewP2P", params=params, headers=HEADERS)
             
             return self._parse_print_payment_receipt(resp.text)
         except Exception as e:
@@ -2147,8 +2153,7 @@ class VTOPSession:
         try:
             receipt_details = soup.find("table", class_="table noborder")
             if not receipt_details:
-                print(f"Receipt HTML: {html[:1000]}") # Print first 1000 chars for debugging
-                return {"error": "Receipt details table not found in HTML"}
+                return {"error": "Receipt details table not found in HTML", "html": html}
             rows = receipt_details.find_all("tr")
             for row in rows:
                 headers = row.find_all("th")

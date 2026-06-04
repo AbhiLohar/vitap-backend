@@ -399,7 +399,10 @@ async def payment_receipt(username: str, receipt_id: str):
     try:
         data = await session.get_payment_receipt_details(receipt_id)
         if "error" in data:
-            raise HTTPException(status_code=500, detail=data["error"])
+            error_detail = data["error"]
+            if "html" in data:
+                error_detail += f"\nHTML: {data['html'][:2000]}"
+            raise HTTPException(status_code=500, detail=error_detail)
         return data
     except Exception as e:
         print(f"Payment Receipt Error: {e}")
