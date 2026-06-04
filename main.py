@@ -391,6 +391,20 @@ async def payments(username: str):
         print(f"Payments Error: {e}")
         return {"payments": []}
 
+@app.get("/payments/receipt")
+async def payment_receipt(username: str, receipt_id: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_payment_receipt_details(receipt_id)
+        if "error" in data:
+            raise HTTPException(status_code=500, detail=data["error"])
+        return data
+    except Exception as e:
+        print(f"Payment Receipt Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ─── Courses ─────────────────────────────────────────────
 @app.get("/courses")
