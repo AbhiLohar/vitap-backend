@@ -2126,21 +2126,14 @@ class VTOPSession:
 
     async def get_payment_receipt_details(self, receipt_id: str) -> dict:
         """Fetch full receipt HTML and parse it."""
+        from urllib.parse import quote_plus
+        from email.utils import formatdate
         try:
-            # We must use the post_login_csrf from the current session state
-            data = {
-                "verifyMenu": "true",
-                "authorizedID": self.registration_number,
-                "applNo": receipt_id,  # VTOP expects applNo for fetching dup receipt
-                "_csrf": self.post_login_csrf,
-            }
-            # Try applNo first
-            resp = await self.client.post("/vtop/finance/dupReceiptNewP2P", data=data, headers=HEADERS)
-            if "Receipt Number" not in resp.text:
-                # Fallback if it expects receiptNo
-                data["receiptNo"] = receipt_id
-                del data["applNo"]
-                resp = await self.client.post("/vtop/finance/dupReceiptNewP2P", data=data, headers=HEADERS)
+            timestamp = quote_plus(formatdate(localtime=False, usegmt=True))
+            receit_no_encoded = quote_plus(receipt_id)
+            url = f"/vtop/finance/dupReceiptNewP2P?receitNo={receit_no_encoded}&authorizedID={self.registration_number}&_csrf={self.post_login_csrf}&x={timestamp}&registerNumber={self.registration_number}&applno="
+            
+            resp = await self.client.get(url, headers=HEADERS)
             
             return self._parse_print_payment_receipt(resp.text)
         except Exception as e:
@@ -2154,6 +2147,7 @@ class VTOPSession:
         try:
             receipt_details = soup.find("table", class_="table noborder")
             if not receipt_details:
+                print(f"Receipt HTML: {html[:1000]}") # Print first 1000 chars for debugging
                 return {"error": "Receipt details table not found in HTML"}
             rows = receipt_details.find_all("tr")
             for row in rows:
