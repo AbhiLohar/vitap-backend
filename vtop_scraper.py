@@ -2126,20 +2126,19 @@ class VTOPSession:
 
     async def get_payment_receipt_details(self, receipt_id: str) -> dict:
         """Fetch full receipt HTML and parse it."""
-        from email.utils import formatdate
-        import time
         try:
-            timestamp = formatdate(localtime=False, usegmt=True)
-            params = {
-                "receitNo": receipt_id,
+            data = {
+                "verifyMenu": "true",
                 "authorizedID": self.registration_number,
-                "_csrf": self.post_login_csrf,
-                "x": timestamp,
+                "receitNo": receipt_id,
+                "applno": receipt_id,
                 "registerNumber": self.registration_number,
-                "applno": ""
+                "_csrf": self.post_login_csrf,
             }
+            custom_headers = HEADERS.copy()
+            custom_headers["X-Requested-With"] = "XMLHttpRequest"
             
-            resp = await self.client.get("/vtop/finance/dupReceiptNewP2P", params=params, headers=HEADERS)
+            resp = await self.client.post("/vtop/finance/dupReceiptNewP2P", data=data, headers=custom_headers)
             
             return self._parse_print_payment_receipt(resp.text)
         except Exception as e:
