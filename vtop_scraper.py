@@ -287,6 +287,12 @@ class VTOPSession:
                     elif "invalid" in error_msg and "captcha" not in error_msg:
                         print(f"Login error detected: Invalid credentials. Msg: {error_msg}")
                         return "invalid_credentials"
+                    elif "user id not available" in error_msg or "not available" in error_msg:
+                        print(f"Login error detected: User ID not available. Msg: {error_msg}")
+                        return "invalid_credentials"
+                    elif "does not match" in error_msg or "incorrect" in error_msg:
+                        print(f"Login error detected: Incorrect credentials. Msg: {error_msg}")
+                        return "invalid_credentials"
                     elif "invalid" in error_msg and "captcha" in error_msg:
                         print(f"Login error detected: Invalid captcha. Msg: {error_msg}")
                         self.csrf_token = _find_csrf(resp.text)
