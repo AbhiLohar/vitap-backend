@@ -275,7 +275,7 @@ class VTOPSession:
                         elif "otp" in full_text:
                             error_msg = "otp has been sent"
                         else:
-                            error_msg = "unknown error"
+                            error_msg = full_text
                     
                     if "otp has been sent" in error_msg or "otp" in error_msg:
                         print(f"Login successful: OTP required. Msg: {error_msg}")
@@ -291,8 +291,11 @@ class VTOPSession:
                         print(f"Login error detected: User ID not available. Msg: {error_msg}")
                         return "invalid_credentials"
                     elif "does not match" in error_msg or "incorrect" in error_msg:
-                        print(f"Login error detected: Incorrect credentials. Msg: {error_msg}")
+                        print(f"Login error detected: Incorrect credentials. Msg: {error_msg[:100]}")
                         return "invalid_credentials"
+                    elif "maximum fail attempts reached" in error_msg:
+                        print(f"Login error detected: Account locked/Max attempts. Msg: {error_msg[:100]}")
+                        return "Account locked. Maximum fail attempts reached. Use forgot password."
                     elif "invalid" in error_msg and "captcha" in error_msg:
                         print(f"Login error detected: Invalid captcha. Msg: {error_msg}")
                         self.csrf_token = _find_csrf(resp.text)
