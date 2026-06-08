@@ -211,7 +211,7 @@ class VTOPSession:
                         await self.client.post(ROUTES["prelogin"], data=pre_data)
                     except Exception:
                         pass
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.1)
                     continue
                 
                 # For captchaType=1, fetch the image via AJAX endpoint
@@ -220,14 +220,14 @@ class VTOPSession:
                 
                 if not captcha_b64:
                     print("Captcha not found even for captchaType=1, retrying...")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.1)
                     continue
                 
                 # Solve captcha
                 solved = _solve_captcha_image(captcha_b64)
                 if not solved or len(solved) != 6:
                     print(f"Bad captcha result '{solved}' (len={len(solved) if solved else 0}), retrying...")
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.1)
                     continue
                 print(f"Captcha solved: {solved}")
                 
@@ -311,13 +311,13 @@ class VTOPSession:
                     elif "invalid" in error_msg and "captcha" in error_msg:
                         print(f"Login error detected: Invalid captcha. Msg: {error_msg}")
                         self.csrf_token = _find_csrf(resp.text)
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.1)
                         continue
                     else:
                         print(f"Unknown login error/alert: {error_msg}")
                         # Fallback to retry if we don't know what it is
                         self.csrf_token = _find_csrf(resp.text)
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.1)
                         continue
                 
                 # 3. Check for explicit OTP URL
@@ -356,7 +356,7 @@ class VTOPSession:
                         await self.client.post(ROUTES["prelogin"], data=pre_data)
                     except Exception:
                         pass
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.1)
                     continue
                 
                 # If we're back on the login page itself, session/CSRF was invalid — retry
@@ -370,7 +370,7 @@ class VTOPSession:
                         await self.client.post(ROUTES["prelogin"], data=pre_data)
                     except Exception:
                         pass
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.1)
                     continue
                 
                 # True unknown response — fail
@@ -383,14 +383,14 @@ class VTOPSession:
                 print(f"Network error: {e}")
                 if attempt == max_retries - 1:
                     raise Exception(f"Connection failed after {max_retries} attempts")
-                await asyncio.sleep(2)
+                await asyncio.sleep(0.2)
             except Exception as e:
                 if "Login failed" in str(e):
                     raise
                 print(f"Unexpected error: {e}")
                 if attempt == max_retries - 1:
                     raise
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.1)
         
         raise Exception("Login failed after maximum captcha retries. Please check your credentials or try again.")
         
