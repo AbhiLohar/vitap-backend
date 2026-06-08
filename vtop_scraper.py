@@ -248,9 +248,21 @@ class VTOPSession:
                 if ROUTES["content"] in final_url or "/vtop/content" in final_url:
                     print("Login successful, redirected to content page")
                     self.post_login_csrf = _find_csrf(resp.text)
+                    content_html = resp.text
                     if not self.post_login_csrf:
                         content_resp = await self.client.get(ROUTES["content"])
-                        self.post_login_csrf = _find_csrf(content_resp.text)
+                        content_html = content_resp.text
+                        self.post_login_csrf = _find_csrf(content_html)
+                    
+                    # Extract REAL registration number (e.g. 21BCE1234) from the content page.
+                    # This is crucial if the user logged in using a custom "Preferred Login ID" (e.g. LALIT123).
+                    import re
+                    reg_match = re.search(r'\b(\d{2}[A-Z]{2,4}\d{3,5})\b', content_html, re.IGNORECASE)
+                    if reg_match:
+                        real_reg_no = reg_match.group(1).upper()
+                        print(f"Extracted actual Registration Number from dashboard: {real_reg_no} (Login ID used: {self.registration_number})")
+                        self.registration_number = real_reg_no
+
                     self.logged_in = True
                     return "success"
                 
@@ -407,7 +419,17 @@ class VTOPSession:
                 if status == "SUCCESS":
                     redirect_url = data.get("redirectUrl", ROUTES["content"])
                     content_resp = await self.client.get(redirect_url)
-                    self.post_login_csrf = _find_csrf(content_resp.text)
+                    content_html = content_resp.text
+                    self.post_login_csrf = _find_csrf(content_html)
+                    
+                    # Extract REAL registration number
+                    import re
+                    reg_match = re.search(r'\b(2[0-9][A-Z]{3}[0-9]{4})\b', content_html, re.IGNORECASE)
+                    if reg_match:
+                        real_reg_no = reg_match.group(1).upper()
+                        print(f"Extracted actual Registration Number from redirect dashboard: {real_reg_no} (Login ID used: {self.registration_number})")
+                        self.registration_number = real_reg_no
+                        
                     self.logged_in = True
                     return "success"
                 elif status == "INVALID":
