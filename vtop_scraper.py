@@ -2001,6 +2001,8 @@ class VTOPSession:
         url = f"/vtop/hostel/downloadLeavePass/{leave_id}?authorizedID={self.registration_number}&_csrf={self.post_login_csrf}&x={x_time}"
         resp = await self._get_authenticated(url)
         if resp.status_code == 200 and resp.content:
+            if b"%PDF" not in resp.content[:1024]:
+                raise Exception("Session expired. Please pull-to-refresh your Outings to log in again.")
             return resp.content
         raise Exception("Failed to download PDF")
 
@@ -2013,6 +2015,8 @@ class VTOPSession:
         url = f"/vtop/hostel/downloadOutingForm/{booking_id}?authorizedID={self.registration_number}&_csrf={self.post_login_csrf}&x={x_time}"
         resp = await self._get_authenticated(url)
         if resp.status_code == 200 and resp.content:
+            if b"%PDF" not in resp.content[:1024]:
+                raise Exception("Session expired. Please pull-to-refresh your Outings to log in again.")
             return resp.content
         raise Exception("Failed to download PDF")
 

@@ -496,22 +496,24 @@ from fastapi.responses import Response
 @app.get("/outing/pdf/general")
 async def outing_pdf_general(username: str, leaveId: str):
     session = get_session(username)
-    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: 
+        return Response(content="<html><body><h2>Session expired. Please close this tab, return to the app, and pull-to-refresh your Outings to log in again.</h2></body></html>", media_type="text/html")
     try:
         pdf_bytes = await session.get_general_outing_pdf(leaveId)
         return Response(content=pdf_bytes, media_type="application/pdf")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return Response(content=f"<html><body><h2>Error downloading PDF</h2><p>{str(e)}</p></body></html>", media_type="text/html")
 
 @app.get("/outing/pdf/weekend")
 async def outing_pdf_weekend(username: str, bookingId: str):
     session = get_session(username)
-    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: 
+        return Response(content="<html><body><h2>Session expired. Please close this tab, return to the app, and pull-to-refresh your Outings to log in again.</h2></body></html>", media_type="text/html")
     try:
         pdf_bytes = await session.get_weekend_outing_pdf(bookingId)
         return Response(content=pdf_bytes, media_type="application/pdf")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return Response(content=f"<html><body><h2>Error downloading PDF</h2><p>{str(e)}</p></body></html>", media_type="text/html")
 
 
 # ─── Logout ──────────────────────────────────────────────
