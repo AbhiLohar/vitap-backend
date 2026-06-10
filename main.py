@@ -61,7 +61,25 @@ async def health(username: Optional[str] = None):
     }
 
 
-# ─── Login (auto-solves captcha) ──────────────────────────
+# 🔒 Captcha Solver API
+class CaptchaSolveRequest(BaseModel):
+    b64_data: str
+
+@app.post("/solve-captcha")
+async def api_solve_captcha(req: CaptchaSolveRequest):
+    try:
+        from vtop_scraper import _solve_captcha_image
+        b64 = req.b64_data
+        if "base64," in b64:
+            b64 = b64.split("base64,")[1]
+        solved = _solve_captcha_image(b64)
+        if not solved:
+            raise HTTPException(status_code=400, detail="Failed to solve captcha")
+        return {"captcha": solved}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 🚀 Login (auto-solves captcha) 🚀──────────────────────────
 @app.post("/login")
 async def login(username: str = Form(...), password: str = Form(...)):
     # Cleanup old session
