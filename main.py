@@ -167,7 +167,7 @@ async def attendance(username: str, semester_id: Optional[str] = None):
         return {"attendance": data}
     except Exception as e:
         print(f"Attendance Error: {e}")
-        return {"attendance": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Timetable ───────────────────────────────────────────
@@ -181,7 +181,7 @@ async def timetable(username: str, semester_id: Optional[str] = None):
         return {"timetable": data}
     except Exception as e:
         print(f"Timetable Error: {e}")
-        return {"timetable": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Marks ───────────────────────────────────────────────
@@ -195,7 +195,7 @@ async def marks(username: str, semester_id: Optional[str] = None):
         return {"marks": data}
     except Exception as e:
         print(f"Marks Error: {e}")
-        return {"marks": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Grades ──────────────────────────────────────────────
@@ -212,7 +212,7 @@ async def grades(username: str):
         return {"grades": {"courses": data, "cgpa": "N/A", "credits_registered": "N/A", "credits_earned": "N/A"}}
     except Exception as e:
         print(f"Grades Error: {e}")
-        return {"grades": {"courses": [], "cgpa": "N/A", "credits_registered": "N/A", "credits_earned": "N/A"}}
+        raise HTTPException(status_code=500, detail=str(e))}
 
 
 # ─── Exam Types ──────────────────────────────────────────
@@ -226,7 +226,7 @@ async def exam_types(username: str, semester_id: Optional[str] = None):
         return {"exam_types": data}
     except Exception as e:
         print(f"Exam Types Error: {e}")
-        return {"exam_types": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Exam Schedule ───────────────────────────────────────
@@ -241,7 +241,7 @@ async def exam_schedule(username: str, semester_id: Optional[str] = None, exam_t
         return {"exam_schedule": data}
     except Exception as e:
         print(f"Exam Schedule Error: {e}")
-        return {"exam_schedule": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Profile ────────────────────────────────────────────
@@ -255,7 +255,7 @@ async def profile(username: str):
         return {"profile": data}
     except Exception as e:
         print(f"Profile Error: {e}")
-        return {"profile": {}}
+        raise HTTPException(status_code=500, detail=str(e))}
 
 @app.get("/debug_profile")
 async def debug_profile(username: str):
@@ -292,7 +292,7 @@ async def mentor(username: str):
         return {"mentor": data.get("mentor", "")}
     except Exception as e:
         print(f"Mentor Error: {e}")
-        return {"mentor": ""}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── CGPA ────────────────────────────────────────────────
@@ -306,7 +306,7 @@ async def cgpa(username: str):
         return {"cgpa": data}
     except Exception as e:
         print(f"CGPA Error: {e}")
-        return {"cgpa": {"cgpa": 0.0, "total_credits": 0.0}}
+        raise HTTPException(status_code=500, detail=str(e))}
 
 
 # ─── Session Cookies ─────────────────────────────────────
@@ -321,7 +321,7 @@ async def session_cookies(username: str):
         return {"cookies": cookies}
     except Exception as e:
         print(f"Session Cookies Error: {e}")
-        return {"cookies": {}}
+        raise HTTPException(status_code=500, detail=str(e))}
 
 
 # ─── Curriculum ──────────────────────────────────────────
@@ -354,7 +354,7 @@ async def faculty(username: str, search_term: str = ""):
         return {"faculty": data}
     except Exception as e:
         print(f"Faculty Error: {e}")
-        return {"faculty": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/faculty/details")
 async def faculty_details(username: str, emp_id: str):
@@ -366,7 +366,7 @@ async def faculty_details(username: str, emp_id: str):
         return {"details": data}
     except Exception as e:
         print(f"Faculty Details Error: {e}")
-        return {"details": {}}
+        raise HTTPException(status_code=500, detail=str(e))}
 
 
 # ─── Digital Assignments ───────────────────────────────
@@ -380,7 +380,7 @@ async def digital_assignments(username: str, semester_id: Optional[str] = None):
         return {"digital_assignments": data}
     except Exception as e:
         print(f"DA Error: {e}")
-        return {"digital_assignments": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Outing ──────────────────────────────────────────────
@@ -394,7 +394,7 @@ async def outing(username: str):
         return {"outing": data}
     except Exception as e:
         print(f"Outing Error: {e}")
-        return {"outing": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Payments ────────────────────────────────────────────
@@ -408,7 +408,7 @@ async def payments(username: str):
         return {"payments": data}
     except Exception as e:
         print(f"Payments Error: {e}")
-        return {"payments": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/payments/receipt")
 async def payment_receipt(username: str, receipt_id: str):
@@ -439,7 +439,7 @@ async def courses(username: str, semester_id: Optional[str] = None):
         return {"courses": data}
     except Exception as e:
         print(f"Courses Error: {e}")
-        return {"courses": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
@@ -453,7 +453,7 @@ async def outing_weekend(username: str):
         return {"outing": data}
     except Exception as e:
         print(f"Weekend Outing Error: {e}")
-        return {"outing": []}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/outing/apply/general")
 async def outing_apply_general(
