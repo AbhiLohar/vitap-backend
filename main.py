@@ -212,7 +212,7 @@ async def grades(username: str):
         return {"grades": {"courses": data, "cgpa": "N/A", "credits_registered": "N/A", "credits_earned": "N/A"}}
     except Exception as e:
         print(f"Grades Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Exam Types ──────────────────────────────────────────
@@ -255,7 +255,7 @@ async def profile(username: str):
         return {"profile": data}
     except Exception as e:
         print(f"Profile Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))}
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/debug_profile")
 async def debug_profile(username: str):
@@ -306,7 +306,7 @@ async def cgpa(username: str):
         return {"cgpa": data}
     except Exception as e:
         print(f"CGPA Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Session Cookies ─────────────────────────────────────
@@ -321,7 +321,7 @@ async def session_cookies(username: str):
         return {"cookies": cookies}
     except Exception as e:
         print(f"Session Cookies Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Curriculum ──────────────────────────────────────────
@@ -366,7 +366,7 @@ async def faculty_details(username: str, emp_id: str):
         return {"details": data}
     except Exception as e:
         print(f"Faculty Details Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─── Digital Assignments ───────────────────────────────
