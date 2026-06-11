@@ -68,7 +68,7 @@ def convert_to_abs_bw(img: np.ndarray) -> np.ndarray:
     if img.size == 0:
         raise ValueError("Cannot process empty image part.")
     avg = float(np.sum(img)) / float(img.size)
-    return np.where(img > avg, 0, 1)
+    return np.where(img > avg, 1, 0)
 
 
 def solve_captcha_ml(parts: list) -> str:
