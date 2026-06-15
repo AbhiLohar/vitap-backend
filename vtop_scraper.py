@@ -1065,9 +1065,9 @@ class VTOPSession:
             if "Course Code" not in table.get_text():
                 continue
             
-            for row in table.find_all("tr", class_="tableContent"):
+            for row in table.find_all("tr"):
                 tds = row.find_all("td")
-                if len(tds) < 10:
+                if len(tds) < 6:
                     continue
                 
                 def clean(cell):
@@ -1080,10 +1080,10 @@ class VTOPSession:
                 
                 courses.append({
                     "course_code": course_code,
-                    "subject": clean(tds[2]),
-                    "type": clean(tds[3]),
-                    "credits": clean(tds[4]),
-                    "grade": clean(tds[5]),
+                    "subject": clean(tds[2]) if len(tds) > 2 else "",
+                    "type": clean(tds[3]) if len(tds) > 3 else "",
+                    "credits": clean(tds[4]) if len(tds) > 4 else "",
+                    "grade": clean(tds[5]) if len(tds) > 5 else "",
                     "exam_month": clean(tds[6]) if len(tds) > 6 else "",
                     "course_distribution": clean(tds[8]) if len(tds) > 8 else "",
                 })
