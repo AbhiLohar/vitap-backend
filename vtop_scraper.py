@@ -1065,36 +1065,25 @@ class VTOPSession:
             if "Course Code" not in table.get_text():
                 continue
             
-            for row in table.find_all("tr"):
+            for row in table.find_all("tr", class_="tableContent"):
                 tds = row.find_all("td")
-                if len(tds) < 6:
+                if len(tds) < 10:
                     continue
                 
                 def clean(cell):
                     return cell.get_text(strip=True)
                 
-                s_no = clean(tds[0])
                 course_code = clean(tds[1])
-                credits_str = clean(tds[4])
-                
-                # Skip header/footer rows
-                if not course_code or course_code.lower() == "course code":
-                    continue
-                    
-                # Valid data rows usually have a digit in S.No or a numeric Credits value
-                # This filters out rows like "Result Declared on: 29-Mar-2024"
-                is_sno_digit = s_no.isdigit()
-                is_credits_num = credits_str.replace('.', '', 1).isdigit() or credits_str == "-"
-                
-                if not (is_sno_digit or is_credits_num):
+                # Skip header rows
+                if course_code == "Course Code" or not course_code:
                     continue
                 
                 courses.append({
                     "course_code": course_code,
-                    "subject": clean(tds[2]) if len(tds) > 2 else "",
-                    "type": clean(tds[3]) if len(tds) > 3 else "",
-                    "credits": credits_str,
-                    "grade": clean(tds[5]) if len(tds) > 5 else "",
+                    "subject": clean(tds[2]),
+                    "type": clean(tds[3]),
+                    "credits": clean(tds[4]),
+                    "grade": clean(tds[5]),
                     "exam_month": clean(tds[6]) if len(tds) > 6 else "",
                     "course_distribution": clean(tds[8]) if len(tds) > 8 else "",
                 })
