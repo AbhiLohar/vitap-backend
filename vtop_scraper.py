@@ -807,27 +807,40 @@ class VTOPSession:
 
         rows = table.find_all("tr")
         
-        # Extract all time columns
-        theory_start = []
-        theory_end = []
-        lab_start = []
-        lab_end = []
+        # Extract all time columns using absolute indices to prevent misalignment
+        theory_start = {}
+        theory_end = {}
+        lab_start = {}
+        lab_end = {}
         
         last_type = None
         for row in rows:
             row_text = row.get_text(strip=True).upper()
             cells = row.find_all(["th", "td"])
-            times = [c.get_text(strip=True) for c in cells if ":" in c.get_text()]
             
             if "THEORY" in row_text:
                 last_type = "THEORY"
-                if "START" in row_text: theory_start = times
-            elif "LAB" in row_text:
+            elif "LAB" in row_text or "PRACTICAL" in row_text:
                 last_type = "LAB"
-                if "START" in row_text: lab_start = times
+                
+            if "START" in row_text:
+                for idx, cell in enumerate(cells):
+                    val = cell.get_text(strip=True)
+                    if last_type == "LAB":
+                        lab_start[idx] = val
+                    else:
+                        theory_start[idx] = val
+                        if idx not in lab_start or not lab_start[idx]:
+                            lab_start[idx] = val
             elif "END" in row_text:
-                if last_type == "THEORY": theory_end = times
-                elif last_type == "LAB": lab_end = times
+                for idx, cell in enumerate(cells):
+                    val = cell.get_text(strip=True)
+                    if last_type == "LAB":
+                        lab_end[idx] = val
+                    else:
+                        theory_end[idx] = val
+                        if idx not in lab_end or not lab_end[idx]:
+                            lab_end[idx] = val
         
         current_day = None
         for row in rows:
@@ -843,14 +856,11 @@ class VTOPSession:
             if not current_day: continue
             
             is_lab = "LAB" in row_text
-            start_times = lab_start if is_lab else theory_start
-            end_times = lab_end if is_lab else theory_end
             type_tag = "LAB" if is_lab else "LECTURE"
             
             # Identify columns
-            start_col = 2 if any(abbr in cells[0].get_text().upper() for abbr in day_map) else 1
-            
-            for idx, cell in enumerate(cells[start_col:]):
+            # We must use absolute enumeration since our timings are keyed by absolute index
+            for idx, cell in enumerate(cells):
                 cell_text = cell.get_text(separator="\n", strip=True)
                 if len(cell_text) < 5 or cell_text == "-" or "LUNCH" in cell_text.upper():
                     continue
@@ -860,8 +870,17 @@ class VTOPSession:
                 code = parts[1] if len(parts) > 1 else ""
                 room = parts[3] if len(parts) > 3 else ""
                 
-                s_time = start_times[idx] if idx < len(start_times) else ""
-                e_time = end_times[idx] if idx < len(end_times) else ""
+                # If this cell is a valid slot, lookup its timings by its absolute column idx
+                s_time = lab_start.get(idx, theory_start.get(idx, "")) if is_lab else theory_start.get(idx, "")
+                e_time = lab_end.get(idx, theory_end.get(idx, "")) if is_lab else theory_end.get(idx, "")
+                
+                # Filter out junk text that got pulled as a time
+                if ":" not in s_time:
+                    s_time = ""
+                if ":" not in e_time:
+                    e_time = ""
+                
+                if not s_time: continue # Ignore empty classes
                 
                 # Enrich with faculty and full name
                 info = course_map.get((code, type_tag), {})
