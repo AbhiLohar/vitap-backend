@@ -764,12 +764,23 @@ class VTOPSession:
             return []
     
     def _parse_timetable(self, html: str) -> list:
-        """Parse VTOP timetable grid and merge with course details."""
+        """Parse VTOP timetable grid and merge with course details.
+        
+        Follows the reference app's proven approach:
+        - First tbody: course details (names, faculty, types)
+        - Second tbody (id=timeTableStyle): timetable grid
+          - Row 0: start times (keyed by column index)
+          - Row 1: end times (keyed by column index)
+          - Rows 2-3: header rows (Theory/Lab labels, day names) — skipped
+          - Rows 4+: class data, alternating theory/lab per day
+            - Even rows within a day: theory row (day name in first cell)
+            - Odd rows within a day: lab row (no day name cell)
+        """
         soup = BeautifulSoup(html, "lxml")
         data = []
         
         # 1. Parse Course Details Table (for Faculty and Full Names)
-        course_map = {} # Key: (CourseCode, Type) -> {faculty, full_name}
+        course_map = {}  # Key: course_code -> {faculty, full_name, type}
         
         # The first table usually contains course details
         details_table = soup.find("table")
@@ -779,125 +790,218 @@ class VTOPSession:
                 cells = row.find_all("td")
                 if len(cells) >= 10:
                     course_text = cells[2].get_text(separator=" ", strip=True)
-                    # "CSE3008 - Introduction to Machine Learning ( Embedded Theory )"
                     parts = course_text.split("-")
                     code = parts[0].strip() if parts else ""
                     
                     type_str = "LECTURE"
                     if "LAB" in course_text.upper() or "PRACTICAL" in course_text.upper():
                         type_str = "LAB"
+                    elif "EMBEDDED LAB" in course_text.upper():
+                        type_str = "LAB"
                     
                     faculty = cells[8].get_text(separator=" ", strip=True).split("-")[0].strip()
                     full_name = parts[1].split("(")[0].strip() if len(parts) > 1 else code
                     
+                    # Store with type as part of key for disambiguation
                     course_map[(code, type_str)] = {
                         "faculty": faculty,
                         "full_name": full_name
                     }
+                    # Also store just by code for fallback lookup
+                    if code not in course_map:
+                        course_map[code] = {
+                            "faculty": faculty,
+                            "full_name": full_name
+                        }
 
-        # 2. Parse Timetable Grid
-        day_map = {
-            "MON": "Monday", "TUE": "Tuesday", "WED": "Wednesday",
-            "THU": "Thursday", "FRI": "Friday", "SAT": "Saturday", "SUN": "Sunday"
-        }
-        
+        # 2. Parse Timetable Grid using row-offset approach (matching reference app)
         table = soup.find("table", {"id": "timeTableStyle"})
         if not table:
             return []
 
         rows = table.find_all("tr")
         
-        # Extract all time columns using absolute indices to prevent misalignment
-        theory_start = {}
-        theory_end = {}
-        lab_start = {}
-        lab_end = {}
+        # Timing storage: keyed by column index for exact alignment
+        timings = {}  # {col_index: {"start": str, "end": str}}
         
-        last_type = None
+        # Raw slot storage before time assignment
+        raw_slots = []
+        
+        row_offset = 0
+        current_day = ""
+        
+        day_abbreviations = {
+            "MON": "Monday", "TUE": "Tuesday", "WED": "Wednesday",
+            "THU": "Thursday", "FRI": "Friday", "SAT": "Saturday", "SUN": "Sunday"
+        }
+        
         for row in rows:
-            row_text = row.get_text(strip=True).upper()
             cells = row.find_all(["th", "td"])
+            if not cells:
+                continue
             
-            if "THEORY" in row_text:
-                last_type = "THEORY"
-            elif "LAB" in row_text or "PRACTICAL" in row_text:
-                last_type = "LAB"
+            # Count actual data cells (skip empty header rows)
+            cell_texts = [c.get_text(strip=True) for c in cells]
+            
+            # Skip rows that are completely empty or just have border styling
+            if all(not t for t in cell_texts):
+                continue
+            
+            # Check if this row has enough columns to be a data row
+            if len(cells) < 6:
+                continue
+            
+            if row_offset == 0:
+                # Row 0: Start times
+                for idx, cell in enumerate(cells):
+                    val = cell.get_text(strip=True).replace("\t", "").replace("\n", "")
+                    if ":" in val and len(val) <= 8:  # Valid time like "08:00"
+                        timings[idx] = {"start": val, "end": ""}
+                row_offset += 1
                 
-            if "START" in row_text:
+            elif row_offset == 1:
+                # Row 1: End times
                 for idx, cell in enumerate(cells):
-                    val = cell.get_text(strip=True)
-                    if last_type == "LAB":
-                        lab_start[idx] = val
-                    else:
-                        theory_start[idx] = val
-                        if idx not in lab_start or not lab_start[idx]:
-                            lab_start[idx] = val
-            elif "END" in row_text:
-                for idx, cell in enumerate(cells):
-                    val = cell.get_text(strip=True)
-                    if last_type == "LAB":
-                        lab_end[idx] = val
-                    else:
-                        theory_end[idx] = val
-                        if idx not in lab_end or not lab_end[idx]:
-                            lab_end[idx] = val
-        
-        current_day = None
-        for row in rows:
-            cells = row.find_all(["th", "td"])
-            if not cells: continue
-            
-            row_text = row.get_text(separator=" ", strip=True).upper()
-            for abbr, full in day_map.items():
-                if f" {abbr} " in f" {row_text} " or row_text.startswith(abbr):
-                    current_day = full
-                    break
-            
-            if not current_day: continue
-            
-            is_lab = "LAB" in row_text
-            type_tag = "LAB" if is_lab else "LECTURE"
-            
-            # Identify columns
-            # We must use absolute enumeration since our timings are keyed by absolute index
-            for idx, cell in enumerate(cells):
-                cell_text = cell.get_text(separator="\n", strip=True)
-                if len(cell_text) < 5 or cell_text == "-" or "LUNCH" in cell_text.upper():
+                    val = cell.get_text(strip=True).replace("\t", "").replace("\n", "")
+                    if idx in timings and ":" in val and len(val) <= 8:
+                        timings[idx]["end"] = val
+                row_offset += 1
+                
+            elif row_offset <= 3:
+                # Rows 2-3: Header rows (Theory/Lab hour labels, day column headers)
+                # Skip these
+                row_offset += 1
+                
+            else:
+                # Rows 4+: Class data rows
+                # Determine if this row has a day cell (theory row) or not (lab row)
+                first_cell_text = cells[0].get_text(strip=True).replace("\t", "").replace("\n", "").upper()
+                
+                has_day_cell = False
+                for abbr in day_abbreviations:
+                    if abbr in first_cell_text:
+                        current_day = day_abbreviations[abbr]
+                        has_day_cell = True
+                        break
+                
+                if not current_day:
+                    row_offset += 1
                     continue
                 
-                parts = cell_text.split("-")
-                slot = parts[0] if parts else ""
-                code = parts[1] if len(parts) > 1 else ""
-                room = parts[3] if len(parts) > 3 else ""
+                # Determine if this is a lab row
+                # In VTOP: each day has 2 rows — first (even within day) is theory, second (odd) is lab
+                # If the row doesn't start with a day name, it's the lab row for the current day
+                is_lab = not has_day_cell
+                type_tag = "LAB" if is_lab else "LECTURE"
                 
-                # If this cell is a valid slot, lookup its timings by its absolute column idx
-                s_time = lab_start.get(idx, theory_start.get(idx, "")) if is_lab else theory_start.get(idx, "")
-                e_time = lab_end.get(idx, theory_end.get(idx, "")) if is_lab else theory_end.get(idx, "")
+                # Process each cell in this row
+                # If has_day_cell, data starts from cell index 1 (cell 0 is the day name, which spans 2 rows)
+                start_idx = 1 if has_day_cell else 0
                 
-                # Filter out junk text that got pulled as a time
-                if ":" not in s_time:
-                    s_time = ""
-                if ":" not in e_time:
-                    e_time = ""
+                for idx, cell in enumerate(cells):
+                    if idx < start_idx:
+                        continue
+                    
+                    cell_text = cell.get_text(separator="\n", strip=True).replace("\t", "").replace("\n", " ").strip()
+                    
+                    # Skip empty cells, short text, dashes, and lunch
+                    if len(cell_text) < 5 or cell_text == "-" or "LUNCH" in cell_text.upper():
+                        continue
+                    
+                    # Parse slot content: format is "SLOT-COURSECODE-TYPE-ROOM-BLOCK"
+                    parts = cell_text.split("-")
+                    if len(parts) < 3:
+                        continue  # Not a valid class cell
+                    
+                    slot = parts[0].strip() if parts else ""
+                    code = parts[1].strip() if len(parts) > 1 else ""
+                    course_type = parts[2].strip() if len(parts) > 2 else ""
+                    room = parts[3].strip() if len(parts) > 3 else ""
+                    
+                    # Determine actual column position for timing lookup
+                    # When the day cell is present and uses rowspan, the absolute column
+                    # position of data cells is shifted by 1. We need the actual column
+                    # position in the table grid (matching the timings row).
+                    actual_col = idx if has_day_cell else idx
+                    # For lab rows (no day cell), the day cell's rowspan means our idx 0
+                    # actually corresponds to column 1 in the table grid
+                    if not has_day_cell:
+                        actual_col = idx + 1
+                    
+                    raw_slots.append({
+                        "col_idx": actual_col,
+                        "slot": slot,
+                        "code": code,
+                        "course_type": course_type,
+                        "room": room,
+                        "day": current_day,
+                        "type_tag": type_tag,
+                    })
                 
-                if not s_time: continue # Ignore empty classes
-                
-                # Enrich with faculty and full name
-                info = course_map.get((code, type_tag), {})
-                
-                data.append({
-                    "subject": info.get("full_name", code),
-                    "course_code": code,
-                    "faculty": info.get("faculty", "Unknown"),
-                    "room": room,
-                    "slot": slot,
-                    "day": current_day,
-                    "time": s_time,
-                    "end_time": e_time,
-                    "type": type_tag,
-                })
+                row_offset += 1
         
-        return data
+        # 3. Assign timings to slots and build final output
+        for raw in raw_slots:
+            col = raw["col_idx"]
+            timing = timings.get(col, {})
+            s_time = timing.get("start", "")
+            e_time = timing.get("end", "")
+            
+            # Validate times
+            if ":" not in s_time:
+                s_time = ""
+            if ":" not in e_time:
+                e_time = ""
+            
+            code = raw["code"]
+            type_tag = raw["type_tag"]
+            
+            # Enrich with faculty and full name
+            info = course_map.get((code, type_tag), course_map.get(code, {}))
+            
+            data.append({
+                "subject": info.get("full_name", code),
+                "course_code": code,
+                "faculty": info.get("faculty", "Unknown"),
+                "room": raw["room"],
+                "slot": raw["slot"],
+                "day": raw["day"],
+                "time": s_time,
+                "end_time": e_time,
+                "type": type_tag,
+            })
+        
+        # 4. Group consecutive lab slots (same course, same day, adjacent times)
+        # Labs often span 2 consecutive slots; merge them into one entry
+        merged = []
+        data.sort(key=lambda x: (x["day"], x["time"], x["type"]))
+        
+        i = 0
+        while i < len(data):
+            current = dict(data[i])  # copy
+            # Look ahead for consecutive same-course same-day lab slots
+            while (i + 1 < len(data) and 
+                   data[i+1]["course_code"] == current["course_code"] and
+                   data[i+1]["day"] == current["day"] and
+                   data[i+1]["type"] == current["type"] and
+                   data[i+1]["time"] == current.get("end_time", "")):
+                # Merge: extend end_time and combine slots
+                next_slot = data[i+1]
+                current["end_time"] = next_slot["end_time"]
+                current["slot"] = current["slot"] + "+" + next_slot["slot"]
+                i += 1
+            merged.append(current)
+            i += 1
+        
+        # Debug: log extracted timings and results
+        print(f"[TT DEBUG] Timings extracted for {len(timings)} columns: {timings}")
+        print(f"[TT DEBUG] Raw slots found: {len(raw_slots)}")
+        print(f"[TT DEBUG] Final entries: {len(merged)}")
+        for entry in merged:
+            print(f"  [{entry['day']}] {entry['subject']} ({entry['course_code']}) "
+                  f"time={entry['time']}-{entry['end_time']} slot={entry['slot']} type={entry['type']}")
+        
+        return merged
     
     async def get_marks(self, semester_id: str = None) -> list:
         """Fetch marks data. Tries requested semester, then falls back to recent semesters."""
