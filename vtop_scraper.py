@@ -953,7 +953,10 @@ class VTOPSession:
                 slot = parts[0].strip()
                 code = parts[1].strip()
                 course_type = parts[2].strip()
-                room = parts[3].strip() if len(parts) > 3 else ""
+                room_num = parts[3].strip() if len(parts) > 3 else ""
+                block = parts[4].strip() if len(parts) > 4 else ""
+                # Combine block and room into venue like "CB-504"
+                room = f"{block}-{room_num}" if block and room_num else (room_num or block)
                 
                 # Look up start time from the first visual column of this cell
                 s_time = times_start[visual_col] if visual_col < len(times_start) else ""
