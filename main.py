@@ -170,6 +170,20 @@ async def attendance(username: str, semester_id: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ─── Attendance Detail ───────────────────────────────────
+@app.get("/attendance/detail")
+async def attendance_detail(username: str, semester_id: str, course_id: str, course_type: str):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        data = await session.get_attendance_detail(semester_id, course_id, course_type)
+        return {"attendance_detail": data}
+    except Exception as e:
+        print(f"Attendance Detail Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─── Timetable ───────────────────────────────────────────
 @app.get("/timetable")
 async def timetable(username: str, semester_id: Optional[str] = None):

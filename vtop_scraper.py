@@ -644,6 +644,66 @@ class VTOPSession:
             print(f"Attendance error: {e}")
             return []
     
+    async def get_attendance_detail(self, semester_id: str, course_id: str, course_type: str) -> list:
+        """Fetch detailed day-wise attendance for a specific course."""
+        try:
+            from datetime import datetime, timezone
+            sem_id = semester_id or "AP2025262"
+            
+            # Initialize page first (required by VTOP)
+            await self._post_menu(ROUTES["attendance"])
+            
+            resp = await self._post_authenticated(
+                "/vtop/processViewAttendanceDetail",
+                {
+                    "semesterSubId": sem_id,
+                    "registerNumber": self.registration_number,
+                    "courseId": course_id,
+                    "courseType": course_type,
+                    "authorizedID": self.registration_number,
+                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                }
+            )
+            
+            return self._parse_attendance_detail(resp.text)
+        except Exception as e:
+            print(f"Attendance detail error: {e}")
+            return []
+    
+    def _parse_attendance_detail(self, html: str) -> list:
+        """Parse attendance detail table (#StudentAttendanceDetailDataTable).
+        
+        Each row has: SNo | Date | Slot | Day/Time | Status | Remark
+        """
+        soup = BeautifulSoup(html, "lxml")
+        data = []
+        
+        table = soup.find("table", {"id": "StudentAttendanceDetailDataTable"})
+        if not table:
+            table = soup.find("table")
+        if not table:
+            return data
+        
+        tbody = table.find("tbody")
+        rows = tbody.find_all("tr") if tbody else table.find_all("tr")[1:]
+        
+        clean = lambda c: c.get_text(strip=True).replace("\t", "").replace("\n", "")
+        
+        for row in rows:
+            cells = row.find_all("td")
+            if len(cells) >= 5:
+                status = clean(cells[4])
+                data.append({
+                    "serial": clean(cells[0]),
+                    "date": clean(cells[1]),
+                    "slot": clean(cells[2]),
+                    "day_time": clean(cells[3]),
+                    "status": status,
+                    "remark": clean(cells[5]) if len(cells) >= 6 else "",
+                })
+        
+        return data
+    
     def _parse_attendance_table(self, html: str) -> list:
         """Parse attendance HTML table - matches vitap_student_app Rust parser logic.
         
