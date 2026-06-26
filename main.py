@@ -483,7 +483,8 @@ async def outing_apply_general(
     if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.apply_general_outing(place, purpose, outDate, outTime, inDate, inTime)
-        return {"status": "success" if "success" in msg.lower() else "failed", "message": msg}
+        status = "failed" if msg.lower().startswith("error") else "success"
+        return {"status": status, "message": msg}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -500,7 +501,8 @@ async def outing_apply_weekend(
     if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.apply_weekend_outing(place, purpose, outDate, outTime, contact)
-        return {"status": "success" if "success" in msg.lower() else "failed", "message": msg}
+        status = "failed" if msg.lower().startswith("error") else "success"
+        return {"status": status, "message": msg}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -510,7 +512,8 @@ async def outing_delete_general(username: str = Form(...), leaveId: str = Form(.
     if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.delete_general_outing(leaveId)
-        return {"status": "success" if "success" in msg.lower() else "failed", "message": msg}
+        status = "failed" if msg.lower().startswith("error") else "success"
+        return {"status": status, "message": msg}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -520,7 +523,8 @@ async def outing_delete_weekend(username: str = Form(...), bookingId: str = Form
     if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.delete_weekend_outing(bookingId)
-        return {"status": "success" if "success" in msg.lower() else "failed", "message": msg}
+        status = "failed" if msg.lower().startswith("error") else "success"
+        return {"status": status, "message": msg}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

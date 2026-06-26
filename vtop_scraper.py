@@ -2232,6 +2232,7 @@ class VTOPSession:
     async def apply_general_outing(self, out_place: str, purpose: str, out_date: str, out_time: str, in_date: str, in_time: str) -> str:
         """Submit a General Outing."""
         try:
+            from datetime import datetime, timezone
             fields = await self._fetch_outing_form_hidden_fields(is_weekend=False)
             
             # Times come as HH:MM
@@ -2256,24 +2257,18 @@ class VTOPSession:
                 "inTimeHr": in_parts[0],
                 "inTimeMin": in_parts[1],
                 "parentContactNumber": fields.get("parentContactNumber", ""),
+                "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
             }
             resp = await self._post_authenticated("/vtop/hostel/saveGeneralOutingForm", data)
             
-            # Check response for success message
-            text_lower = resp.text.lower()
-            if "success" in text_lower or "submitted" in text_lower:
-                return "Successfully applied for General Outing"
-            
-            # Extract error message if any
-            soup = BeautifulSoup(resp.text, "lxml")
-            msg = soup.get_text(strip=True)[:100]
-            return f"Failed: {msg}"
+            return self._parse_outing_response(resp.text)
         except Exception as e:
             raise Exception(f"Failed to apply for general outing: {e}")
 
     async def apply_weekend_outing(self, out_place: str, purpose: str, out_date: str, out_time: str, contact_number: str) -> str:
         """Submit a Weekend Outing."""
         try:
+            from datetime import datetime, timezone
             fields = await self._fetch_outing_form_hidden_fields(is_weekend=True)
             
             data = {
@@ -2291,28 +2286,93 @@ class VTOPSession:
                 "outTime": out_time,
                 "contactNumber": contact_number,
                 "parentContactNumber": fields.get("parentContactNumber", ""),
+                "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
             }
             resp = await self._post_authenticated("/vtop/hostel/saveOutingForm", data)
             
-            text_lower = resp.text.lower()
-            if "success" in text_lower or "booked" in text_lower:
-                return "Successfully applied for Weekend Outing"
-                
-            soup = BeautifulSoup(resp.text, "lxml")
-            msg = soup.get_text(strip=True)[:100]
-            return f"Failed: {msg}"
+            return self._parse_outing_response(resp.text)
         except Exception as e:
             raise Exception(f"Failed to apply for weekend outing: {e}")
 
+    def _parse_outing_response(self, html: str) -> str:
+        """Parse VTOP outing submit/delete response — matches reference app logic.
+        
+        Checks for:
+        1. Error spans (red text, .error, .alert-danger)
+        2. Weekend success: green span with 'Successfully'/'Applied'/'Deleted'
+        3. General outing success: SweetAlert h2
+        4. Fallback h2 with success/error keywords
+        5. If form page returned without message = silent failure
+        """
+        soup = BeautifulSoup(html, "lxml")
+        
+        # 1. Check for error messages (red text)
+        for span in soup.select("span[style*='color: red'], span[style*='color:red'], .error, .alert-danger"):
+            text = span.get_text(strip=True)
+            if text:
+                return f"Error: {text}"
+        
+        # 2. Check for weekend outing success (green span)
+        for span in soup.select("span.col-md-12[style*='color: green'], span.col-md-12[style*='color:green']"):
+            text = span.get_text(strip=True)
+            if text and any(kw in text for kw in ("Successfully", "Applied", "Deleted")):
+                return text
+        
+        # 3. Check for general outing success (SweetAlert modal h2)
+        sweet_h2 = soup.select_one("div.sweet-alert h2")
+        if sweet_h2:
+            text = sweet_h2.get_text(strip=True)
+            if text:
+                return text
+        
+        # 4. Fallback: any h2 with success/error keywords
+        for h2 in soup.find_all("h2"):
+            text = h2.get_text(strip=True)
+            if text and any(kw in text for kw in ("Successfully", "Applied", "Deleted", "Error", "Failed")):
+                return text
+        
+        # 5. If form page was returned (silent failure)
+        if "outingForm" in html and ("Weekend Outing Request" in html or "General Outing" in html):
+            # Look for any colored span messages
+            for span in soup.select("span.col-sm-12[style*='color'], span.col-md-12[style*='color']"):
+                text = span.get_text(strip=True)
+                if text and "disciplinary" not in text and "logs will be" not in text:
+                    return f"Error: {text}"
+            return "Submission may have failed - form page was returned. Please check outing history."
+        
+        return "Unable to parse response. Please check outing history to verify."
+
     async def delete_general_outing(self, leave_id: str) -> str:
-        data = {"LeaveId": leave_id, "authorizedID": self.registration_number}
-        resp = await self._post_authenticated("/vtop/hostel/deleteGeneralOutingInfo", data)
-        return "Deleted successfully" if "success" in resp.text.lower() else "Failed to delete"
+        from datetime import datetime, timezone
+        data = {
+            "LeaveId": leave_id,
+            "authorizedID": self.registration_number,
+            "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+        }
+        # Delete requires XMLHttpRequest header
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        data["_csrf"] = self.post_login_csrf or self.csrf_token
+        resp = await self.client.post("/vtop/hostel/deleteGeneralOutingInfo", data=data, headers=headers)
+        return self._parse_outing_response(resp.text)
 
     async def delete_weekend_outing(self, booking_id: str) -> str:
-        data = {"BookingId": booking_id, "authorizedID": self.registration_number}
-        resp = await self._post_authenticated("/vtop/hostel/deleteBookingInfo", data)
-        return "Deleted successfully" if "success" in resp.text.lower() else "Failed to delete"
+        from datetime import datetime, timezone
+        data = {
+            "BookingId": booking_id,
+            "authorizedID": self.registration_number,
+            "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+        }
+        # Delete requires XMLHttpRequest header
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        data["_csrf"] = self.post_login_csrf or self.csrf_token
+        resp = await self.client.post("/vtop/hostel/deleteBookingInfo", data=data, headers=headers)
+        return self._parse_outing_response(resp.text)
 
     async def get_weekend_outing_status(self) -> list:
         """Fetch weekend outings (distinct from general outings)."""
