@@ -12,7 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import UJSONResponse
 from vtop_scraper import VTOPSession, HEADERS
 
+from fastapi.middleware.gzip import GZipMiddleware
+
 app = FastAPI(title="VTOP API", version="3.0.0", default_response_class=UJSONResponse)
+
+# Compression for low network
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # CORS
 app.add_middleware(

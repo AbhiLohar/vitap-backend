@@ -641,8 +641,7 @@ class VTOPSession:
             
             return self._parse_attendance_table(resp.text)
         except Exception as e:
-            print(f"Attendance error: {e}")
-            return []
+            raise Exception(f"Attendance error: {e}")
     
     async def get_attendance_detail(self, semester_id: str, course_id: str, course_type: str) -> list:
         """Fetch detailed day-wise attendance for a specific course."""
@@ -667,8 +666,7 @@ class VTOPSession:
             
             return self._parse_attendance_detail(resp.text)
         except Exception as e:
-            print(f"Attendance detail error: {e}")
-            return []
+            raise Exception(f"Attendance detail error: {e}")
     
     def _parse_attendance_detail(self, html: str) -> list:
         """Parse attendance detail table (#StudentAttendanceDetailDataTable).
@@ -820,8 +818,7 @@ class VTOPSession:
             
             return self._parse_timetable(resp.text)
         except Exception as e:
-            print(f"Timetable error: {e}")
-            return []
+            raise Exception(f"Timetable error: {e}")
     
     def _parse_timetable(self, html: str) -> list:
         """Parse VTOP timetable grid and merge with course details.
@@ -1120,8 +1117,7 @@ class VTOPSession:
             
             return []
         except Exception as e:
-            print(f"Marks error: {e}")
-            return []
+            raise Exception(f"Marks error: {e}")
     
     def _parse_marks(self, html: str) -> list:
         """Parse marks table - matches vitap_student_app Rust parser logic.
@@ -1223,8 +1219,7 @@ class VTOPSession:
             
             return self._parse_grades(resp.text)
         except Exception as e:
-            print(f"Grades error: {e}")
-            return []
+            raise Exception(f"Grades error: {e}")
     
     def _parse_grades(self, html: str) -> dict:
         """Parse grades table - matches vitap_student_app Rust parser logic.
@@ -1392,8 +1387,7 @@ class VTOPSession:
             
             return all_data
         except Exception as e:
-            print(f"Exam schedule error: {e}")
-            return []
+            raise Exception(f"Exam schedule error: {e}")
     
     def _parse_exam_schedule(self, html: str) -> list:
         """Parse exam schedule table - matches vitap_student_app Rust parser logic.
@@ -1875,8 +1869,7 @@ class VTOPSession:
             
             return self._parse_faculty_table(resp.text)
         except Exception as e:
-            print(f"Faculty search error: {e}")
-            return []
+            raise Exception(f"Faculty search error: {e}")
 
     def _parse_faculty_table(self, html: str) -> list:
         """Parse faculty search results - matches vitap_student_app Rust parser logic.
@@ -1950,8 +1943,7 @@ class VTOPSession:
             )
             return self._parse_faculty_data(resp.text)
         except Exception as e:
-            print(f"Faculty data error: {e}")
-            return {}
+            raise Exception(f"Faculty data error: {e}")
 
     def _parse_faculty_data(self, html: str) -> dict:
         """Parse EmployeeSearch1ForStudent response."""
@@ -2011,8 +2003,7 @@ class VTOPSession:
             
             return self._parse_da_table(resp.text)
         except Exception as e:
-            print(f"DA error: {e}")
-            return []
+            raise Exception(f"DA error: {e}")
 
     def _parse_da_table(self, html: str) -> list:
         """Parse DA table."""
@@ -2057,8 +2048,7 @@ class VTOPSession:
             
             return self._parse_outing_table(resp.text)
         except Exception as e:
-            print(f"Outing error: {e}")
-            return []
+            raise Exception(f"Outing error: {e}")
 
     def _parse_outing_table(self, html: str) -> list:
         """Parse outing table."""
@@ -2096,8 +2086,7 @@ class VTOPSession:
             resp = await self.client.post(ROUTES["payments"], data=data, headers=HEADERS)
             return self._parse_payments_table(resp.text)
         except Exception as e:
-            print(f"Payments error: {e}")
-            return []
+            raise Exception(f"Payments error: {e}")
 
     def _parse_payments_table(self, html: str) -> list:
         """Parse payments table - matches vitap_student_app Rust parser logic.
@@ -2183,8 +2172,7 @@ class VTOPSession:
                 })
             return courses
         except Exception as e:
-            print(f"Courses error: {e}")
-            return []
+            raise Exception(f"Courses error: {e}")
 
 
     async def get_general_outing_pdf(self, leave_id: str) -> bytes:
@@ -2410,8 +2398,7 @@ class VTOPSession:
                         })
             return data
         except Exception as e:
-            print(f"Weekend outing error: {e}")
-            return []
+            raise Exception(f"Weekend outing error: {e}")
 
 
     async def get_payment_receipt_details(self, receipt_id: str) -> dict:
