@@ -2387,8 +2387,24 @@ class VTOPSession:
                             date_val = texts[7]
                             status_val = texts[9]
                             
+                        booking_id = ""
+                        if is_weekend_format and len(texts) > 10 and texts[10]:
+                            booking_id = texts[10]
+                            
+                        if not booking_id:
+                            for c in cols:
+                                btn = c.find("button")
+                                if btn and "onclick" in btn.attrs:
+                                    onclick_text = btn["onclick"]
+                                    if "deleteWeekendOuting" in onclick_text:
+                                        m = re.search(r"deleteWeekendOuting\('([^']+)'\)", onclick_text)
+                                        if m:
+                                            booking_id = m.group(1)
+                                            break
+                            
                         data.append({
                             "id": texts[0],
+                            "bookingId": booking_id,
                             "type": "Weekend",
                             "place": texts[4] if len(texts) > 4 else "",
                             "purpose": texts[5] if len(texts) > 5 else "",
