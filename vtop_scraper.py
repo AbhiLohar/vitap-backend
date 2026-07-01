@@ -495,12 +495,25 @@ class VTOPSession:
             print(f"Resend OTP error: {e}")
             return "failed"
     
+    def _check_session_expired(self, resp: httpx.Response):
+        """Check if the response indicates the session has expired."""
+        if resp.status_code == 302:
+            raise Exception("Session expired. Please log out and log in again.")
+        path = str(resp.url.path).lower()
+        if "login" in path or path == "/vtop/" or path == "/vtop":
+            raise Exception("Session expired. Please log out and log in again.")
+        if "login-page" in resp.text.lower() or "you have been successfully logged out" in resp.text.lower():
+            raise Exception("Session expired. Please log out and log in again.")
+        if "session out" in resp.text.lower() or "session timed out" in resp.text.lower():
+            raise Exception("Session expired. Please log out and log in again.")
+
     async def _post_authenticated(self, url: str, data: dict) -> httpx.Response:
         """Make an authenticated POST request."""
         if not self.logged_in:
             raise Exception("Not logged in")
         data["_csrf"] = self.post_login_csrf or self.csrf_token
         resp = await self.client.post(url, data=data)
+        self._check_session_expired(resp)
         return resp
 
     async def _get_authenticated(self, url: str) -> httpx.Response:
@@ -508,10 +521,11 @@ class VTOPSession:
         if not self.logged_in:
             raise Exception("Not logged in")
         resp = await self.client.get(url)
+        self._check_session_expired(resp)
         return resp
 
     async def _post_menu(self, url: str) -> httpx.Response:
-        """Initialize a VTOP page with verifyMenu — required for VTOP to load dropdowns."""
+        """Initialize a VTOP page with verifyMenu - required for VTOP to load dropdowns."""
         data = {
             "verifyMenu": "true",
             "authorizedID": self.registration_number,
@@ -519,6 +533,7 @@ class VTOPSession:
             "nocache": "@(new Date().getTime())",
         }
         resp = await self.client.post(url, data=data, headers=HEADERS)
+        self._check_session_expired(resp)
         return resp
     
     async def get_semesters(self) -> list:

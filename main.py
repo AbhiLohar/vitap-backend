@@ -1,25 +1,17 @@
 import asyncio
 import time
 import platform
-
 if platform.system() == "Windows":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-from fastapi import FastAPI, Form, HTTPException
-from pydantic import BaseModel
-from typing import Optional
+from fastapi import FastAPI, Form, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import UJSONResponse
-from vtop_scraper import VTOPSession, HEADERS
+from typing import Optional
+import uvicorn
+from vtop_scraper import VtopScraper
 
-from fastapi.middleware.gzip import GZipMiddleware
-
-app = FastAPI(title="VTOP API", version="3.0.0", default_response_class=UJSONResponse)
-
-# Compression for low network
-app.add_middleware(GZipMiddleware, minimum_size=500)
-
-# CORS
+app = FastAPI(title="VTOP Backend")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,461 +20,211 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Active sessions per user
-client_store: dict[str, dict] = {}
-SESSION_TIMEOUT = 7200  # 2 hours
+sessions = {}
 
+def get_session(username: str) -> Optional[VtopScraper]:
+    return sessions.get(username)
 
-def get_session(username: str) -> VTOPSession | None:
-    entry = client_store.get(username)
-    if not entry:
-        return None
-    if time.time() - entry["last_active"] > SESSION_TIMEOUT:
-        asyncio.create_task(cleanup_session(username))
-        return None
-    entry["last_active"] = time.time()
-    return entry["session"]
+def handle_exception(e: Exception):
+    err_str = str(e).lower()
+    if "session expired" in err_str or "not logged in" in err_str:
+        raise HTTPException(status_code=401, detail=str(e))
+    raise HTTPException(status_code=500, detail=str(e))
 
-
-async def cleanup_session(username: str):
-    entry = client_store.pop(username, None)
-    if entry:
-        try:
-            await entry["session"].close()
-        except Exception:
-            pass
-
-
-# ─── Health ───────────────────────────────────────────────
-@app.get("/health")
-async def health(username: Optional[str] = None):
-    # If username provided, keep session alive
-    if username and username in client_store:
-        client_store[username]["last_active"] = time.time()
-        
-    return {
-        "status": "ok", 
-        "active_sessions": len(client_store),
-        "timestamp": time.time()
-    }
-
-
-# 🔒 Captcha Solver API
-class CaptchaSolveRequest(BaseModel):
-    b64_data: str
-
-@app.post("/solve-captcha")
-async def api_solve_captcha(req: CaptchaSolveRequest):
-    try:
-        from vtop_scraper import _solve_captcha_image
-        b64 = req.b64_data
-        if "base64," in b64:
-            b64 = b64.split("base64,")[1]
-        solved = _solve_captcha_image(b64)
-        if not solved:
-            raise HTTPException(status_code=400, detail="Failed to solve captcha")
-        return {"captcha": solved}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# 🚀 Login (auto-solves captcha) 🚀──────────────────────────
 @app.post("/login")
 async def login(username: str = Form(...), password: str = Form(...)):
-    # Cleanup old session
-    if username in client_store:
-        old = client_store.pop(username)
-        asyncio.create_task(old["session"].close())
-
+    scraper = VtopScraper()
     try:
-        session = VTOPSession()
-        result = await session.login(username, password)
-
-        if result in ["success", "otp_required"]:
-            client_store[username] = {
-                "session": session,
-                "last_active": time.time(),
-            }
-            return {"status": result}
-        else:
-            # It's an error message string
-            await session.close()
-            raise HTTPException(status_code=401, detail=result)
-
+        status = await scraper.login(username, password)
+        if status == "success" or status == "otp_required":
+            sessions[username] = scraper
+        return {"status": status, "detail": "Login successful" if status == "success" else "OTP Required"}
     except Exception as e:
-        print(f"Login Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Verify OTP ──────────────────────────────────────────
 @app.post("/verify-otp")
 async def verify_otp(username: str = Form(...), otp: str = Form(...)):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Session expired. Please login again.")
-
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        result = await session.submit_otp(otp)
-        if result == "invalid_otp":
-            return {"status": "failed", "detail": "Invalid OTP. Please check and try again."}
-        elif result == "otp_expired":
-            return {"status": "failed", "detail": "OTP has expired. Please resend."}
-        return {"status": result}
+        status = await session.submit_otp(otp)
+        return {"status": status}
     except Exception as e:
-        print(f"OTP Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Resend OTP ──────────────────────────────────────────
 @app.post("/resend-otp")
 async def resend_otp(username: str = Form(...)):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Session expired. Please login again.")
-
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        result = await session.resend_otp()
-        return {"status": result}
+        status = await session.resend_otp()
+        return {"status": status}
     except Exception as e:
-        print(f"Resend OTP Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Semesters ───────────────────────────────────────────
-@app.get("/semesters")
-async def semesters(username: str):
-    session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    try:
-        data = await session.get_semesters()
-        return {"semesters": data}
-    except Exception as e:
-        print(f"Semesters Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ─── Attendance ──────────────────────────────────────────
-@app.get("/attendance")
-async def attendance(username: str, semester_id: Optional[str] = None):
-    session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    try:
-        data = await session.get_attendance(semester_id=semester_id)
-        return {"attendance": data}
-    except Exception as e:
-        print(f"Attendance Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ─── Attendance Detail ───────────────────────────────────
-@app.get("/attendance/detail")
-async def attendance_detail(username: str, semester_id: str, course_id: str, course_type: str):
-    session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    try:
-        data = await session.get_attendance_detail(semester_id, course_id, course_type)
-        return {"attendance_detail": data}
-    except Exception as e:
-        print(f"Attendance Detail Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ─── Timetable ───────────────────────────────────────────
 @app.get("/timetable")
 async def timetable(username: str, semester_id: Optional[str] = None):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_timetable(semester_id=semester_id)
-        return {"timetable": data}
+        return {"timetable": await session.get_timetable(semester_id)}
     except Exception as e:
-        print(f"Timetable Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
+@app.get("/attendance")
+async def attendance(username: str, semester_id: Optional[str] = None):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        return {"attendance": await session.get_attendance(semester_id)}
+    except Exception as e:
+        handle_exception(e)
 
-# ─── Marks ───────────────────────────────────────────────
+@app.get("/attendance/detail")
+async def attendance_detail(username: str, semester_id: str, course_id: str, course_type: str):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        return {"details": await session.get_attendance_detail(semester_id, course_id, course_type)}
+    except Exception as e:
+        handle_exception(e)
+
 @app.get("/marks")
 async def marks(username: str, semester_id: Optional[str] = None):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_marks(semester_id=semester_id)
-        return {"marks": data}
+        return {"marks": await session.get_marks(semester_id)}
     except Exception as e:
-        print(f"Marks Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Grades ──────────────────────────────────────────────
 @app.get("/grades")
 async def grades(username: str):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_grades()
-        # New parser returns dict with {cgpa, credits_registered, credits_earned, courses}
-        if isinstance(data, dict):
-            return {"grades": data}
-        return {"grades": {"courses": data, "cgpa": "N/A", "credits_registered": "N/A", "credits_earned": "N/A"}}
+        # Compatibility with frontend
+        return {"grades": {"courses": await session.get_grades(), "cgpa": "N/A", "credits_registered": "N/A", "credits_earned": "N/A"}}
     except Exception as e:
-        print(f"Grades Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Exam Types ──────────────────────────────────────────
 @app.get("/exam-types")
 async def exam_types(username: str, semester_id: Optional[str] = None):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_exam_types(semester_id=semester_id)
-        return {"exam_types": data}
+        return {"exam_types": await session.get_exam_types(semester_id)}
     except Exception as e:
-        print(f"Exam Types Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Exam Schedule ───────────────────────────────────────
 @app.get("/exam-schedule")
 async def exam_schedule(username: str, semester_id: Optional[str] = None, exam_type: Optional[str] = None):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        # Pass None to get ALL exam types; parser extracts type from header rows
-        data = await session.get_exam_schedule(semester_id=semester_id, exam_type=exam_type)
-        return {"exam_schedule": data}
+        return {"exam_schedule": await session.get_exam_schedule(semester_id, exam_type)}
     except Exception as e:
-        print(f"Exam Schedule Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Profile ────────────────────────────────────────────
 @app.get("/profile")
 async def profile(username: str):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_profile()
-        return {"profile": data}
+        return {"profile": await session.get_profile()}
     except Exception as e:
-        print(f"Profile Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-@app.get("/debug_profile")
-async def debug_profile(username: str):
-    session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    try:
-        from bs4 import BeautifulSoup
-        resp = await session.client.get("/vtop/studentsRecord/StudentProfileAllView")
-        soup = BeautifulSoup(resp.text, "lxml")
-        labels = []
-        for row in soup.find_all("tr"):
-            tds = row.find_all("td")
-            if len(tds) >= 2:
-                labels.append({
-                    "label": tds[0].get_text(strip=True),
-                    "value": tds[1].get_text(strip=True)
-                })
-        return {"labels": labels}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Debug endpoints removed for production safety
-
-
-# ─── Mentor ──────────────────────────────────────────────
-@app.get("/mentor")
-async def mentor(username: str):
-    session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    try:
-        data = await session.get_profile()
-        return {"mentor": data.get("mentor", "")}
-    except Exception as e:
-        print(f"Mentor Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ─── CGPA ────────────────────────────────────────────────
 @app.get("/cgpa")
 async def cgpa(username: str):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_cgpa()
-        return {"cgpa": data}
+        return {"cgpa": await session.get_cgpa()}
     except Exception as e:
-        print(f"CGPA Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Session Cookies ─────────────────────────────────────
-@app.get("/session-cookies")
-async def session_cookies(username: str):
+@app.get("/mentor")
+async def mentor(username: str):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        # Expose all cookies attached to the httpx client
-        cookies = dict(session.client.cookies)
+        profile_data = await session.get_profile()
+        return {"mentor": profile_data.get("mentor", "")}
+    except Exception as e:
+        handle_exception(e)
+
+@app.get("/cookies")
+async def get_cookies(username: str):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        cookies = []
+        for name, value in session.client.cookies.items():
+            cookies.append({"name": name, "value": value})
         return {"cookies": cookies}
     except Exception as e:
-        print(f"Session Cookies Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Curriculum ──────────────────────────────────────────
 @app.get("/curriculum")
 async def curriculum(username: str):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_curriculum()
-        return {"curriculum": data}
+        return {"curriculum": await session.get_curriculum()}
     except Exception as e:
-        print(f"Curriculum Error: {e}")
-        return {
-            "curriculum": {
-                "summary": {"earned": "0", "total": "0", "left": "0"},
-                "distribution": []
-            }
-        }
+        handle_exception(e)
 
-
-# ─── Faculty Search ──────────────────────────────────────
 @app.get("/faculty")
-async def faculty(username: str, search_term: str = ""):
+async def faculty(username: str):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_faculty_details(search_term)
-        return {"faculty": data}
+        return {"faculty": await session.get_faculty_details("")}
     except Exception as e:
-        print(f"Faculty Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
 @app.get("/faculty/details")
 async def faculty_details(username: str, emp_id: str):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_faculty_data(emp_id)
-        return {"details": data}
+        return {"details": await session.get_faculty_data(emp_id)}
     except Exception as e:
-        print(f"Faculty Details Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Digital Assignments ───────────────────────────────
 @app.get("/digital-assignments")
 async def digital_assignments(username: str, semester_id: Optional[str] = None):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_digital_assignments(semester_id=semester_id)
-        return {"digital_assignments": data}
+        return {"digital_assignments": await session.get_digital_assignments(semester_id)}
     except Exception as e:
-        print(f"DA Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Outing ──────────────────────────────────────────────
 @app.get("/outing")
 async def outing(username: str):
     session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_outing_status()
-        return {"outing": data}
+        return {"outing": await session.get_outing_status()}
     except Exception as e:
-        print(f"Outing Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-
-# ─── Payments ────────────────────────────────────────────
-@app.get("/payments")
-async def payments(username: str):
-    session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    try:
-        data = await session.get_payment_history()
-        return {"payments": data}
-    except Exception as e:
-        print(f"Payments Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/payments/receipt")
-async def payment_receipt(username: str, receipt_id: str):
-    session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    try:
-        data = await session.get_payment_receipt_details(receipt_id)
-        if "error" in data:
-            error_detail = data["error"]
-            if "html" in data:
-                error_detail += f"\nHTML: {data['html'][:2000]}"
-            raise HTTPException(status_code=500, detail=error_detail)
-        return data
-    except Exception as e:
-        print(f"Payment Receipt Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ─── Courses ─────────────────────────────────────────────
-@app.get("/courses")
-async def courses(username: str, semester_id: Optional[str] = None):
-    session = get_session(username)
-    if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    try:
-        data = await session.get_courses(semester_id=semester_id)
-        return {"courses": data}
-    except Exception as e:
-        print(f"Courses Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-
-# ─── New Outing Methods ──────────────────────────────────
 @app.get("/outing/weekend")
 async def outing_weekend(username: str):
     session = get_session(username)
     if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        data = await session.get_weekend_outing_status()
-        return {"outing": data}
+        return {"outing": await session.get_weekend_outing_status()}
     except Exception as e:
-        print(f"Weekend Outing Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
 @app.post("/outing/apply/general")
 async def outing_apply_general(
-    username: str = Form(...),
-    place: str = Form(...),
-    purpose: str = Form(...),
-    outDate: str = Form(...),
-    outTime: str = Form(...),
-    inDate: str = Form(...),
-    inTime: str = Form(...)
+    username: str = Form(...), place: str = Form(...), purpose: str = Form(...),
+    outDate: str = Form(...), outTime: str = Form(...),
+    inDate: str = Form(...), inTime: str = Form(...)
 ):
     session = get_session(username)
     if not session: raise HTTPException(status_code=401, detail="Not logged in")
@@ -491,16 +233,12 @@ async def outing_apply_general(
         status = "failed" if msg.lower().startswith("error") else "success"
         return {"status": status, "message": msg}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
 @app.post("/outing/apply/weekend")
 async def outing_apply_weekend(
-    username: str = Form(...),
-    place: str = Form(...),
-    purpose: str = Form(...),
-    outDate: str = Form(...),
-    outTime: str = Form(...),
-    contact: str = Form(...)
+    username: str = Form(...), place: str = Form(...), purpose: str = Form(...),
+    outDate: str = Form(...), outTime: str = Form(...), contact: str = Form(...)
 ):
     session = get_session(username)
     if not session: raise HTTPException(status_code=401, detail="Not logged in")
@@ -509,7 +247,7 @@ async def outing_apply_weekend(
         status = "failed" if msg.lower().startswith("error") else "success"
         return {"status": status, "message": msg}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
 @app.post("/outing/delete/general")
 async def outing_delete_general(username: str = Form(...), leaveId: str = Form(...)):
@@ -520,7 +258,7 @@ async def outing_delete_general(username: str = Form(...), leaveId: str = Form(.
         status = "failed" if msg.lower().startswith("error") else "success"
         return {"status": status, "message": msg}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
 @app.post("/outing/delete/weekend")
 async def outing_delete_weekend(username: str = Form(...), bookingId: str = Form(...)):
@@ -531,35 +269,46 @@ async def outing_delete_weekend(username: str = Form(...), bookingId: str = Form
         status = "failed" if msg.lower().startswith("error") else "success"
         return {"status": status, "message": msg}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        handle_exception(e)
 
-from fastapi.responses import Response
-
-@app.get("/outing/pdf/general")
-async def outing_pdf_general(username: str, leaveId: str):
+@app.get("/payments")
+async def payments(username: str):
     session = get_session(username)
-    if not session: 
-        return Response(content="<html><body><h2>Session expired. Please close this tab, return to the app, and pull-to-refresh your Outings to log in again.</h2></body></html>", media_type="text/html")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        pdf_bytes = await session.get_general_outing_pdf(leaveId)
-        return Response(content=pdf_bytes, media_type="application/pdf")
+        return {"payments": await session.get_payment_history()}
     except Exception as e:
-        return Response(content=f"<html><body><h2>Error downloading PDF</h2><p>{str(e)}</p></body></html>", media_type="text/html")
+        handle_exception(e)
 
-@app.get("/outing/pdf/weekend")
-async def outing_pdf_weekend(username: str, bookingId: str):
+@app.get("/payments/receipt")
+async def payment_receipt(username: str, receipt_id: str):
     session = get_session(username)
-    if not session: 
-        return Response(content="<html><body><h2>Session expired. Please close this tab, return to the app, and pull-to-refresh your Outings to log in again.</h2></body></html>", media_type="text/html")
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        pdf_bytes = await session.get_weekend_outing_pdf(bookingId)
-        return Response(content=pdf_bytes, media_type="application/pdf")
+        data = await session.get_payment_receipt_details(receipt_id)
+        if "error" in data:
+            handle_exception(Exception(data["error"]))
+        return data
     except Exception as e:
-        return Response(content=f"<html><body><h2>Error downloading PDF</h2><p>{str(e)}</p></body></html>", media_type="text/html")
+        handle_exception(e)
 
+@app.get("/courses")
+async def courses(username: str, semester_id: Optional[str] = None):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        return {"courses": await session.get_courses(semester_id)}
+    except Exception as e:
+        handle_exception(e)
 
-# ─── Logout ──────────────────────────────────────────────
-@app.post("/logout")
-async def logout(username: str = Form(...)):
-    await cleanup_session(username)
-    return {"status": "logged_out"}
+@app.get("/semesters")
+async def semesters(username: str):
+    session = get_session(username)
+    if not session: raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        return {"semesters": await session.get_semesters()}
+    except Exception as e:
+        handle_exception(e)
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
