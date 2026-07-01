@@ -2392,16 +2392,19 @@ class VTOPSession:
                             booking_id = texts[10]
                             
                         if not booking_id:
-                            for c in cols:
-                                btn = c.find("button")
-                                if btn and "onclick" in btn.attrs:
-                                    onclick_text = btn["onclick"]
-                                    if "deleteWeekendOuting" in onclick_text:
-                                        m = re.search(r"deleteWeekendOuting\('([^']+)'\)", onclick_text)
-                                        if m:
-                                            booking_id = m.group(1)
-                                            break
-                            
+                            row_html = str(row)
+                            m1 = re.search(r"deleteWeekendOuting\('([^']+)'\)", row_html)
+                            if m1:
+                                booking_id = m1.group(1)
+                            else:
+                                m2 = re.search(r"downloadOutingForm/([^/\"'\?]+)", row_html)
+                                if m2:
+                                    booking_id = m2.group(1)
+                                else:
+                                    # Fallback: look for any typical W-prefixed ID
+                                    m3 = re.search(r"(W\d{9,14})", row_html)
+                                    if m3:
+                                        booking_id = m3.group(1)
                         data.append({
                             "id": texts[0],
                             "bookingId": booking_id,
