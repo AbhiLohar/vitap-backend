@@ -162,6 +162,10 @@ async def grades(username: str):
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         data = await session.get_grades()
+        # get_grades() returns dict: {courses: [...], cgpa: "...", credits_registered: "...", credits_earned: "..."}
+        if isinstance(data, dict):
+            return {"grades": data}
+        # Fallback if it returns a plain list (shouldn't happen)
         return {"grades": {"courses": data, "cgpa": "N/A", "credits_registered": "N/A", "credits_earned": "N/A"}}
     except Exception as e:
         handle_exception(e)
