@@ -2342,8 +2342,12 @@ class VTOPSession:
                 if text and "disciplinary" not in text and "logs will be" not in text:
                     return f"Error: {text}"
             return "Submission may have failed - form page was returned. Please check outing history."
-        
-        return "Unable to parse response. Please check outing history to verify."
+            
+        # Fallback with debug info
+        clean_html = soup.get_text(separator=" ", strip=True)
+        debug_info = clean_html[:200] if len(clean_html) > 0 else "Empty response"
+        return f"Unable to parse response (Debug: {debug_info}). Please check outing history to verify."
+
 
     async def delete_general_outing(self, leave_id: str) -> str:
         from datetime import datetime, timezone
