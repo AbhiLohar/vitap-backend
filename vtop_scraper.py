@@ -2104,11 +2104,10 @@ class VTOPSession:
             raise Exception(f"Payments error: {e}")
 
     def _parse_payments_table(self, html: str) -> list:
-        """Parse payments table - matches vitap_student_app Rust parser logic.
+        """Parse payments table from VTOP.
         
-        VTOP payment receipts table (table.table-bordered):
-        Skip header row, then for each data row with >= 5 cells:
-        cells[0]=receipt_number, [1]=date, [2]=amount, [3]=campus_code, [4]=button with onclick
+        VTOP payment receipts table typically has columns:
+        Receipt No, Date, Application No, Fee Type, Amount, Payment Mode, Print Button
         """
         soup = BeautifulSoup(html, "lxml")
         data = []
@@ -2116,7 +2115,6 @@ class VTOPSession:
         # Find the main receipts table
         table = soup.find("table", class_="table-bordered")
         if not table:
-            # Fallback: try any table
             table = soup.find("table")
         
         if not table:
@@ -2124,24 +2122,89 @@ class VTOPSession:
         
         rows = table.find_all("tr")
         
+        # Debug: print header row to understand column structure
+        if rows:
+            header_cells = rows[0].find_all(["th", "td"])
+            headers = [c.get_text(strip=True) for c in header_cells]
+            print(f"[PAYMENTS DEBUG] Header columns ({len(headers)}): {headers}")
+            if len(rows) > 1:
+                first_data = rows[1].find_all("td")
+                first_vals = [c.get_text(strip=True) for c in first_data]
+                print(f"[PAYMENTS DEBUG] First data row ({len(first_vals)}): {first_vals}")
+        
+        # Build a header-to-index map for robust column detection
+        header_cells = rows[0].find_all(["th", "td"]) if rows else []
+        header_map = {}
+        for i, hc in enumerate(header_cells):
+            h = hc.get_text(strip=True).lower()
+            header_map[h] = i
+        
+        # Try to detect column indices from headers
+        receipt_idx = None
+        date_idx = None
+        amount_idx = None
+        desc_idx = None
+        mode_idx = None
+        appno_idx = None
+        
+        for h, i in header_map.items():
+            h_clean = h.replace(".", "").replace(" ", "")
+            if "receiptno" in h_clean or "receipt" in h_clean:
+                receipt_idx = i
+            elif "date" in h_clean:
+                date_idx = i
+            elif "amount" in h_clean:
+                amount_idx = i
+            elif "feetype" in h_clean or "description" in h_clean or "feeheading" in h_clean or "particular" in h_clean:
+                desc_idx = i
+            elif "mode" in h_clean or "paymentmode" in h_clean:
+                mode_idx = i
+            elif "applicationno" in h_clean or "applno" in h_clean or "appno" in h_clean:
+                appno_idx = i
+        
+        print(f"[PAYMENTS DEBUG] Detected indices: receipt={receipt_idx} date={date_idx} amount={amount_idx} desc={desc_idx} mode={mode_idx} appno={appno_idx}")
+        
         # Skip first row (header)
         for row in rows[1:]:
             cells = row.find_all("td")
-            if len(cells) >= 5:
-                def clean(cell):
-                    return cell.get_text(strip=True)
+            if len(cells) < 3:
+                continue
+            
+            def clean(idx):
+                if idx is not None and idx < len(cells):
+                    return cells[idx].get_text(strip=True)
+                return ""
+            
+            receipt_number = clean(receipt_idx)
+            date = clean(date_idx)
+            amount = clean(amount_idx)
+            description = clean(desc_idx)
+            payment_mode = clean(mode_idx)
+            
+            # If we couldn't detect from headers, fall back to heuristic
+            if receipt_idx is None and amount_idx is None:
+                # Fallback: try to find amount by looking for numeric values
+                for ci, cell in enumerate(cells):
+                    txt = cell.get_text(strip=True)
+                    # Amount is typically a number, possibly with commas
+                    if txt.replace(",", "").replace(".", "").isdigit() and len(txt) > 1:
+                        if amount_idx is None:
+                            amount_idx = ci
+                            amount = txt
                 
-                receipt_number = clean(cells[0])
-                date = clean(cells[1])
-                amount = clean(cells[2])
-                campus_code = clean(cells[3])
-                
-                # Extract receipt_no from button onclick
-                receipt_no = ""
-                button = cells[4].find("button") if len(cells) > 4 else None
+                # Simple positional fallback
+                if len(cells) >= 5:
+                    receipt_number = receipt_number or clean(0)
+                    date = date or clean(1)
+                    amount = amount or clean(2)
+                    description = description or clean(3)
+            
+            # Extract receipt_id from the last cell's button onclick (for viewing details)
+            receipt_id = ""
+            for cell in reversed(cells):
+                button = cell.find("button")
                 if button:
                     onclick = button.get("onclick", "")
-                    # Example: javascript:doDuplicateReceipt('27640/26/AMR');
                     prefix = "doDuplicateReceipt('"
                     suffix = "')"
                     if prefix in onclick:
@@ -2149,18 +2212,25 @@ class VTOPSession:
                         rest = onclick[start:]
                         if suffix in rest:
                             end = rest.index(suffix)
-                            receipt_no = rest[:end]
-                
-                data.append({
-                    "receipt_no": receipt_number,
-                    "date": date,
-                    "amount": amount,
-                    "payment_mode": campus_code,
-                    "status": "Paid",
-                    "receipt_id": receipt_no,
-                })
+                            receipt_id = rest[:end]
+                    break
+            
+            # Clean up amount - remove currency symbols and whitespace
+            if amount:
+                amount = amount.replace("₹", "").replace("Rs", "").replace("Rs.", "").strip()
+            
+            data.append({
+                "receipt_no": receipt_number,
+                "date": date,
+                "amount": amount,
+                "description": description if description else "Fee Payment",
+                "payment_mode": payment_mode if payment_mode else "-",
+                "status": "Paid",
+                "receipt_id": receipt_id,
+            })
         
         return data
+
 
     async def get_courses(self, semester_id: str = None) -> list:
         """Fetch courses for a specific semester (using attendance page)."""
