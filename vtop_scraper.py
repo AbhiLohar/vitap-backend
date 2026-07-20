@@ -2146,23 +2146,84 @@ class VTOPSession:
         desc_idx = None
         mode_idx = None
         appno_idx = None
+        serial_idx = None
+        campus_idx = None
+        matched = set()
         
-        for h, i in header_map.items():
-            h_clean = h.replace(".", "").replace(" ", "")
-            if "receiptno" in h_clean or "receipt" in h_clean:
-                receipt_idx = i
-            elif "date" in h_clean:
-                date_idx = i
-            elif "amount" in h_clean:
-                amount_idx = i
-            elif "feetype" in h_clean or "description" in h_clean or "feeheading" in h_clean or "particular" in h_clean:
-                desc_idx = i
-            elif "mode" in h_clean or "paymentmode" in h_clean:
-                mode_idx = i
-            elif "applicationno" in h_clean or "applno" in h_clean or "appno" in h_clean:
-                appno_idx = i
+        for i, (h_raw, _) in enumerate(header_map.items()):
+            h = h_raw.replace(".", "").replace(" ", "").replace("_", "")
+            idx = header_map[h_raw]
+            
+            # Serial number (skip)
+            if h in ("slno", "sno", "sino", "sr", "srno", "no", "#", ""):
+                serial_idx = idx
+                matched.add(idx)
+            # Receipt number
+            elif any(kw in h for kw in ("receiptno", "receiptnumber", "recno", "receiptid", "receipt")):
+                receipt_idx = idx
+                matched.add(idx)
+            # Date
+            elif any(kw in h for kw in ("date", "receiptdate", "paymentdate", "transactiondate", "transdate")):
+                date_idx = idx
+                matched.add(idx)
+            # Amount
+            elif any(kw in h for kw in ("amount", "totalamount", "paidamount", "feeamount")):
+                amount_idx = idx
+                matched.add(idx)
+            # Fee type / description
+            elif any(kw in h for kw in ("feetype", "feehead", "feeheading", "heading", "description", 
+                                         "particular", "particulars", "category", "purpose",
+                                         "feecategory", "feeparticular")):
+                desc_idx = idx
+                matched.add(idx)
+            # Payment mode
+            elif any(kw in h for kw in ("mode", "paymentmode", "paymode", "paytype", "method",
+                                         "transactiontype", "transtype", "modeofpayment")):
+                mode_idx = idx
+                matched.add(idx)
+            # Application number
+            elif any(kw in h for kw in ("applicationno", "applno", "appno", "appnumber", "application")):
+                appno_idx = idx
+                matched.add(idx)
+            # Campus
+            elif any(kw in h for kw in ("campus", "campuscode", "location")):
+                campus_idx = idx
+                matched.add(idx)
+            # Print / Action button columns (skip)
+            elif any(kw in h for kw in ("print", "action", "download", "duplicate", "view")):
+                matched.add(idx)
         
-        print(f"[PAYMENTS DEBUG] Detected indices: receipt={receipt_idx} date={date_idx} amount={amount_idx} desc={desc_idx} mode={mode_idx} appno={appno_idx}")
+        print(f"[PAYMENTS DEBUG] Mapped: receipt={receipt_idx} date={date_idx} amount={amount_idx} desc={desc_idx} mode={mode_idx} appno={appno_idx} campus={campus_idx}")
+        
+        # For unmatched columns, try to infer from the first data row's values
+        import re
+        unmatched_indices = [i for i in range(len(header_map)) if i not in matched]
+        
+        if unmatched_indices and len(rows) > 1:
+            sample_cells = rows[1].find_all("td")
+            for ui in unmatched_indices:
+                if ui >= len(sample_cells):
+                    continue
+                val = sample_cells[ui].get_text(strip=True)
+                val_clean = val.replace(",", "").replace(".", "").strip()
+                
+                # Date pattern (e.g., 11-JUL-2026)
+                if date_idx is None and re.search(r'\d{1,2}[-/]\w{3}[-/]\d{2,4}', val):
+                    date_idx = ui
+                # Application number (e.g., AM2600133122)
+                elif appno_idx is None and re.match(r'^[A-Z]{2,4}\d{5,}$', val):
+                    appno_idx = ui
+                # Numeric value — likely amount
+                elif amount_idx is None and val_clean.isdigit() and len(val_clean) >= 3:
+                    amount_idx = ui
+                # Text value — likely description or mode
+                elif desc_idx is None and len(val) > 3 and not val.isdigit() and not val.startswith("AM"):
+                    desc_idx = ui
+                elif mode_idx is None and len(val) > 1 and not val.isdigit():
+                    mode_idx = ui
+            
+            print(f"[PAYMENTS DEBUG] After inference: receipt={receipt_idx} date={date_idx} amount={amount_idx} desc={desc_idx} mode={mode_idx}")
+
         
         # Skip first row (header)
         for row in rows[1:]:
@@ -2176,30 +2237,26 @@ class VTOPSession:
                 return ""
             
             receipt_number = clean(receipt_idx)
-            date = clean(date_idx)
-            amount = clean(amount_idx)
+            date_val = clean(date_idx)
+            amount_val = clean(amount_idx)
             description = clean(desc_idx)
             payment_mode = clean(mode_idx)
             
-            # If we couldn't detect from headers, fall back to heuristic
-            if receipt_idx is None and amount_idx is None:
-                # Fallback: try to find amount by looking for numeric values
-                for ci, cell in enumerate(cells):
-                    txt = cell.get_text(strip=True)
-                    # Amount is typically a number, possibly with commas
-                    if txt.replace(",", "").replace(".", "").isdigit() and len(txt) > 1:
-                        if amount_idx is None:
-                            amount_idx = ci
-                            amount = txt
-                
-                # Simple positional fallback
-                if len(cells) >= 5:
-                    receipt_number = receipt_number or clean(0)
-                    date = date or clean(1)
-                    amount = amount or clean(2)
-                    description = description or clean(3)
+            # Positional fallback if header detection missed key columns
+            if not receipt_number and len(cells) >= 1:
+                receipt_number = clean(0)
+            if not date_val and len(cells) >= 2:
+                date_val = clean(1)
+            if not amount_val:
+                # If column 4 exists and looks like amount
+                if len(cells) >= 5 and clean(4).replace(",", "").replace(".", "").isdigit():
+                    amount_val = clean(4)
+                elif len(cells) >= 3 and clean(2).replace(",", "").replace(".", "").isdigit():
+                    amount_val = clean(2)
+            if not description and len(cells) >= 4:
+                description = clean(3)
             
-            # Extract receipt_id from the last cell's button onclick (for viewing details)
+            # Extract receipt_id from any button onclick in the row
             receipt_id = ""
             for cell in reversed(cells):
                 button = cell.find("button")
@@ -2215,16 +2272,20 @@ class VTOPSession:
                             receipt_id = rest[:end]
                     break
             
-            # Clean up amount - remove currency symbols and whitespace
-            if amount:
-                amount = amount.replace("₹", "").replace("Rs", "").replace("Rs.", "").strip()
+            # Clean up amount
+            if amount_val:
+                amount_val = amount_val.replace("₹", "").replace("Rs", "").replace("Rs.", "").strip()
+            
+            # Fallback for description and payment_mode if either is empty/dash
+            final_desc = description if (description and description != "-") else "Fee Payment"
+            final_mode = payment_mode if (payment_mode and payment_mode != "-") else (description if description else "Online Payment")
             
             data.append({
                 "receipt_no": receipt_number,
-                "date": date,
-                "amount": amount,
-                "description": description if description else "Fee Payment",
-                "payment_mode": payment_mode if payment_mode else "-",
+                "date": date_val,
+                "amount": amount_val,
+                "description": final_desc,
+                "payment_mode": final_mode,
                 "status": "Paid",
                 "receipt_id": receipt_id,
             })
