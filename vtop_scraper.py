@@ -2429,7 +2429,7 @@ class VTOPSession:
             raise Exception(f"Failed to apply for weekend outing: {e}")
 
     def _parse_outing_response(self, html: str) -> str:
-        """Parse VTOP outing submit/delete response — matches reference app logic.
+        """Parse VTOP outing submit/delete response.
         
         Checks for:
         1. Error spans (red text, .error, .alert-danger)
@@ -2437,6 +2437,7 @@ class VTOPSession:
         3. General outing success: SweetAlert h2
         4. Fallback h2 with success/error keywords
         5. If form page returned without message = silent failure
+        6. If VTOP redirected to dashboard/home = likely success
         """
         soup = BeautifulSoup(html, "lxml")
         
@@ -2452,6 +2453,12 @@ class VTOPSession:
             if text and any(kw in text for kw in ("Successfully", "Applied", "Deleted")):
                 return text
         
+        # Also check any green-colored span (not just col-md-12)
+        for span in soup.select("span[style*='color: green'], span[style*='color:green']"):
+            text = span.get_text(strip=True)
+            if text and any(kw in text.lower() for kw in ("success", "applied", "deleted", "saved")):
+                return text
+
         # 3. Check for general outing success (SweetAlert modal h2)
         sweet_h2 = soup.select_one("div.sweet-alert h2")
         if sweet_h2:
@@ -2459,25 +2466,40 @@ class VTOPSession:
             if text:
                 return text
         
+        # Also check for SweetAlert p tag (some VTOP versions use <p> inside sweet-alert)
+        sweet_p = soup.select_one("div.sweet-alert p")
+        if sweet_p:
+            text = sweet_p.get_text(strip=True)
+            if text:
+                return text
+
         # 4. Fallback: any h2 with success/error keywords
         for h2 in soup.find_all("h2"):
             text = h2.get_text(strip=True)
             if text and any(kw in text for kw in ("Successfully", "Applied", "Deleted", "Error", "Failed")):
                 return text
         
-        # 5. If form page was returned (silent failure)
+        # 5. If the outing form page was returned (silent failure — VTOP didn't process the request)
         if "outingForm" in html and ("Weekend Outing Request" in html or "General Outing" in html):
-            # Look for any colored span messages
+            # Look for any colored span messages on the form
             for span in soup.select("span.col-sm-12[style*='color'], span.col-md-12[style*='color']"):
                 text = span.get_text(strip=True)
                 if text and "disciplinary" not in text and "logs will be" not in text:
                     return f"Error: {text}"
-            return "Submission may have failed - form page was returned. Please check outing history."
+            return "Error: Submission may have failed - form page was returned. Please check outing history."
+        
+        # 6. If VTOP redirected to dashboard/home page (no outing form, no errors)
+        #    This typically means the submission succeeded and VTOP redirected to home.
+        page_text = soup.get_text(separator=" ", strip=True).lower()
+        is_dashboard = any(kw in page_text for kw in ("quick links", "sign out", "login history", "my info"))
+        has_no_outing_form = "outingForm" not in html and "saveGeneralOutingForm" not in html and "saveOutingForm" not in html
+        has_no_errors = not any(kw in page_text for kw in ("error", "failed", "invalid", "not allowed"))
+        
+        if is_dashboard and has_no_outing_form and has_no_errors:
+            return "Outing request submitted successfully! Please check outing history to verify."
             
-        # Fallback with debug info
-        clean_html = soup.get_text(separator=" ", strip=True)
-        debug_info = clean_html[:200] if len(clean_html) > 0 else "Empty response"
-        return f"Unable to parse response (Debug: {debug_info}). Please check outing history to verify."
+        # 7. Final fallback — truly unable to determine outcome
+        return "Error: Unable to confirm submission. Please check your outing history to verify."
 
 
     async def delete_general_outing(self, leave_id: str) -> str:
