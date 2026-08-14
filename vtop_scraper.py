@@ -2355,10 +2355,24 @@ class VTOPSession:
         resp = await self._post_menu(url)
         soup = BeautifulSoup(resp.text, "lxml")
         fields = {}
+        
+        # Extract all input fields (hidden, text, etc.)
         for inp in soup.find_all("input"):
-            id_val = inp.get("id") or inp.get("name")
-            if id_val:
-                fields[id_val] = inp.get("value", "")
+            # Prefer 'name' over 'id' since forms submit by 'name'
+            field_name = inp.get("name") or inp.get("id")
+            if field_name and field_name not in ("_csrf",):  # Skip CSRF, we add it ourselves
+                fields[field_name] = inp.get("value", "")
+        
+        # Also extract selected values from <select> elements
+        for sel in soup.find_all("select"):
+            field_name = sel.get("name") or sel.get("id")
+            if field_name:
+                selected = sel.find("option", selected=True)
+                if selected:
+                    fields[field_name] = selected.get("value", "")
+        
+        print(f"[OUTING DEBUG] Form fields: {fields}")
+        
         if not fields.get("applicationNo"):
             raise Exception("Could not parse outing form fields")
         return fields
@@ -2368,6 +2382,8 @@ class VTOPSession:
         try:
             from datetime import datetime, timezone
             fields = await self._fetch_outing_form_hidden_fields(is_weekend=False)
+            
+            print(f"[OUTING DEBUG] Hidden fields extracted: {list(fields.keys())}")
             
             # Times come as HH:MM
             out_parts = out_time.split(":")
@@ -2393,10 +2409,32 @@ class VTOPSession:
                 "parentContactNumber": fields.get("parentContactNumber", ""),
                 "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
             }
-            resp = await self._post_authenticated("/vtop/hostel/saveGeneralOutingForm", data)
             
-            return self._parse_outing_response(resp.text)
+            # VTOP requires XMLHttpRequest header for AJAX form submissions
+            # (same pattern used by delete endpoints which work correctly)
+            headers = {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": "https://vtop.vitap.ac.in/vtop/hostel/StudentGeneralOuting",
+            }
+            
+            data["_csrf"] = self.post_login_csrf or self.csrf_token
+            print(f"[OUTING DEBUG] Submitting general outing: place={out_place}, outDate={out_date}, outTime={out_time}, inDate={in_date}, inTime={in_time}")
+            
+            resp = await self.client.post("/vtop/hostel/saveGeneralOutingForm", data=data, headers=headers)
+            self._check_session_expired(resp)
+            
+            # Debug: log the response for troubleshooting
+            resp_text = resp.text
+            print(f"[OUTING DEBUG] Response status: {resp.status_code}, length: {len(resp_text)}")
+            print(f"[OUTING DEBUG] Response preview: {resp_text[:500]}")
+            
+            result = self._parse_outing_response(resp_text)
+            print(f"[OUTING DEBUG] Parsed result: {result}")
+            
+            return result
         except Exception as e:
+            print(f"[OUTING DEBUG] Exception: {e}")
             raise Exception(f"Failed to apply for general outing: {e}")
 
     async def apply_weekend_outing(self, out_place: str, purpose: str, out_date: str, out_time: str, contact_number: str) -> str:
@@ -2437,7 +2475,7 @@ class VTOPSession:
         3. General outing success: SweetAlert h2
         4. Fallback h2 with success/error keywords
         5. If form page returned without message = silent failure
-        6. If VTOP redirected to dashboard/home = likely success
+        6. If VTOP redirected to dashboard/home = failure/expired session
         """
         soup = BeautifulSoup(html, "lxml")
         
@@ -2488,15 +2526,15 @@ class VTOPSession:
                     return f"Error: {text}"
             return "Error: Submission may have failed - form page was returned. Please check outing history."
         
-        # 6. If VTOP redirected to dashboard/home page (no outing form, no errors)
-        #    This typically means the submission succeeded and VTOP redirected to home.
+        # 6. If VTOP redirected to dashboard/home page (no outing form, no success/error indicators)
+        #    With proper AJAX headers, VTOP should return the response directly.
+        #    Getting the dashboard means the session may have expired or the request wasn't processed.
         page_text = soup.get_text(separator=" ", strip=True).lower()
         is_dashboard = any(kw in page_text for kw in ("quick links", "sign out", "login history", "my info"))
         has_no_outing_form = "outingForm" not in html and "saveGeneralOutingForm" not in html and "saveOutingForm" not in html
-        has_no_errors = not any(kw in page_text for kw in ("error", "failed", "invalid", "not allowed"))
         
-        if is_dashboard and has_no_outing_form and has_no_errors:
-            return "Outing request submitted successfully! Please check outing history to verify."
+        if is_dashboard and has_no_outing_form:
+            return "Error: VTOP did not process the outing request. Your session may have expired. Please pull-to-refresh and try again."
             
         # 7. Final fallback — truly unable to determine outcome
         return "Error: Unable to confirm submission. Please check your outing history to verify."
