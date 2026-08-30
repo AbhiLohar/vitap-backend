@@ -127,7 +127,9 @@ async def attendance(username: str, semester_id: Optional[str] = None):
     if not session:
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
-        return {"attendance": await session.get_attendance(semester_id)}
+        result = await session.get_attendance(semester_id)
+        # result is now a dict: {"attendance": [...], "has_capstone": bool}
+        return result
     except Exception as e:
         handle_exception(e)
 
@@ -138,6 +140,16 @@ async def attendance_detail(username: str, semester_id: str, course_id: str, cou
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         return {"details": await session.get_attendance_detail(semester_id, course_id, course_type)}
+    except Exception as e:
+        handle_exception(e)
+
+@app.get("/attendance/capstone")
+async def capstone_attendance(username: str, semester_id: Optional[str] = None):
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        return {"capstone": await session.get_capstone_attendance(semester_id)}
     except Exception as e:
         handle_exception(e)
 
