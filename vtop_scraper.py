@@ -758,29 +758,50 @@ class VTOPSession:
             if initial_parsed.get("available") and initial_parsed.get("percentage"):
                 return initial_parsed
             
-            # 3. Dynamic Button & Onclick Discovery
-            soup = BeautifulSoup(page_html, "lxml")
+            # 3. Dynamic Snippet & Onclick Discovery
             discovered_calls = []
+            candidate_endpoints = []
             
-            # Find any button, input, or link with Capstone/SDP text
-            elements = soup.find_all(lambda tag: tag.name in ["button", "input", "a"] and re.search(r"capstone|sdp", tag.get_text() + " " + tag.get("value", "") + " " + tag.get("id", "") + " " + tag.get("name", ""), re.I))
-            for el in elements:
-                onclick = el.get("onclick", "")
-                if onclick:
-                    # Extract function name and arguments from onclick e.g. callStudentAttendanceDetailDisplay('semId', 'regNo', 'PJT', 'ETH')
-                    fn_match = re.match(r"([a-zA-Z0-9_$]+)\s*\((.*?)\)", onclick.strip())
-                    if fn_match:
-                        fn_name = fn_match.group(1)
-                        raw_args = fn_match.group(2)
-                        args = re.findall(r"""['"]([^'"]*)['"]""", raw_args)
-                        discovered_calls.append({"fn": fn_name, "args": args, "raw": onclick})
+            # Search around any mention of capstone or sdp in the HTML
+            for match in re.finditer(r"(?i)(?:capstone|sdp)", page_html):
+                start = max(0, match.start() - 400)
+                end = min(len(page_html), match.end() + 600)
+                snippet = page_html[start:end]
+                
+                # Extract onclick from snippet
+                for onclick_m in re.finditer(r"""onclick\s*=\s*["']([^"']+)["']""", snippet, re.I):
+                    raw_onclick = onclick_m.group(1)
+                    fn_call_m = re.match(r"([a-zA-Z0-9_$]+)\s*\((.*?)\)", raw_onclick.strip())
+                    if fn_call_m:
+                        fn_name = fn_call_m.group(1)
+                        raw_args = fn_call_m.group(2)
+                        args = [a.strip().strip("'\"") for a in raw_args.split(",") if a.strip()]
+                        discovered_calls.append({"fn": fn_name, "args": args, "raw": raw_onclick})
+                
+                # Extract URLs from snippet
+                for u in re.findall(r"""['"](/vtop/[^'"]+)['"]""", snippet):
+                    if u not in candidate_endpoints:
+                        candidate_endpoints.append(u)
             
-            # If function name is callStudentAttendanceDetailDisplay or processViewAttendanceDetail
+            # Search for external scripts and examine them
+            script_sources = re.findall(r"""<script[^>]+src\s*=\s*['"]([^'"]+)['"]""", combined_html, re.I)
+            for src in script_sources:
+                if any(k in src.lower() for k in ["attendance", "student", "academic", "project", "capstone"]):
+                    src_url = src if src.startswith("http") else f"{VTOP_BASE}/{src.lstrip('/')}"
+                    try:
+                        js_resp = await self.client.get(src_url)
+                        if js_resp.status_code == 200:
+                            for u in re.findall(r"""['"](/vtop/[^'"]*(?:attendance|capstone|sdp|project)[^'"]*)['"]""", js_resp.text, re.I):
+                                if u not in candidate_endpoints:
+                                    candidate_endpoints.append(u)
+                    except Exception:
+                        pass
+            
+            # 4. Try calling processViewAttendanceDetail with discovered args
             for call in discovered_calls:
                 fn = call["fn"]
                 args = call["args"]
                 if len(args) >= 4:
-                    # (semSubId, registerNumber, courseId, courseType)
                     try:
                         detail_resp = await self.client.post(
                             "/vtop/processViewAttendanceDetail",
@@ -801,17 +822,45 @@ class VTOPSession:
                                 return parsed
                     except Exception:
                         pass
+                
+                if fn and fn != "callStudentAttendanceDetailDisplay":
+                    for ep in [f"/vtop/{fn}", f"/vtop/academics/common/{fn}"]:
+                        try:
+                            fn_resp = await self.client.post(
+                                ep,
+                                data={
+                                    "semesterSubId": sem_id,
+                                    "registerNumber": self.registration_number,
+                                    "authorizedID": self.registration_number,
+                                    "_csrf": csrf,
+                                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                                },
+                                headers=ajax_headers
+                            )
+                            if fn_resp.status_code == 200:
+                                parsed = self._parse_capstone_attendance(fn_resp.text)
+                                if parsed.get("available"):
+                                    return parsed
+                        except Exception:
+                            pass
             
-            # 4. Try processViewAttendanceDetail with standard project course combinations
+            # 5. Try all project / capstone courseId & courseType combinations with processViewAttendanceDetail
             project_combos = [
-                ("PJT", "PJT"),
                 ("CAPSTONE", "PJT"),
                 ("SDP", "PJT"),
+                ("PJT", "PJT"),
                 ("PROJECT", "PJT"),
-                ("ETH", "ETH"),
-                ("", "PJT"),
                 ("CAPSTONE", "CAPSTONE"),
                 ("SDP", "SDP"),
+                ("CAPSTONE", "ETH"),
+                ("SDP", "ETH"),
+                ("CAPSTONE", ""),
+                ("SDP", ""),
+                ("", "PJT"),
+                ("PJT", ""),
+                ("ETH", "ETH"),
+                ("EPJ", "EPJ"),
+                ("PJT", "EPJ"),
             ]
             for c_id, c_type in project_combos:
                 try:
@@ -835,8 +884,8 @@ class VTOPSession:
                 except Exception:
                     pass
             
-            # 5. Try candidate project / capstone endpoints
-            candidate_endpoints = [
+            # 6. Try candidate project / capstone endpoints
+            all_candidate_endpoints = candidate_endpoints + [
                 "/vtop/processViewStudentProjectAttendance",
                 "/vtop/processViewStudentProjectAttendanceDetail",
                 "/vtop/processViewStudentCapstoneAttendance",
@@ -878,7 +927,7 @@ class VTOPSession:
                 },
             ]
             
-            for endpoint in candidate_endpoints:
+            for endpoint in all_candidate_endpoints:
                 for payload in payloads:
                     try:
                         test_resp = await self.client.post(
@@ -893,7 +942,7 @@ class VTOPSession:
                     except Exception:
                         continue
             
-            # 6. Fallback: Parse whole combined HTML
+            # 7. Fallback: Parse whole combined HTML
             fallback_parsed = self._parse_capstone_attendance(combined_html)
             if fallback_parsed.get("available") and (fallback_parsed.get("present") is not None or fallback_parsed.get("percentage")):
                 return fallback_parsed
