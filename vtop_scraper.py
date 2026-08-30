@@ -692,18 +692,6 @@ class VTOPSession:
         This is only available for certain batches/students.
         The attendance page shows a green "View CAPSTONE/SDP Attendance" button
         which triggers an AJAX call to fetch the capstone attendance modal.
-        
-        Returns a dict with capstone attendance details:
-        {
-            "title": "Capstone",
-            "guide_evaluation_status": "...",
-            "date_of_registration": "...",
-            "present": 18,
-            "on_duty": 4,
-            "absent": 8,
-            "percentage": "74%",
-            "available": true
-        }
         """
         try:
             from datetime import datetime, timezone
@@ -711,140 +699,145 @@ class VTOPSession:
             logger = logging.getLogger(__name__)
             
             sem_id = semester_id or "AP2025262"
+            ajax_headers = {
+                "User-Agent": HEADERS.get("User-Agent", "Mozilla/5.0"),
+                "Origin": VTOP_BASE,
+                "Referer": f"{VTOP_BASE}/vtop/academics/common/StudentAttendance",
+                "X-Requested-With": "XMLHttpRequest",
+            }
+            csrf = self.post_login_csrf or self.csrf_token
             
-            # Initialize page first (required by VTOP)
-            await self._post_menu(ROUTES["attendance"])
+            # 1. Initialize page first (required by VTOP)
+            menu_resp = await self._post_menu(ROUTES["attendance"])
+            menu_html = menu_resp.text if menu_resp else ""
             
-            # First, fetch the attendance page to discover the capstone button/endpoint
-            resp = await self._post_authenticated(
+            # 2. Fetch the attendance view for the semester
+            resp = await self.client.post(
                 ROUTES["view_attend"],
+                data={
+                    "semesterSubId": sem_id,
+                    "authorizedID": self.registration_number,
+                    "_csrf": csrf,
+                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                },
+                headers=ajax_headers
+            )
+            self._check_session_expired(resp)
+            page_html = resp.text
+            
+            combined_html = menu_html + "\n" + page_html
+            
+            # Check if capstone button exists
+            if not re.search(r"(?i)capstone|sdp", combined_html):
+                return {"available": False, "message": "Capstone/SDP attendance not available for this semester"}
+            
+            # Check if modal HTML is already embedded in the response
+            initial_parsed = self._parse_capstone_attendance(page_html)
+            if initial_parsed.get("available") and initial_parsed.get("percentage"):
+                return initial_parsed
+            
+            # 3. Dynamic Endpoint Discovery
+            # Look for button/link element with CAPSTONE / SDP text and its onclick attribute
+            soup = BeautifulSoup(page_html, "lxml")
+            discovered_urls = []
+            
+            # Find any button, input, or link with Capstone/SDP text
+            elements = soup.find_all(lambda tag: tag.name in ["button", "input", "a"] and re.search(r"capstone|sdp", tag.get_text() + " " + tag.get("value", "") + " " + tag.get("id", "") + " " + tag.get("name", ""), re.I))
+            for el in elements:
+                onclick = el.get("onclick", "")
+                if onclick:
+                    # Match url directly in onclick
+                    url_in_onclick = re.search(r"""(?:url\s*:\s*|['"])(/[^'"]+capstone[^'"]*|/[^'"]+sdp[^'"]*|/[^'"]+project[^'"]*)['"]""", onclick, re.I)
+                    if url_in_onclick:
+                        discovered_urls.append(url_in_onclick.group(1))
+                    
+                    # Match function name in onclick e.g. callCapstoneAttendance(...)
+                    fn_match = re.match(r"([a-zA-Z0-9_$]+)\s*\(", onclick.strip())
+                    if fn_match:
+                        fn_name = fn_match.group(1)
+                        # Search for function definition across combined HTML
+                        fn_def = re.search(rf"function\s+{re.escape(fn_name)}\s*\([^)]*\)\s*\{{(.*?)\}}", combined_html, re.DOTALL)
+                        if fn_def:
+                            body = fn_def.group(1)
+                            for u in re.findall(r"""['"](/vtop/[^'"]+)['"]""", body):
+                                discovered_urls.append(u)
+            
+            # Also search for any url in script blocks matching capstone/project/sdp
+            for script_url in re.findall(r"""['"](/vtop/[^'"]*(?:capstone|sdp|project)[^'"]*)['"]""", combined_html, re.IGNORECASE):
+                if script_url not in discovered_urls:
+                    discovered_urls.append(script_url)
+            
+            # Priority list of all candidate endpoints
+            candidate_endpoints = discovered_urls + [
+                "/vtop/processViewStudentProjectAttendance",
+                "/vtop/processViewStudentProjectAttendanceDetail",
+                "/vtop/processViewStudentCapstoneAttendance",
+                "/vtop/processViewStudentCapstoneAttendanceDetail",
+                "/vtop/processViewCapstoneAttendance",
+                "/vtop/processViewCapstoneAttendanceDetail",
+                "/vtop/processViewCapstoneSDPAttendance",
+                "/vtop/processViewCapstoneSDPAttendanceDetail",
+                "/vtop/processViewSDPAttendance",
+                "/vtop/processViewSDPAttendanceDetail",
+                "/vtop/processViewProjectAttendance",
+                "/vtop/processViewProjectAttendanceDetail",
+                "/vtop/academics/common/processViewCapstoneAttendance",
+                "/vtop/academics/common/processViewStudentProjectAttendance",
+                "/vtop/academics/common/processViewCapstoneSDPAttendance",
+                "/vtop/academics/common/processViewSDPAttendance",
+                "/vtop/academics/common/StudentCapstoneAttendance",
+                "/vtop/academics/common/StudentProjectAttendance",
+                "/vtop/examinations/processViewCapstoneAttendance",
+                "/vtop/examinations/processViewStudentProjectAttendance",
+            ]
+            
+            # Parameter sets to try
+            param_payloads = [
+                {
+                    "semesterSubId": sem_id,
+                    "registerNumber": self.registration_number,
+                    "authorizedID": self.registration_number,
+                    "_csrf": csrf,
+                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                },
                 {
                     "semesterSubId": sem_id,
                     "authorizedID": self.registration_number,
+                    "_csrf": csrf,
                     "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
-                }
-            )
+                },
+                {
+                    "semesterSubId": sem_id,
+                    "regNo": self.registration_number,
+                    "authorizedID": self.registration_number,
+                    "_csrf": csrf,
+                },
+            ]
             
-            page_html = resp.text
-            logger.info(f"[CAPSTONE] Attendance page length: {len(page_html)}")
-            
-            # Check if capstone button exists
-            if not re.search(r"(?i)capstone|sdp", page_html):
-                return {"available": False, "message": "Capstone/SDP attendance not available for this semester"}
-            
-            # Try to find the onclick handler of the capstone button to get the endpoint
-            # Common patterns:
-            # onclick="viewCapstoneAttendance('semId','regNo')"
-            # onclick="openCapstoneSDPAttendance('semId','regNo')"  
-            # onclick="callCapstoneAttendanceDetailDisplay('semId','regNo')"
-            capstone_onclick = re.search(
-                r"""onclick\s*=\s*["']([^"']*(?:capstone|sdp|Capstone|SDP)[^"']*)["']""",
-                page_html,
-                re.IGNORECASE
-            )
-            
-            # Also look for a direct URL in the button/link
-            capstone_url = re.search(
-                r"""(?:href|action)\s*=\s*["']([^"']*(?:capstone|sdp|Capstone|SDP)[^"']*)["']""",
-                page_html,
-                re.IGNORECASE
-            )
-            
-            # Extract the AJAX endpoint from the JavaScript function
-            # Look for function definitions that match the onclick
-            ajax_endpoint = None
-            
-            if capstone_onclick:
-                func_call = capstone_onclick.group(1)
-                logger.info(f"[CAPSTONE] Found onclick: {func_call}")
-                
-                # Extract function name from the onclick
-                func_name_match = re.match(r"(\w+)\s*\(", func_call)
-                if func_name_match:
-                    func_name = func_name_match.group(1)
-                    logger.info(f"[CAPSTONE] Function name: {func_name}")
-                    
-                    # Search for the function definition to find the AJAX URL
-                    func_body = re.search(
-                        rf"function\s+{re.escape(func_name)}\s*\([^)]*\)\s*\{{(.*?)\}}",
-                        page_html,
-                        re.DOTALL
-                    )
-                    if func_body:
-                        body = func_body.group(1)
-                        url_match = re.search(r"""url\s*:\s*["']([^"']+)["']""", body)
-                        if url_match:
-                            ajax_endpoint = url_match.group(1)
-                            logger.info(f"[CAPSTONE] Discovered AJAX endpoint: {ajax_endpoint}")
-            
-            if capstone_url and not ajax_endpoint:
-                ajax_endpoint = capstone_url.group(1)
-                logger.info(f"[CAPSTONE] Using URL from href/action: {ajax_endpoint}")
-            
-            # If we couldn't discover the endpoint, try common VTOP patterns
-            if not ajax_endpoint:
-                # Try multiple common endpoint patterns
-                candidate_endpoints = [
-                    "/vtop/processViewCapstoneAttendance",
-                    "/vtop/academics/common/processViewCapstoneAttendance",
-                    "/vtop/processViewStudentProjectAttendance",
-                    "/vtop/processViewCapstoneSdpAttendance",
-                    "/vtop/academics/common/StudentCapstoneAttendance",
-                ]
-                
-                for endpoint in candidate_endpoints:
+            for endpoint in candidate_endpoints:
+                for payload in param_payloads:
                     try:
-                        logger.info(f"[CAPSTONE] Trying endpoint: {endpoint}")
-                        test_resp = await self._post_authenticated(
+                        test_resp = await self.client.post(
                             endpoint,
-                            {
-                                "semesterSubId": sem_id,
-                                "registerNumber": self.registration_number,
-                                "authorizedID": self.registration_number,
-                                "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
-                            }
+                            data=payload,
+                            headers=ajax_headers
                         )
-                        if test_resp.status_code == 200 and len(test_resp.text) > 100:
-                            # Check if response contains capstone data
-                            if re.search(r"(?i)capstone|attendance\s*summary|present|absent", test_resp.text):
-                                ajax_endpoint = endpoint
-                                logger.info(f"[CAPSTONE] Found working endpoint: {endpoint}")
-                                return self._parse_capstone_attendance(test_resp.text)
-                    except Exception as ep_err:
-                        logger.debug(f"[CAPSTONE] Endpoint {endpoint} failed: {ep_err}")
+                        if test_resp.status_code == 200 and len(test_resp.text) > 50:
+                            parsed = self._parse_capstone_attendance(test_resp.text)
+                            if parsed.get("available") and (parsed.get("present") is not None or parsed.get("percentage")):
+                                return parsed
+                    except Exception:
                         continue
             
-            if ajax_endpoint:
-                # Call the discovered endpoint
-                capstone_resp = await self._post_authenticated(
-                    ajax_endpoint,
-                    {
-                        "semesterSubId": sem_id,
-                        "registerNumber": self.registration_number,
-                        "authorizedID": self.registration_number,
-                        "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
-                    }
-                )
-                
-                logger.info(f"[CAPSTONE] Response status: {capstone_resp.status_code}, length: {len(capstone_resp.text)}")
-                return self._parse_capstone_attendance(capstone_resp.text)
+            # If all AJAX calls failed, attempt to parse the entire page HTML
+            fallback_parsed = self._parse_capstone_attendance(combined_html)
+            if fallback_parsed.get("available") and (fallback_parsed.get("present") is not None or fallback_parsed.get("percentage")):
+                return fallback_parsed
             
-            # If we still can't find the endpoint, try parsing the capstone data
-            # directly from the attendance page HTML (it might be embedded in the page)
-            logger.info("[CAPSTONE] No AJAX endpoint found, trying to parse from attendance page")
-            parsed = self._parse_capstone_attendance(page_html)
-            if parsed.get("available"):
-                return parsed
-            
-            # Last resort: log the HTML for debugging
-            # Save a snippet of HTML around the capstone button for diagnosis
-            capstone_idx = page_html.lower().find("capstone")
-            if capstone_idx >= 0:
-                snippet_start = max(0, capstone_idx - 500)
-                snippet_end = min(len(page_html), capstone_idx + 1000)
-                logger.info(f"[CAPSTONE] HTML around button:\n{page_html[snippet_start:snippet_end]}")
-            
-            return {"available": True, "message": "Capstone/SDP button found but could not fetch data. Check server logs for details."}
+            return {
+                "available": False,
+                "message": "Capstone/SDP data could not be fetched from VTOP for this semester."
+            }
             
         except Exception as e:
             raise Exception(f"Capstone attendance error: {e}")
@@ -856,68 +849,96 @@ class VTOPSession:
         1. A details table with: Title | Guide Evaluation Status | Date of Registration
         2. An 'Attendance Summary' table with: Present | On Duty (OD) | Absent | Percentage | Punch Details
         """
+        if not html or not isinstance(html, str):
+            return {"available": False}
+            
         soup = BeautifulSoup(html, "lxml")
         clean = lambda el: el.get_text(strip=True).replace("\t", "").replace("\n", "") if el else ""
         
-        result = {"available": False}
+        result = {
+            "available": False,
+            "title": "Capstone",
+            "guide_evaluation_status": None,
+            "date_of_registration": None,
+            "present": None,
+            "on_duty": None,
+            "absent": None,
+            "percentage": None,
+        }
         
-        # Look for the "CAPSTONE/SDP Attendance Detail" heading
-        heading = soup.find(string=re.compile(r"CAPSTONE.*Attendance|SDP.*Attendance", re.IGNORECASE))
-        if not heading:
-            # Try to find data tables directly
-            tables = soup.find_all("table")
-            if not tables:
-                return result
-        
-        result["available"] = True
-        
-        # Parse the details table (Title, Guide Evaluation Status, Date of Registration)
-        # This table has rows like: <tr><td>Title</td><td>Capstone</td></tr>
+        # 1. Look across all table rows for label-value pairs
         all_tables = soup.find_all("table")
-        
         for table in all_tables:
             rows = table.find_all("tr")
             for row in rows:
-                cells = row.find_all("td")
-                if len(cells) >= 2:
-                    label = clean(cells[0]).lower()
-                    value = clean(cells[1])
-                    
-                    if "title" in label:
-                        result["title"] = value
+                cells = row.find_all(["td", "th"])
+                cell_texts = [clean(c) for c in cells]
+                
+                # Check 2-column detail rows
+                if len(cell_texts) >= 2:
+                    label = cell_texts[0].lower()
+                    val = cell_texts[1]
+                    if "title" in label and not result.get("guide_evaluation_status"):
+                        result["title"] = val
                     elif "guide" in label and "evaluation" in label:
-                        result["guide_evaluation_status"] = value
+                        result["guide_evaluation_status"] = val
                     elif "date" in label and "registration" in label:
-                        result["date_of_registration"] = value
+                        result["date_of_registration"] = val
+                
+                # Check Attendance Summary header row and data row
+                header_lower = [t.lower() for t in cell_texts]
+                if any("present" in h for h in header_lower):
+                    # Next sibling row usually contains the values
+                    next_row = row.find_next_sibling("tr")
+                    if next_row:
+                        data_cells = [clean(c) for c in next_row.find_all(["td", "th"])]
+                        if len(data_cells) >= 4:
+                            result["present"] = data_cells[0]
+                            result["on_duty"] = data_cells[1]
+                            result["absent"] = data_cells[2]
+                            result["percentage"] = data_cells[3]
+                            if len(data_cells) >= 5:
+                                result["punch_details"] = data_cells[4]
+                
+                # Also check if this row directly contains numeric summary values (e.g. Present: 18, OD: 4, Absent: 8, Pct: 74%)
+                if len(cell_texts) >= 4:
+                    # If cells look like numbers and percentages: [18, 4, 8, 74%]
+                    pct_candidates = [c for c in cell_texts if "%" in c]
+                    num_candidates = [c for c in cell_texts if c.isdigit()]
+                    if pct_candidates and len(num_candidates) >= 2:
+                        result["present"] = num_candidates[0]
+                        result["on_duty"] = num_candidates[1] if len(num_candidates) > 1 else "0"
+                        result["absent"] = num_candidates[2] if len(num_candidates) > 2 else "0"
+                        result["percentage"] = pct_candidates[0]
         
-        # Parse the Attendance Summary table
-        # Headers: Present | On Duty (OD) | Absent | Percentage | Punch Details
-        for table in all_tables:
-            headers = table.find_all("th")
-            header_texts = [clean(h).lower() for h in headers]
-            
-            # Check if this is the attendance summary table
-            if any("present" in h for h in header_texts):
-                rows = table.find_all("tr")
-                for row in rows:
-                    cells = row.find_all("td")
-                    if len(cells) >= 4:
-                        result["present"] = clean(cells[0])
-                        result["on_duty"] = clean(cells[1])
-                        result["absent"] = clean(cells[2])
-                        result["percentage"] = clean(cells[3])
-                        if len(cells) >= 5:
-                            result["punch_details"] = clean(cells[4])
-                        break
+        # 2. Regex fallback for any fields missed
+        if not result.get("guide_evaluation_status"):
+            guide_match = re.search(r"(?i)guide\s*evaluation\s*status\s*</td>\s*<td[^>]*>([^<]+)</td>", html)
+            if guide_match:
+                result["guide_evaluation_status"] = guide_match.group(1).strip()
+                
+        if not result.get("date_of_registration"):
+            date_match = re.search(r"(?i)date\s*of\s*registration\s*</td>\s*<td[^>]*>([^<]+)</td>", html)
+            if date_match:
+                result["date_of_registration"] = date_match.group(1).strip()
+                
+        if not result.get("percentage"):
+            pct_match = re.search(r"\b(\d{1,3}(?:\.\d+)?%)\b", html)
+            if pct_match:
+                result["percentage"] = pct_match.group(1)
         
-        # Try to parse numeric values
-        for key in ["present", "on_duty", "absent"]:
-            if key in result:
+        # Parse integers
+        for k in ["present", "on_duty", "absent"]:
+            if result.get(k) is not None:
                 try:
-                    result[key] = int(result[key])
+                    result[k] = int(str(result[k]).strip())
                 except (ValueError, TypeError):
                     pass
         
+        # Determine availability
+        if result.get("percentage") is not None or result.get("present") is not None or result.get("guide_evaluation_status") is not None:
+            result["available"] = True
+            
         return result
 
     def _parse_attendance_detail(self, html: str) -> list:
