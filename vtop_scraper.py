@@ -48,6 +48,12 @@ ROUTES = {
 # Pattern: AP{start_year}{end_year_last_digit}{type}
 # Types: 2=Fall, 4=Winter, 5=Summer-1, 6=Summer-2, 7=Summer
 KNOWN_SEMESTERS = {
+    "Fall Semester 2026-27 - AMR": "AP2026272",
+    "FALL SEM 2026-27": "AP2026272",
+    "Fall Semester 2026-27": "AP2026272",
+    "Short Summer Semester II 2025-26 - AMR": "AP2025266",
+    "Winter Semester 2025-26 - AMR": "AP2025264",
+    "Fall Semester 2025-26 - AMR": "AP2025262",
     "Summer Semester - 1 2025-26": "AP2025265",
     "Winter Semester 2025-26": "AP2025264",
     "FALL SEM 2025-26": "AP2025262",
@@ -698,7 +704,18 @@ class VTOPSession:
             import logging
             logger = logging.getLogger(__name__)
             
-            sem_id = semester_id or "AP2025262"
+            # Resolve semester ID
+            sem_id = semester_id
+            if not sem_id:
+                try:
+                    sems = await self.get_semesters()
+                    if sems:
+                        sem_id = sems[0]["id"]
+                except Exception:
+                    pass
+            if not sem_id:
+                sem_id = "AP2026272"
+            
             ajax_headers = {
                 "User-Agent": HEADERS.get("User-Agent", "Mozilla/5.0"),
                 "Origin": VTOP_BASE,
@@ -710,6 +727,10 @@ class VTOPSession:
             # 1. Initialize page first (required by VTOP)
             menu_resp = await self._post_menu(ROUTES["attendance"])
             menu_html = menu_resp.text if menu_resp else ""
+            menu_csrf = _find_csrf(menu_html)
+            if menu_csrf:
+                csrf = menu_csrf
+                self.post_login_csrf = menu_csrf
             
             # 2. Fetch the attendance view for the semester
             resp = await self.client.post(
@@ -725,50 +746,97 @@ class VTOPSession:
             self._check_session_expired(resp)
             page_html = resp.text
             
-            combined_html = menu_html + "\n" + page_html
+            page_csrf = _find_csrf(page_html)
+            if page_csrf:
+                csrf = page_csrf
+                self.post_login_csrf = page_csrf
             
-            # Check if capstone button exists
-            if not re.search(r"(?i)capstone|sdp", combined_html):
-                return {"available": False, "message": "Capstone/SDP attendance not available for this semester"}
+            combined_html = menu_html + "\n" + page_html
             
             # Check if modal HTML is already embedded in the response
             initial_parsed = self._parse_capstone_attendance(page_html)
             if initial_parsed.get("available") and initial_parsed.get("percentage"):
                 return initial_parsed
             
-            # 3. Dynamic Endpoint Discovery
-            # Look for button/link element with CAPSTONE / SDP text and its onclick attribute
+            # 3. Dynamic Button & Onclick Discovery
             soup = BeautifulSoup(page_html, "lxml")
-            discovered_urls = []
+            discovered_calls = []
             
             # Find any button, input, or link with Capstone/SDP text
             elements = soup.find_all(lambda tag: tag.name in ["button", "input", "a"] and re.search(r"capstone|sdp", tag.get_text() + " " + tag.get("value", "") + " " + tag.get("id", "") + " " + tag.get("name", ""), re.I))
             for el in elements:
                 onclick = el.get("onclick", "")
                 if onclick:
-                    # Match url directly in onclick
-                    url_in_onclick = re.search(r"""(?:url\s*:\s*|['"])(/[^'"]+capstone[^'"]*|/[^'"]+sdp[^'"]*|/[^'"]+project[^'"]*)['"]""", onclick, re.I)
-                    if url_in_onclick:
-                        discovered_urls.append(url_in_onclick.group(1))
-                    
-                    # Match function name in onclick e.g. callCapstoneAttendance(...)
-                    fn_match = re.match(r"([a-zA-Z0-9_$]+)\s*\(", onclick.strip())
+                    # Extract function name and arguments from onclick e.g. callStudentAttendanceDetailDisplay('semId', 'regNo', 'PJT', 'ETH')
+                    fn_match = re.match(r"([a-zA-Z0-9_$]+)\s*\((.*?)\)", onclick.strip())
                     if fn_match:
                         fn_name = fn_match.group(1)
-                        # Search for function definition across combined HTML
-                        fn_def = re.search(rf"function\s+{re.escape(fn_name)}\s*\([^)]*\)\s*\{{(.*?)\}}", combined_html, re.DOTALL)
-                        if fn_def:
-                            body = fn_def.group(1)
-                            for u in re.findall(r"""['"](/vtop/[^'"]+)['"]""", body):
-                                discovered_urls.append(u)
+                        raw_args = fn_match.group(2)
+                        args = re.findall(r"""['"]([^'"]*)['"]""", raw_args)
+                        discovered_calls.append({"fn": fn_name, "args": args, "raw": onclick})
             
-            # Also search for any url in script blocks matching capstone/project/sdp
-            for script_url in re.findall(r"""['"](/vtop/[^'"]*(?:capstone|sdp|project)[^'"]*)['"]""", combined_html, re.IGNORECASE):
-                if script_url not in discovered_urls:
-                    discovered_urls.append(script_url)
+            # If function name is callStudentAttendanceDetailDisplay or processViewAttendanceDetail
+            for call in discovered_calls:
+                fn = call["fn"]
+                args = call["args"]
+                if len(args) >= 4:
+                    # (semSubId, registerNumber, courseId, courseType)
+                    try:
+                        detail_resp = await self.client.post(
+                            "/vtop/processViewAttendanceDetail",
+                            data={
+                                "semesterSubId": args[0] or sem_id,
+                                "registerNumber": args[1] or self.registration_number,
+                                "courseId": args[2],
+                                "courseType": args[3],
+                                "authorizedID": self.registration_number,
+                                "_csrf": csrf,
+                                "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                            },
+                            headers=ajax_headers
+                        )
+                        if detail_resp.status_code == 200:
+                            parsed = self._parse_capstone_attendance(detail_resp.text)
+                            if parsed.get("available"):
+                                return parsed
+                    except Exception:
+                        pass
             
-            # Priority list of all candidate endpoints
-            candidate_endpoints = discovered_urls + [
+            # 4. Try processViewAttendanceDetail with standard project course combinations
+            project_combos = [
+                ("PJT", "PJT"),
+                ("CAPSTONE", "PJT"),
+                ("SDP", "PJT"),
+                ("PROJECT", "PJT"),
+                ("ETH", "ETH"),
+                ("", "PJT"),
+                ("CAPSTONE", "CAPSTONE"),
+                ("SDP", "SDP"),
+            ]
+            for c_id, c_type in project_combos:
+                try:
+                    pjt_resp = await self.client.post(
+                        "/vtop/processViewAttendanceDetail",
+                        data={
+                            "semesterSubId": sem_id,
+                            "registerNumber": self.registration_number,
+                            "courseId": c_id,
+                            "courseType": c_type,
+                            "authorizedID": self.registration_number,
+                            "_csrf": csrf,
+                            "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                        },
+                        headers=ajax_headers
+                    )
+                    if pjt_resp.status_code == 200 and len(pjt_resp.text) > 50:
+                        parsed = self._parse_capstone_attendance(pjt_resp.text)
+                        if parsed.get("available") and (parsed.get("present") is not None or parsed.get("percentage")):
+                            return parsed
+                except Exception:
+                    pass
+            
+            # 5. Try candidate project / capstone endpoints
+            candidate_endpoints = [
                 "/vtop/processViewStudentProjectAttendance",
                 "/vtop/processViewStudentProjectAttendanceDetail",
                 "/vtop/processViewStudentCapstoneAttendance",
@@ -784,15 +852,11 @@ class VTOPSession:
                 "/vtop/academics/common/processViewCapstoneAttendance",
                 "/vtop/academics/common/processViewStudentProjectAttendance",
                 "/vtop/academics/common/processViewCapstoneSDPAttendance",
-                "/vtop/academics/common/processViewSDPAttendance",
                 "/vtop/academics/common/StudentCapstoneAttendance",
                 "/vtop/academics/common/StudentProjectAttendance",
-                "/vtop/examinations/processViewCapstoneAttendance",
-                "/vtop/examinations/processViewStudentProjectAttendance",
             ]
             
-            # Parameter sets to try
-            param_payloads = [
+            payloads = [
                 {
                     "semesterSubId": sem_id,
                     "registerNumber": self.registration_number,
@@ -815,7 +879,7 @@ class VTOPSession:
             ]
             
             for endpoint in candidate_endpoints:
-                for payload in param_payloads:
+                for payload in payloads:
                     try:
                         test_resp = await self.client.post(
                             endpoint,
@@ -829,7 +893,7 @@ class VTOPSession:
                     except Exception:
                         continue
             
-            # If all AJAX calls failed, attempt to parse the entire page HTML
+            # 6. Fallback: Parse whole combined HTML
             fallback_parsed = self._parse_capstone_attendance(combined_html)
             if fallback_parsed.get("available") and (fallback_parsed.get("present") is not None or fallback_parsed.get("percentage")):
                 return fallback_parsed
@@ -866,11 +930,11 @@ class VTOPSession:
             "percentage": None,
         }
         
-        # 1. Look across all table rows for label-value pairs
+        # 1. Parse all tables
         all_tables = soup.find_all("table")
         for table in all_tables:
-            rows = table.find_all("tr")
-            for row in rows:
+            table_rows = table.find_all("tr")
+            for i, row in enumerate(table_rows):
                 cells = row.find_all(["td", "th"])
                 cell_texts = [clean(c) for c in cells]
                 
@@ -885,13 +949,12 @@ class VTOPSession:
                     elif "date" in label and "registration" in label:
                         result["date_of_registration"] = val
                 
-                # Check Attendance Summary header row and data row
+                # Check Attendance Summary header row
                 header_lower = [t.lower() for t in cell_texts]
                 if any("present" in h for h in header_lower):
-                    # Next sibling row usually contains the values
-                    next_row = row.find_next_sibling("tr")
-                    if next_row:
-                        data_cells = [clean(c) for c in next_row.find_all(["td", "th"])]
+                    # Next tr row in table_rows has data (independent of thead/tbody)
+                    if i + 1 < len(table_rows):
+                        data_cells = [clean(c) for c in table_rows[i + 1].find_all(["td", "th"])]
                         if len(data_cells) >= 4:
                             result["present"] = data_cells[0]
                             result["on_duty"] = data_cells[1]
@@ -900,9 +963,8 @@ class VTOPSession:
                             if len(data_cells) >= 5:
                                 result["punch_details"] = data_cells[4]
                 
-                # Also check if this row directly contains numeric summary values (e.g. Present: 18, OD: 4, Absent: 8, Pct: 74%)
+                # Check if this row directly contains [18, 4, 8, 74%]
                 if len(cell_texts) >= 4:
-                    # If cells look like numbers and percentages: [18, 4, 8, 74%]
                     pct_candidates = [c for c in cell_texts if "%" in c]
                     num_candidates = [c for c in cell_texts if c.isdigit()]
                     if pct_candidates and len(num_candidates) >= 2:
@@ -911,21 +973,21 @@ class VTOPSession:
                         result["absent"] = num_candidates[2] if len(num_candidates) > 2 else "0"
                         result["percentage"] = pct_candidates[0]
         
-        # 2. Regex fallback for any fields missed
+        # 2. Regex fallback
         if not result.get("guide_evaluation_status"):
-            guide_match = re.search(r"(?i)guide\s*evaluation\s*status\s*</td>\s*<td[^>]*>([^<]+)</td>", html)
-            if guide_match:
-                result["guide_evaluation_status"] = guide_match.group(1).strip()
+            m = re.search(r"(?i)guide\s*evaluation\s*status\s*[:\s<>/a-z0-9=\"'-]*>([^<]+)<", html)
+            if m:
+                result["guide_evaluation_status"] = m.group(1).strip()
                 
         if not result.get("date_of_registration"):
-            date_match = re.search(r"(?i)date\s*of\s*registration\s*</td>\s*<td[^>]*>([^<]+)</td>", html)
-            if date_match:
-                result["date_of_registration"] = date_match.group(1).strip()
+            m = re.search(r"(?i)date\s*of\s*registration\s*[:\s<>/a-z0-9=\"'-]*>([^<]+)<", html)
+            if m:
+                result["date_of_registration"] = m.group(1).strip()
                 
         if not result.get("percentage"):
-            pct_match = re.search(r"\b(\d{1,3}(?:\.\d+)?%)\b", html)
-            if pct_match:
-                result["percentage"] = pct_match.group(1)
+            m = re.search(r"\b(\d{1,3}(?:\.\d+)?%)\b", html)
+            if m:
+                result["percentage"] = m.group(1)
         
         # Parse integers
         for k in ["present", "on_duty", "absent"]:
