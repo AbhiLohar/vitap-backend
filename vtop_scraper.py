@@ -692,6 +692,114 @@ class VTOPSession:
         except Exception as e:
             raise Exception(f"Attendance detail error: {e}")
     
+    async def debug_capstone_html(self, semester_id: str = None) -> dict:
+        """Debug helper: returns raw HTML snippets from the VTOP attendance page
+        around the capstone button so we can discover the correct endpoint."""
+        from datetime import datetime, timezone
+        import re as _re
+        
+        sem_id = semester_id
+        if not sem_id:
+            try:
+                sems = await self.get_semesters()
+                if sems:
+                    sem_id = sems[0]["id"]
+            except Exception:
+                pass
+        if not sem_id:
+            sem_id = "AP2026272"
+        
+        csrf = self.post_login_csrf or self.csrf_token
+        ajax_headers = {
+            "User-Agent": HEADERS.get("User-Agent", "Mozilla/5.0"),
+            "Origin": VTOP_BASE,
+            "Referer": f"{VTOP_BASE}/vtop/academics/common/StudentAttendance",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        
+        result = {
+            "semester_id": sem_id,
+            "registration_number": self.registration_number,
+            "csrf_token": csrf,
+            "snippets": [],
+            "all_onclicks": [],
+            "all_buttons": [],
+            "all_scripts": [],
+            "page_length": 0,
+            "capstone_found": False,
+        }
+        
+        try:
+            # Initialize attendance page
+            menu_resp = await self._post_menu(ROUTES["attendance"])
+            menu_html = menu_resp.text if menu_resp else ""
+            menu_csrf = _find_csrf(menu_html)
+            if menu_csrf:
+                csrf = menu_csrf
+            
+            # Fetch attendance view
+            resp = await self.client.post(
+                ROUTES["view_attend"],
+                data={
+                    "semesterSubId": sem_id,
+                    "authorizedID": self.registration_number,
+                    "_csrf": csrf,
+                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                },
+                headers=ajax_headers
+            )
+            page_html = resp.text
+            result["page_length"] = len(page_html)
+            
+            # Check if capstone/sdp text exists
+            result["capstone_found"] = bool(_re.search(r"(?i)capstone|sdp", page_html))
+            
+            # Extract ALL onclick handlers from the page
+            for m in _re.finditer(r"""onclick\s*=\s*["']([^"']+)["']""", page_html, _re.I):
+                result["all_onclicks"].append(m.group(1))
+            
+            # Extract all button/input/a elements text
+            soup = BeautifulSoup(page_html, "lxml")
+            for tag in soup.find_all(["button", "input", "a"]):
+                tag_info = {
+                    "tag": tag.name,
+                    "text": tag.get_text(strip=True)[:200],
+                    "onclick": tag.get("onclick", ""),
+                    "href": tag.get("href", ""),
+                    "value": tag.get("value", ""),
+                    "id": tag.get("id", ""),
+                    "class": " ".join(tag.get("class", [])),
+                    "type": tag.get("type", ""),
+                }
+                # Only include if it has meaningful content
+                if tag_info["text"] or tag_info["onclick"] or tag_info["value"]:
+                    result["all_buttons"].append(tag_info)
+            
+            # Extract script sources
+            for script in soup.find_all("script"):
+                src = script.get("src", "")
+                if src:
+                    result["all_scripts"].append(src)
+                # Also capture inline script content mentioning capstone/attendance/project
+                inline = script.get_text()
+                if inline and _re.search(r"(?i)capstone|sdp|project|attendance", inline):
+                    result["all_scripts"].append({"inline_snippet": inline[:2000]})
+            
+            # Extract 1000-char snippets around each mention of capstone/sdp
+            for m in _re.finditer(r"(?i)(?:capstone|sdp)", page_html):
+                start = max(0, m.start() - 500)
+                end = min(len(page_html), m.end() + 500)
+                result["snippets"].append({
+                    "position": m.start(),
+                    "match": m.group(),
+                    "context": page_html[start:end],
+                })
+            
+        except Exception as e:
+            result["error"] = str(e)
+        
+        return result
+    
     async def get_capstone_attendance(self, semester_id: str = None) -> dict:
         """Fetch Capstone/SDP attendance data.
         

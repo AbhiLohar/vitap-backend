@@ -153,6 +153,17 @@ async def capstone_attendance(username: str, semester_id: Optional[str] = None):
     except Exception as e:
         handle_exception(e)
 
+@app.get("/attendance/capstone/debug")
+async def capstone_debug(username: str, semester_id: Optional[str] = None):
+    """Debug endpoint: returns the raw HTML from VTOP attendance page around the capstone button."""
+    session = get_session(username)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    try:
+        return await session.debug_capstone_html(semester_id)
+    except Exception as e:
+        handle_exception(e)
+
 
 # ── Marks ────────────────────────────────────────────────────────────────────
 @app.get("/marks")
