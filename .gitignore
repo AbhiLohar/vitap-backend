@@ -1,4 +1,40 @@
+# Python
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Environment & credentials
 .env
+.env.*
+*.env
+secrets.*
+
+# Test and debug scripts with temporary credentials
+test_*.py
+debug_*.py
+check_*.py
+save_*.py
+temp_*.py
+find_*.py
+test.py
+script.js
+keep_alive.py
+
+# Scraped HTML & debug dumps
+*.html
+*.log
+debug_html/
+sessions/
+
+# Captcha test images
+cap_*.jpg
+cap_*.png
+captcha_*.jpg
+captcha_*.png
+last_test_captcha.png
+captcha_bw.png
+captcha_enhanced.png
+captcha_gray.jpg
+captcha_original.jpg

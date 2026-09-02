@@ -693,10 +693,10 @@ class VTOPSession:
             raise Exception(f"Attendance detail error: {e}")
     
     async def debug_capstone_html(self, semester_id: str = None) -> dict:
-        """Debug helper: returns raw HTML snippets from the VTOP attendance page
-        around the capstone button so we can discover the correct endpoint."""
+        """Debug helper: saves raw VTOP attendance page HTML to files and returns analysis."""
         from datetime import datetime, timezone
         import re as _re
+        import os
         
         sem_id = semester_id
         if not sem_id:
@@ -726,16 +726,29 @@ class VTOPSession:
             "all_buttons": [],
             "all_scripts": [],
             "page_length": 0,
+            "menu_page_length": 0,
             "capstone_found": False,
+            "files_saved": [],
         }
+        
+        # Directory to save debug files
+        debug_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug_html")
+        os.makedirs(debug_dir, exist_ok=True)
         
         try:
             # Initialize attendance page
             menu_resp = await self._post_menu(ROUTES["attendance"])
             menu_html = menu_resp.text if menu_resp else ""
+            result["menu_page_length"] = len(menu_html)
             menu_csrf = _find_csrf(menu_html)
             if menu_csrf:
                 csrf = menu_csrf
+            
+            # Save menu HTML
+            menu_path = os.path.join(debug_dir, "menu_page.html")
+            with open(menu_path, "w", encoding="utf-8") as f:
+                f.write(menu_html)
+            result["files_saved"].append(menu_path)
             
             # Fetch attendance view
             resp = await self.client.post(
@@ -751,6 +764,12 @@ class VTOPSession:
             page_html = resp.text
             result["page_length"] = len(page_html)
             
+            # Save attendance page HTML
+            attend_path = os.path.join(debug_dir, "attendance_page.html")
+            with open(attend_path, "w", encoding="utf-8") as f:
+                f.write(page_html)
+            result["files_saved"].append(attend_path)
+            
             # Check if capstone/sdp text exists
             result["capstone_found"] = bool(_re.search(r"(?i)capstone|sdp", page_html))
             
@@ -758,7 +777,7 @@ class VTOPSession:
             for m in _re.finditer(r"""onclick\s*=\s*["']([^"']+)["']""", page_html, _re.I):
                 result["all_onclicks"].append(m.group(1))
             
-            # Extract all button/input/a elements text
+            # Extract all button/input/a elements
             soup = BeautifulSoup(page_html, "lxml")
             for tag in soup.find_all(["button", "input", "a"]):
                 tag_info = {
@@ -769,23 +788,20 @@ class VTOPSession:
                     "value": tag.get("value", ""),
                     "id": tag.get("id", ""),
                     "class": " ".join(tag.get("class", [])),
-                    "type": tag.get("type", ""),
                 }
-                # Only include if it has meaningful content
                 if tag_info["text"] or tag_info["onclick"] or tag_info["value"]:
                     result["all_buttons"].append(tag_info)
             
-            # Extract script sources
+            # Extract script sources and inline scripts mentioning capstone
             for script in soup.find_all("script"):
                 src = script.get("src", "")
                 if src:
                     result["all_scripts"].append(src)
-                # Also capture inline script content mentioning capstone/attendance/project
                 inline = script.get_text()
                 if inline and _re.search(r"(?i)capstone|sdp|project|attendance", inline):
-                    result["all_scripts"].append({"inline_snippet": inline[:2000]})
+                    result["all_scripts"].append({"inline_snippet": inline[:3000]})
             
-            # Extract 1000-char snippets around each mention of capstone/sdp
+            # Extract snippets around capstone/sdp mentions
             for m in _re.finditer(r"(?i)(?:capstone|sdp)", page_html):
                 start = max(0, m.start() - 500)
                 end = min(len(page_html), m.end() + 500)
@@ -793,6 +809,16 @@ class VTOPSession:
                     "position": m.start(),
                     "match": m.group(),
                     "context": page_html[start:end],
+                })
+            
+            # Also check menu page for capstone mentions
+            for m in _re.finditer(r"(?i)(?:capstone|sdp)", menu_html):
+                start = max(0, m.start() - 500)
+                end = min(len(menu_html), m.end() + 500)
+                result["snippets"].append({
+                    "position": m.start(),
+                    "match": m.group() + " (from menu page)",
+                    "context": menu_html[start:end],
                 })
             
         except Exception as e:
@@ -863,12 +889,54 @@ class VTOPSession:
             
             # Check if modal HTML is already embedded in the response
             initial_parsed = self._parse_capstone_attendance(page_html)
-            if initial_parsed.get("available") and initial_parsed.get("percentage"):
+            if initial_parsed.get("available") and (initial_parsed.get("present") is not None or initial_parsed.get("percentage")):
                 return initial_parsed
             
-            # 3. Dynamic Snippet & Onclick Discovery
+            # 3. Direct execution of VTOP's exact viewSDPAttendance() logic
+            sdp_exact_payload = {
+                "_csrf": csrf,
+                "semesterSubId": sem_id,
+                "regNo": self.registration_number,
+                "authorizedID": self.registration_number,
+                "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+            }
+            
+            # The exact endpoint from viewSDPAttendance()
+            primary_endpoints = [
+                f"{VTOP_BASE}/vtop/academics/common/processSdpAttendance",
+                "/vtop/academics/common/processSdpAttendance",
+                "/vtop/processSdpAttendance",
+                "processSdpAttendance",
+            ]
+            for ep in primary_endpoints:
+                try:
+                    sdp_resp = await self.client.post(
+                        ep,
+                        data=sdp_exact_payload,
+                        headers=ajax_headers
+                    )
+                    if sdp_resp.status_code == 200 and len(sdp_resp.text) > 50:
+                        parsed = self._parse_capstone_attendance(sdp_resp.text)
+                        if parsed.get("available") and (parsed.get("present") is not None or parsed.get("percentage") is not None):
+                            return parsed
+                except Exception:
+                    pass
+
             discovered_calls = []
             candidate_endpoints = []
+            
+            # Search for JS function definition `viewSDPAttendance` in HTML
+            sdp_fn_matches = re.finditer(r"(?s)function\s+(viewSDPAttendance[a-zA-Z0-9_$]*)\s*\([^)]*\)\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}", combined_html)
+            for m in sdp_fn_matches:
+                fn_body = m.group(2)
+                for u in re.findall(r"""['"]([a-zA-Z0-9_/.-]+)['"]""", fn_body):
+                    if any(k in u.lower() for k in ["attendance", "sdp", "capstone", "process"]):
+                        full_u = u if u.startswith("/") else f"/vtop/{u}"
+                        if full_u not in candidate_endpoints:
+                            candidate_endpoints.insert(0, full_u)
+                        common_u = f"/vtop/academics/common/{u.lstrip('/')}"
+                        if common_u not in candidate_endpoints:
+                            candidate_endpoints.insert(0, common_u)
             
             # Search around any mention of capstone or sdp in the HTML
             for match in re.finditer(r"(?i)(?:capstone|sdp)", page_html):
@@ -885,29 +953,108 @@ class VTOPSession:
                         raw_args = fn_call_m.group(2)
                         args = [a.strip().strip("'\"") for a in raw_args.split(",") if a.strip()]
                         discovered_calls.append({"fn": fn_name, "args": args, "raw": raw_onclick})
+                        if fn_name not in ["callStudentAttendanceDetailDisplay"]:
+                            for prefix in ["/vtop/academics/common/", "/vtop/"]:
+                                ep = f"{prefix}{fn_name}"
+                                if ep not in candidate_endpoints:
+                                    candidate_endpoints.insert(0, ep)
                 
                 # Extract URLs from snippet
                 for u in re.findall(r"""['"](/vtop/[^'"]+)['"]""", snippet):
                     if u not in candidate_endpoints:
-                        candidate_endpoints.append(u)
+                        candidate_endpoints.insert(0, u)
             
-            # Search for external scripts and examine them
+            # Search ALL external scripts for viewSDPAttendance
             script_sources = re.findall(r"""<script[^>]+src\s*=\s*['"]([^'"]+)['"]""", combined_html, re.I)
             for src in script_sources:
-                if any(k in src.lower() for k in ["attendance", "student", "academic", "project", "capstone"]):
-                    src_url = src if src.startswith("http") else f"{VTOP_BASE}/{src.lstrip('/')}"
+                src_url = src if src.startswith("http") else f"{VTOP_BASE}/{src.lstrip('/')}"
+                try:
+                    js_resp = await self.client.get(src_url)
+                    if js_resp.status_code == 200 and ("viewSDPAttendance" in js_resp.text or "sdpAttendance" in js_resp.text):
+                        for u in re.findall(r"""['"]([a-zA-Z0-9_/.-]+(?:attendance|sdp|capstone|process)[a-zA-Z0-9_/.-]*)['"]""", js_resp.text, re.I):
+                            full_u = u if u.startswith("/") else f"/vtop/{u}"
+                            if full_u not in candidate_endpoints:
+                                candidate_endpoints.insert(0, full_u)
+                            common_u = f"/vtop/academics/common/{u.lstrip('/')}"
+                            if common_u not in candidate_endpoints:
+                                candidate_endpoints.insert(0, common_u)
+                except Exception:
+                    pass
+            
+            # Payloads to test with candidate endpoints
+            payloads = [
+                {
+                    "semesterSubId": sem_id,
+                    "_csrf": csrf,
+                },
+                {
+                    "semesterSubId": sem_id,
+                    "authorizedID": self.registration_number,
+                    "_csrf": csrf,
+                },
+                {
+                    "semesterSubId": sem_id,
+                    "authorizedID": self.registration_number,
+                    "_csrf": csrf,
+                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                },
+                {
+                    "semesterSubId": sem_id,
+                    "registerNumber": self.registration_number,
+                    "authorizedID": self.registration_number,
+                    "_csrf": csrf,
+                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                },
+                {
+                    "semSubId": sem_id,
+                    "authorizedID": self.registration_number,
+                    "_csrf": csrf,
+                },
+                {
+                    "semSubId": sem_id,
+                    "_csrf": csrf,
+                },
+                {
+                    "_csrf": csrf,
+                },
+            ]
+            
+            # Try all candidate endpoints with varied payloads
+            for endpoint in candidate_endpoints:
+                for payload in payloads:
                     try:
-                        js_resp = await self.client.get(src_url)
-                        if js_resp.status_code == 200:
-                            for u in re.findall(r"""['"](/vtop/[^'"]*(?:attendance|capstone|sdp|project)[^'"]*)['"]""", js_resp.text, re.I):
-                                if u not in candidate_endpoints:
-                                    candidate_endpoints.append(u)
+                        test_resp = await self.client.post(
+                            endpoint,
+                            data=payload,
+                            headers=ajax_headers
+                        )
+                        if test_resp.status_code == 200 and len(test_resp.text) > 50:
+                            # If response contains SDP modal HTML
+                            if any(k in test_resp.text.lower() for k in ["sdpattendance", "capstone", "punch details"]):
+                                parsed = self._parse_capstone_attendance(test_resp.text)
+                                if parsed.get("available") and (parsed.get("present") is not None or parsed.get("percentage")):
+                                    return parsed
                     except Exception:
-                        pass
+                        continue
+            
+            # Try GET request for top candidates
+            for endpoint in candidate_endpoints[:8]:
+                try:
+                    get_resp = await self.client.get(
+                        endpoint,
+                        params={"semesterSubId": sem_id, "_csrf": csrf},
+                        headers=ajax_headers
+                    )
+                    if get_resp.status_code == 200 and len(get_resp.text) > 50:
+                        if any(k in get_resp.text.lower() for k in ["sdpattendance", "capstone", "punch details"]):
+                            parsed = self._parse_capstone_attendance(get_resp.text)
+                            if parsed.get("available") and (parsed.get("present") is not None or parsed.get("percentage")):
+                                return parsed
+                except Exception:
+                    pass
             
             # 4. Try calling processViewAttendanceDetail with discovered args
             for call in discovered_calls:
-                fn = call["fn"]
                 args = call["args"]
                 if len(args) >= 4:
                     try:
@@ -926,33 +1073,12 @@ class VTOPSession:
                         )
                         if detail_resp.status_code == 200:
                             parsed = self._parse_capstone_attendance(detail_resp.text)
-                            if parsed.get("available"):
+                            if parsed.get("available") and (parsed.get("present") is not None or parsed.get("percentage")):
                                 return parsed
                     except Exception:
                         pass
-                
-                if fn and fn != "callStudentAttendanceDetailDisplay":
-                    for ep in [f"/vtop/{fn}", f"/vtop/academics/common/{fn}"]:
-                        try:
-                            fn_resp = await self.client.post(
-                                ep,
-                                data={
-                                    "semesterSubId": sem_id,
-                                    "registerNumber": self.registration_number,
-                                    "authorizedID": self.registration_number,
-                                    "_csrf": csrf,
-                                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
-                                },
-                                headers=ajax_headers
-                            )
-                            if fn_resp.status_code == 200:
-                                parsed = self._parse_capstone_attendance(fn_resp.text)
-                                if parsed.get("available"):
-                                    return parsed
-                        except Exception:
-                            pass
             
-            # 5. Try all project / capstone courseId & courseType combinations with processViewAttendanceDetail
+            # 5. Try project / capstone courseId & courseType combinations with processViewAttendanceDetail
             project_combos = [
                 ("CAPSTONE", "PJT"),
                 ("SDP", "PJT"),
@@ -992,65 +1118,7 @@ class VTOPSession:
                 except Exception:
                     pass
             
-            # 6. Try candidate project / capstone endpoints
-            all_candidate_endpoints = candidate_endpoints + [
-                "/vtop/processViewStudentProjectAttendance",
-                "/vtop/processViewStudentProjectAttendanceDetail",
-                "/vtop/processViewStudentCapstoneAttendance",
-                "/vtop/processViewStudentCapstoneAttendanceDetail",
-                "/vtop/processViewCapstoneAttendance",
-                "/vtop/processViewCapstoneAttendanceDetail",
-                "/vtop/processViewCapstoneSDPAttendance",
-                "/vtop/processViewCapstoneSDPAttendanceDetail",
-                "/vtop/processViewSDPAttendance",
-                "/vtop/processViewSDPAttendanceDetail",
-                "/vtop/processViewProjectAttendance",
-                "/vtop/processViewProjectAttendanceDetail",
-                "/vtop/academics/common/processViewCapstoneAttendance",
-                "/vtop/academics/common/processViewStudentProjectAttendance",
-                "/vtop/academics/common/processViewCapstoneSDPAttendance",
-                "/vtop/academics/common/StudentCapstoneAttendance",
-                "/vtop/academics/common/StudentProjectAttendance",
-            ]
-            
-            payloads = [
-                {
-                    "semesterSubId": sem_id,
-                    "registerNumber": self.registration_number,
-                    "authorizedID": self.registration_number,
-                    "_csrf": csrf,
-                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
-                },
-                {
-                    "semesterSubId": sem_id,
-                    "authorizedID": self.registration_number,
-                    "_csrf": csrf,
-                    "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
-                },
-                {
-                    "semesterSubId": sem_id,
-                    "regNo": self.registration_number,
-                    "authorizedID": self.registration_number,
-                    "_csrf": csrf,
-                },
-            ]
-            
-            for endpoint in all_candidate_endpoints:
-                for payload in payloads:
-                    try:
-                        test_resp = await self.client.post(
-                            endpoint,
-                            data=payload,
-                            headers=ajax_headers
-                        )
-                        if test_resp.status_code == 200 and len(test_resp.text) > 50:
-                            parsed = self._parse_capstone_attendance(test_resp.text)
-                            if parsed.get("available") and (parsed.get("present") is not None or parsed.get("percentage")):
-                                return parsed
-                    except Exception:
-                        continue
-            
-            # 7. Fallback: Parse whole combined HTML
+            # 6. Fallback: Parse whole combined HTML
             fallback_parsed = self._parse_capstone_attendance(combined_html)
             if fallback_parsed.get("available") and (fallback_parsed.get("present") is not None or fallback_parsed.get("percentage")):
                 return fallback_parsed
@@ -1130,7 +1198,36 @@ class VTOPSession:
                         result["absent"] = num_candidates[2] if len(num_candidates) > 2 else "0"
                         result["percentage"] = pct_candidates[0]
         
-        # 2. Regex fallback
+        # 2. Parse Punch Details table ("Punch Details Upto Today" or #sdpCalendarTable)
+        punch_list = []
+        cal_table = soup.find("table", {"id": "sdpCalendarTable"})
+        target_tables = [cal_table] if cal_table else all_tables
+        for table in target_tables:
+            if not table:
+                continue
+            table_rows = table.find_all("tr")
+            for i, row in enumerate(table_rows):
+                cells = [clean(c) for c in row.find_all(["td", "th"])]
+                if any("date" in c.lower() for c in cells) and any("status" in c.lower() for c in cells):
+                    for d_row in table_rows[i + 1:]:
+                        d_cells = [clean(c) for c in d_row.find_all(["td", "th"])]
+                        if len(d_cells) >= 5:
+                            punch_list.append({
+                                "sl_no": d_cells[0],
+                                "date": d_cells[1],
+                                "day": d_cells[2],
+                                "day_type": d_cells[3],
+                                "status": d_cells[4],
+                                "punch_time": d_cells[5] if len(d_cells) > 5 else "-"
+                            })
+                    if punch_list:
+                        break
+            if punch_list:
+                break
+        if punch_list:
+            result["punches"] = punch_list
+
+        # 3. Regex fallback
         if not result.get("guide_evaluation_status"):
             m = re.search(r"(?i)guide\s*evaluation\s*status\s*[:\s<>/a-z0-9=\"'-]*>([^<]+)<", html)
             if m:
@@ -1155,7 +1252,7 @@ class VTOPSession:
                     pass
         
         # Determine availability
-        if result.get("percentage") is not None or result.get("present") is not None or result.get("guide_evaluation_status") is not None:
+        if result.get("percentage") is not None or result.get("present") is not None or result.get("guide_evaluation_status") is not None or result.get("punches"):
             result["available"] = True
             
         return result
