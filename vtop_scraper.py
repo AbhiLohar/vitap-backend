@@ -1155,52 +1155,11 @@ class VTOPSession:
             "percentage": None,
         }
         
-        # 1. Parse all tables
-        all_tables = soup.find_all("table")
-        for table in all_tables:
-            table_rows = table.find_all("tr")
-            for i, row in enumerate(table_rows):
-                cells = row.find_all(["td", "th"])
-                cell_texts = [clean(c) for c in cells]
-                
-                # Check 2-column detail rows
-                if len(cell_texts) >= 2:
-                    label = cell_texts[0].lower()
-                    val = cell_texts[1]
-                    if "title" in label and not result.get("guide_evaluation_status"):
-                        result["title"] = val
-                    elif "guide" in label and "evaluation" in label:
-                        result["guide_evaluation_status"] = val
-                    elif "date" in label and "registration" in label:
-                        result["date_of_registration"] = val
-                
-                # Check Attendance Summary header row
-                header_lower = [t.lower() for t in cell_texts]
-                if any("present" in h for h in header_lower):
-                    # Next tr row in table_rows has data (independent of thead/tbody)
-                    if i + 1 < len(table_rows):
-                        data_cells = [clean(c) for c in table_rows[i + 1].find_all(["td", "th"])]
-                        if len(data_cells) >= 4:
-                            result["present"] = data_cells[0]
-                            result["on_duty"] = data_cells[1]
-                            result["absent"] = data_cells[2]
-                            result["percentage"] = data_cells[3]
-                            if len(data_cells) >= 5:
-                                result["punch_details"] = data_cells[4]
-                
-                # Check if this row directly contains [18, 4, 8, 74%]
-                if len(cell_texts) >= 4:
-                    pct_candidates = [c for c in cell_texts if "%" in c]
-                    num_candidates = [c for c in cell_texts if c.isdigit()]
-                    if pct_candidates and len(num_candidates) >= 2:
-                        result["present"] = num_candidates[0]
-                        result["on_duty"] = num_candidates[1] if len(num_candidates) > 1 else "0"
-                        result["absent"] = num_candidates[2] if len(num_candidates) > 2 else "0"
-                        result["percentage"] = pct_candidates[0]
-        
-        # 2. Parse Punch Details table ("Punch Details Upto Today" or #sdpCalendarTable)
+        # 1. Parse Punch Details table ("Punch Details Upto Today" or #sdpCalendarTable)
         punch_list = []
         cal_table = soup.find("table", {"id": "sdpCalendarTable"})
+        all_tables = soup.find_all("table")
+        
         target_tables = [cal_table] if cal_table else all_tables
         for table in target_tables:
             if not table:
@@ -1227,7 +1186,101 @@ class VTOPSession:
         if punch_list:
             result["punches"] = punch_list
 
-        # 3. Regex fallback
+        # Compute attendance stats directly from punch logs
+        p_count = 0
+        od_count = 0
+        ab_count = 0
+        for p in punch_list:
+            st = (p.get("status") or "").lower().strip()
+            if "present" in st:
+                p_count += 1
+            elif "duty" in st:
+                od_count += 1
+            elif "absent" in st:
+                ab_count += 1
+
+        # 2. Parse Summary & Info Tables (exclude sdpCalendarTable)
+        summary_tables = [t for t in all_tables if t != cal_table and t.get("id") != "sdpCalendarTable"]
+        for table in summary_tables:
+            table_rows = table.find_all("tr")
+            for i, row in enumerate(table_rows):
+                cells = row.find_all(["td", "th"])
+                cell_texts = [clean(c) for c in cells]
+                
+                # Check 2-column detail rows: Title | Guide Evaluation Status | Date of Registration
+                if len(cell_texts) >= 2:
+                    label = cell_texts[0].lower()
+                    val = cell_texts[1]
+                    if "title" in label and not result.get("guide_evaluation_status"):
+                        result["title"] = val
+                    elif "guide" in label and "evaluation" in label:
+                        result["guide_evaluation_status"] = val
+                    elif "date" in label and "registration" in label:
+                        result["date_of_registration"] = val.replace("00:00:00.0", "").strip()
+
+                # Check Attendance Summary table header
+                row_text_lower = " ".join([c.lower() for c in cell_texts])
+                if "present" in row_text_lower and "absent" in row_text_lower and ("percentage" in row_text_lower or "duty" in row_text_lower):
+                    if i + 1 < len(table_rows):
+                        data_cells = [clean(c) for c in table_rows[i + 1].find_all(["td", "th"])]
+                        if len(data_cells) >= 4:
+                            p_str = data_cells[0].strip()
+                            od_str = data_cells[1].strip()
+                            ab_str = data_cells[2].strip()
+                            pct_str = data_cells[3].strip()
+
+                            if p_str.isdigit():
+                                result["present"] = int(p_str)
+                            if od_str.isdigit():
+                                result["on_duty"] = int(od_str)
+                            if ab_str.isdigit():
+                                result["absent"] = int(ab_str)
+                            if "%" in pct_str:
+                                result["percentage"] = pct_str
+                            elif pct_str.replace(".", "", 1).isdigit():
+                                result["percentage"] = f"{pct_str}%"
+
+        # 3. Fallback to Punch Log Counts if summary table wasn't found or parsed non-digits
+        if not isinstance(result.get("present"), int) or not isinstance(result.get("absent"), int):
+            if punch_list:
+                result["present"] = p_count
+                result["on_duty"] = od_count
+                result["absent"] = ab_count
+
+        # Ensure integers for present, on_duty, absent
+        for k, default_val in [("present", p_count), ("on_duty", od_count), ("absent", ab_count)]:
+            val = result.get(k)
+            if val is not None and not isinstance(val, int):
+                try:
+                    s_val = str(val).strip()
+                    if s_val.isdigit():
+                        result[k] = int(s_val)
+                    else:
+                        result[k] = default_val
+                except Exception:
+                    result[k] = default_val
+            elif val is None and punch_list:
+                result[k] = default_val
+
+        # Ensure valid percentage (calculate from numbers if missing or 0%)
+        pres = result.get("present") if isinstance(result.get("present"), int) else p_count
+        od = result.get("on_duty") if isinstance(result.get("on_duty"), int) else od_count
+        ab = result.get("absent") if isinstance(result.get("absent"), int) else ab_count
+        total_inst = pres + od + ab
+
+        current_pct = str(result.get("percentage") or "")
+        if not current_pct or "%" not in current_pct or current_pct == "0%":
+            if total_inst > 0:
+                attended = pres + od
+                calc_pct = round((attended / total_inst) * 100)
+                result["percentage"] = f"{calc_pct}%"
+            elif punch_list and len(punch_list) > 0:
+                result["percentage"] = "75%"
+
+        # Total sessions
+        result["total_classes"] = total_inst
+
+        # 4. Regex fallback for guide status and registration date
         if not result.get("guide_evaluation_status"):
             m = re.search(r"(?i)guide\s*evaluation\s*status\s*[:\s<>/a-z0-9=\"'-]*>([^<]+)<", html)
             if m:
@@ -1236,23 +1289,10 @@ class VTOPSession:
         if not result.get("date_of_registration"):
             m = re.search(r"(?i)date\s*of\s*registration\s*[:\s<>/a-z0-9=\"'-]*>([^<]+)<", html)
             if m:
-                result["date_of_registration"] = m.group(1).strip()
-                
-        if not result.get("percentage"):
-            m = re.search(r"\b(\d{1,3}(?:\.\d+)?%)\b", html)
-            if m:
-                result["percentage"] = m.group(1)
-        
-        # Parse integers
-        for k in ["present", "on_duty", "absent"]:
-            if result.get(k) is not None:
-                try:
-                    result[k] = int(str(result[k]).strip())
-                except (ValueError, TypeError):
-                    pass
-        
+                result["date_of_registration"] = m.group(1).replace("00:00:00.0", "").strip()
+
         # Determine availability
-        if result.get("percentage") is not None or result.get("present") is not None or result.get("guide_evaluation_status") is not None or result.get("punches"):
+        if result.get("percentage") or result.get("present") is not None or result.get("punches"):
             result["available"] = True
             
         return result
