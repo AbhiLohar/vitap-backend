@@ -44,9 +44,29 @@ async def login(username: str = Form(...), password: str = Form(...)):
     scraper = VTOPSession()
     try:
         status = await scraper.login(username, password)
-        if status in ("success", "otp_required"):
+        if status == "success":
             sessions[username] = scraper
-        return {"status": status, "detail": "Login successful" if status == "success" else "OTP Required"}
+            return {"status": "success", "detail": "Login successful"}
+        elif status == "otp_required":
+            sessions[username] = scraper
+            return {"status": "otp_required", "detail": "OTP Required"}
+        elif status == "invalid_credentials":
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid Username or Password. Please check your credentials and try again."
+            )
+        elif "account locked" in status.lower() or "maximum fail attempts" in status.lower():
+            raise HTTPException(
+                status_code=403,
+                detail="Account locked due to maximum failed attempts. Please use Forgot Password on VTOP."
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=status if len(status) < 120 else "Login failed. Please check your credentials and try again."
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         handle_exception(e)
 
@@ -297,6 +317,24 @@ async def digital_assignments(username: str, semester_id: Optional[str] = None):
 
 
 # ── Outing ───────────────────────────────────────────────────────────────────
+def is_outing_success(msg: str) -> bool:
+    """Determine if VTOP response indicates true success."""
+    if not msg:
+        return False
+    msg_clean = msg.strip().lower()
+    # Explicit failure indicators mean failed
+    if (
+        msg_clean.startswith("error")
+        or "failed" in msg_clean
+        or "unable to" in msg_clean
+        or "rejected" in msg_clean
+        or "session expired" in msg_clean
+        or "check outing history" in msg_clean
+    ):
+        return False
+    # Explicit success indicators
+    return any(kw in msg_clean for kw in ("success", "applied", "saved", "deleted", "booked", "confirmed"))
+
 @app.get("/outing")
 async def outing(username: str):
     session = get_session(username)
@@ -328,7 +366,7 @@ async def outing_apply_general(
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.apply_general_outing(place, purpose, outDate, outTime, inDate, inTime)
-        status = "failed" if (msg or "").lower().startswith("error") else "success"
+        status = "success" if is_outing_success(msg) else "failed"
         return {"status": status, "message": msg}
     except Exception as e:
         handle_exception(e)
@@ -343,7 +381,7 @@ async def outing_apply_weekend(
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.apply_weekend_outing(place, purpose, outDate, outTime, contact)
-        status = "failed" if (msg or "").lower().startswith("error") else "success"
+        status = "success" if is_outing_success(msg) else "failed"
         return {"status": status, "message": msg}
     except Exception as e:
         handle_exception(e)
@@ -355,7 +393,7 @@ async def outing_delete_general(username: str = Form(...), leaveId: str = Form(.
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.delete_general_outing(leaveId)
-        status = "failed" if (msg or "").lower().startswith("error") else "success"
+        status = "success" if is_outing_success(msg) else "failed"
         return {"status": status, "message": msg}
     except Exception as e:
         handle_exception(e)
@@ -367,7 +405,7 @@ async def outing_delete_weekend(username: str = Form(...), bookingId: str = Form
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.delete_weekend_outing(bookingId)
-        status = "failed" if (msg or "").lower().startswith("error") else "success"
+        status = "success" if is_outing_success(msg) else "failed"
         return {"status": status, "message": msg}
     except Exception as e:
         handle_exception(e)

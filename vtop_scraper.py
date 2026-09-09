@@ -7,6 +7,8 @@ import base64
 import io
 import re
 import asyncio
+import time
+from datetime import datetime, timezone
 import httpx
 from bs4 import BeautifulSoup
 from PIL import Image, ImageFilter
@@ -115,6 +117,24 @@ def _find_csrf(html: str) -> str:
     return ""
 
 
+def _normalize_outing_date(date_str: str) -> str:
+    """Normalize date string to standard VTOP format 'DD-MMM-YYYY' (e.g. '09-Sep-2026')."""
+    if not date_str:
+        return ""
+    date_str = date_str.strip()
+    for fmt in ("%d-%b-%Y", "%d-%B-%Y", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            return dt.strftime("%d-%b-%Y")
+        except ValueError:
+            pass
+    # If date_str looks like "09-SEP-2026", convert month to title-case: "09-Sep-2026"
+    parts = date_str.split("-")
+    if len(parts) == 3 and len(parts[1]) == 3:
+        return f"{parts[0]}-{parts[1].capitalize()}-{parts[2]}"
+    return date_str
+
+
 def _find_captcha_b64(html: str) -> str:
     """Extract base64 captcha image from login page HTML."""
     soup = BeautifulSoup(html, "lxml")
@@ -129,8 +149,7 @@ def _find_captcha_b64(html: str) -> str:
 def _find_login_error(html: str) -> str:
     """Extract login error message from error page."""
     soup = BeautifulSoup(html, "lxml")
-    # Try common VTOP error containers first
-    for sel in ["#errMsg", "#errorMsg", ".alert-danger", ".error-msg", "p.text-danger"]:
+    for sel in ["#errMsg", "#errorMsg", ".alert-danger", ".alert", ".error-msg", "p.text-danger", "span.text-danger", ".text-danger", "#otpErrorMsg"]:
         el = soup.select_one(sel)
         if el and el.get_text(strip=True):
             err_text = el.get_text(strip=True)
@@ -138,18 +157,129 @@ def _find_login_error(html: str) -> str:
                 return "Invalid Captcha"
             return err_text
             
-    # Check body text for known errors
     text = soup.get_text(separator=" ", strip=True)
     text_lower = text.lower()
-    if "invalid captcha" in text_lower:
+    if "invalid captcha" in text_lower or "captcha does not match" in text_lower:
         return "Invalid Captcha"
+    if "maximum fail attempts" in text_lower or "account locked" in text_lower:
+        return "Account locked: Maximum fail attempts reached. Please use Forgot Password."
     if "invalid" in text_lower and ("user" in text_lower or "password" in text_lower or "credential" in text_lower):
         return "Invalid Credentials"
-    if "not available" in text_lower and "user" in text_lower:
+    if "user id not available" in text_lower or ("not available" in text_lower and "user" in text_lower):
         return "User Id Not Available"
+    if "incorrect password" in text_lower or "password does not match" in text_lower:
+        return "Incorrect Password"
         
-    # Return a snippet of the page text so we can see what VTOP is complaining about
     return f"Unknown Error: {text[:100]}"
+
+
+def _analyze_login_response(resp) -> tuple[str, str]:
+    """
+    Analyzes the VTOP login response and returns (category, detail_message).
+    Categories:
+      - 'success': Login succeeded, session active on content page.
+      - 'otp_required': Genuine two-factor OTP verification pending.
+      - 'invalid_credentials': Wrong username, wrong password, or user not available.
+      - 'account_locked': Max fail attempts reached.
+      - 'invalid_captcha': Captcha mispredicted by solver (safe to retry).
+      - 'retry': Transient session drop / Tomcat 404 / redirect back to login without error.
+      - 'unknown': Truly unrecognized error page.
+    """
+    import re
+    final_url = str(resp.url).lower()
+    html = resp.text
+    text_lower = html.lower()
+    
+    # 1. Success check
+    if "/vtop/content" in final_url or ROUTES.get("content", "/vtop/content") in final_url:
+        return "success", "Login successful"
+        
+    soup = BeautifulSoup(html, "lxml")
+    
+    # Extract error message from alert/error elements
+    error_msg = ""
+    for sel in [
+        ".alert", "#errMsg", "#errorMsg", ".alert-danger", ".error-msg",
+        "p.text-danger", "span.text-danger", "div.text-danger", ".text-danger",
+        "#otpErrorMsg"
+    ]:
+        el = soup.select_one(sel)
+        if el and el.get_text(strip=True):
+            error_msg = el.get_text(strip=True)
+            break
+            
+    err_lower = error_msg.lower()
+    
+    # 2. Account Locked / Max Attempts (PRIORITY: Stop immediately to avoid further locking)
+    locked_indicators = [
+        "maximum fail attempts reached",
+        "maximum failed attempts",
+        "account locked",
+        "account is locked",
+        "max attempt",
+    ]
+    if any(k in err_lower or k in text_lower for k in locked_indicators):
+        return "account_locked", "Account locked due to maximum failed attempts. Please use Forgot Password on VTOP."
+
+    # 3. Invalid Credentials (WRONG PASSWORD / WRONG USERNAME / NOT FOUND)
+    # Stop immediately! Do NOT retry in a loop!
+    credential_indicators = [
+        "invalid user id / password",
+        "invalid user id/password",
+        "invalid user id",
+        "invalid user",
+        "invalid password",
+        "invalid credential",
+        "user id not available",
+        "user id does not exist",
+        "user not found",
+        "incorrect password",
+        "password does not match",
+        "authentication failed",
+        "bad credentials",
+        "check user id and password",
+    ]
+    if any(ind in err_lower for ind in credential_indicators) or \
+       (any(ind in text_lower for ind in credential_indicators) and "invalid captcha" not in err_lower):
+        clean_msg = error_msg if error_msg else "Invalid Username or Password. Please check your credentials and try again."
+        return "invalid_credentials", clean_msg
+
+    # 4. Invalid Captcha (The ONLY error that should trigger a retry!)
+    if "invalid captcha" in err_lower or "captcha does not match" in err_lower or "captcha expired" in err_lower:
+        return "invalid_captcha", "Invalid captcha"
+    if "invalid captcha" in text_lower and not any(ind in text_lower for ind in credential_indicators):
+        return "invalid_captcha", "Invalid captcha"
+
+    # 5. Genuine OTP check (Strict criteria: NEVER match generic 'otp' substring in page text)
+    has_otp_js = bool(re.search(r'var\s+securityOtpPending\s*=\s*(true|\'true\'|\"true\")', html, re.IGNORECASE))
+    has_otp_sent_at = bool(re.search(r'var\s+otpSentAt\s*=\s*\d+', html))
+    has_otp_input = bool(soup.find("input", {"name": "otpCode"}) or soup.find(id="otpCode"))
+    has_otp_url = "/vtop/otp" in final_url or "twofactor" in final_url
+    has_otp_phrase = any(phrase in text_lower for phrase in [
+        "otp has been sent to your registered",
+        "an otp has been sent to your registered",
+        "enter the otp sent to",
+        "enter the 6-digit otp",
+        "otp sent to your registered email",
+        "otp sent to your mail id"
+    ])
+    
+    if has_otp_js or has_otp_sent_at or has_otp_input or has_otp_url or has_otp_phrase:
+        return "otp_required", "OTP required"
+
+    # 6. Tomcat 404 / Session drop
+    if resp.status_code == 404 or "http status 404" in text_lower or "apache tomcat" in text_lower:
+        return "retry", "Tomcat 404 error"
+
+    # 7. Landed back on /vtop/login or /vtop/login/error
+    if final_url.rstrip("/").endswith("/vtop/login") or final_url.rstrip("/").endswith("/vtop/login/error"):
+        if err_lower:
+            if "captcha" in err_lower:
+                return "invalid_captcha", "Invalid captcha"
+            return "invalid_credentials", error_msg
+        return "retry", "Redirected to login"
+
+    return "unknown", f"Unknown response ({final_url})"
 
 
 # ── VTOP Session Class ─────────────────────────────────────
@@ -247,12 +377,13 @@ class VTOPSession:
                 }
                 resp = await self.client.post(ROUTES["login"], data=login_data)
                 
-                final_url = str(resp.url)
-                text_lower = resp.text.lower()
+                # Analyze login response systematically
+                category, detail = _analyze_login_response(resp)
+                print(f"Login attempt {attempt + 1} analysis: category='{category}', detail='{detail}'")
                 
-                # 1. Check for successful login
-                if ROUTES["content"] in final_url or "/vtop/content" in final_url:
-                    print("Login successful, redirected to content page")
+                # 1. Successful login
+                if category == "success":
+                    print("Login successful, extracting profile...")
                     self.post_login_csrf = _find_csrf(resp.text)
                     content_html = resp.text
                     if not self.post_login_csrf:
@@ -260,101 +391,51 @@ class VTOPSession:
                         content_html = content_resp.text
                         self.post_login_csrf = _find_csrf(content_html)
                     
-                    # Extract REAL registration number (e.g. 21BCE1234) from the content page.
-                    # This is crucial if the user logged in using a custom "Preferred Login ID" (e.g. LALIT123).
                     import re
                     reg_match = re.search(r'\b(\d{2}[A-Z]{2,4}\d{3,5})\b', content_html, re.IGNORECASE)
                     if reg_match:
                         real_reg_no = reg_match.group(1).upper()
-                        print(f"Extracted actual Registration Number from dashboard: {real_reg_no} (Login ID used: {self.registration_number})")
+                        print(f"Extracted actual Registration Number: {real_reg_no} (Login ID used: {self.registration_number})")
                         self.registration_number = real_reg_no
 
                     self.logged_in = True
                     return "success"
                 
-                # 2. Check for explicit login error URL (also used for OTP prompts sometimes)
-                elif ROUTES["login_error"] in final_url or "/vtop/login/error" in final_url:
-                    from bs4 import BeautifulSoup
-                    soup = BeautifulSoup(resp.text, 'lxml')
-                    
-                    # Try to find the error/alert message in various known places
-                    error_msg = ""
-                    for sel in [".alert", "#errMsg", "#errorMsg", ".alert-danger", ".error-msg", "p.text-danger"]:
-                        el = soup.select_one(sel)
-                        if el and el.get_text(strip=True):
-                            error_msg = el.get_text(strip=True).lower()
-                            break
-                            
-                    if not error_msg:
-                        # Fallback to checking the whole text for known phrases
-                        full_text = soup.get_text(separator=" ", strip=True).lower()
-                        if "invalid captcha" in full_text:
-                            error_msg = "invalid captcha"
-                        elif "otp" in full_text:
-                            error_msg = "otp has been sent"
-                        else:
-                            error_msg = full_text
-                    
-                    if "otp has been sent" in error_msg or "otp" in error_msg:
-                        print(f"Login successful: OTP required. Msg: {error_msg}")
-                        self._otp_required = True
-                        new_csrf = _find_csrf(resp.text)
-                        if new_csrf:
-                            self.csrf_token = new_csrf
-                        return "otp_required"
-                    elif "invalid" in error_msg and "captcha" not in error_msg:
-                        print(f"Login error detected: Invalid credentials. Msg: {error_msg}")
-                        return "invalid_credentials"
-                    elif "user id not available" in error_msg or "not available" in error_msg:
-                        print(f"Login error detected: User ID not available. Msg: {error_msg}")
-                        return "invalid_credentials"
-                    elif "does not match" in error_msg or "incorrect" in error_msg:
-                        print(f"Login error detected: Incorrect credentials. Msg: {error_msg[:100]}")
-                        return "invalid_credentials"
-                    elif "maximum fail attempts reached" in error_msg:
-                        print(f"Login error detected: Account locked/Max attempts. Msg: {error_msg[:100]}")
-                        return "Account locked. Maximum fail attempts reached. Use forgot password."
-                    elif "invalid" in error_msg and "captcha" in error_msg:
-                        print(f"Login error detected: Invalid captcha. Msg: {error_msg}")
-                        self.csrf_token = _find_csrf(resp.text)
-                        await asyncio.sleep(0.1)
-                        continue
-                    else:
-                        print(f"Unknown login error/alert: {error_msg}")
-                        # Fallback to retry if we don't know what it is
-                        self.csrf_token = _find_csrf(resp.text)
-                        await asyncio.sleep(0.1)
-                        continue
-                
-                # 3. Check for explicit OTP URL
-                elif "otp" in final_url.lower() or "twofactor" in final_url.lower():
-                    print("OTP required detected in URL")
+                # 2. Genuine OTP required
+                elif category == "otp_required":
+                    print("OTP required detected.")
                     self._otp_required = True
-                    # Update CSRF token from OTP page before resending or submitting
                     new_csrf = _find_csrf(resp.text)
                     if new_csrf:
                         self.csrf_token = new_csrf
-                    print("Force triggering OTP email delivery...")
+                    print("Triggering OTP email delivery...")
                     await self.resend_otp()
                     return "otp_required"
                     
-                # 4. Check for OTP via JS variable 
-                import re
-                if re.search(r'var\s+securityOtpPending\s*=\s*(true|\'true\'|\"true\")', resp.text, re.IGNORECASE):
-                    print("OTP required detected via securityOtpPending variable")
-                    self._otp_required = True
-                    current_csrf = _find_csrf(resp.text)
-                    if current_csrf:
-                        self.csrf_token = current_csrf
+                # 3. Invalid credentials (wrong password / user not found) — STOP IMMEDIATELY!
+                elif category == "invalid_credentials":
+                    print(f"Login rejected: Invalid credentials. Message: {detail}")
+                    return "invalid_credentials"
                     
-                    print("Force triggering OTP email delivery...")
-                    await self.resend_otp()
-                    return "otp_required"
-                
-                # Fallback: Check for 404/Tomcat error page (happens with bad captcha or expired session)
-                elif resp.status_code == 404 or "HTTP Status 404" in resp.text or "Apache Tomcat" in resp.text:
-                    print(f"VTOP returned 404/Tomcat error, re-initializing session... (attempt {attempt + 1})")
-                    # Session is corrupted after 404 — must re-establish
+                # 4. Account locked — STOP IMMEDIATELY!
+                elif category == "account_locked":
+                    print(f"Login rejected: Account locked. Message: {detail}")
+                    return "Account locked: Maximum fail attempts reached. Please use Forgot Password on VTOP."
+                    
+                # 5. Invalid captcha — retry with fresh captcha
+                elif category == "invalid_captcha":
+                    print(f"Login attempt {attempt + 1}: Invalid captcha, retrying with fresh captcha...")
+                    self.csrf_token = _find_csrf(resp.text)
+                    await asyncio.sleep(0.1)
+                    continue
+                    
+                # 6. Transient state / Tomcat 404 / clean redirect
+                elif category == "retry":
+                    print(f"Transient session state ({detail}), attempt {attempt + 1}/{max_retries}")
+                    if attempt >= 4:
+                        # If multiple attempts land on login page without captcha error, credentials rejected
+                        print("Multiple login redirects without captcha error: stopping to prevent account lock.")
+                        return "invalid_credentials"
                     try:
                         resp = await self.client.get(ROUTES["open_page"])
                         self.csrf_token = _find_csrf(resp.text)
@@ -364,26 +445,14 @@ class VTOPSession:
                         pass
                     await asyncio.sleep(0.1)
                     continue
-                
-                # If we're back on the login page itself, session/CSRF was invalid — retry
-                elif final_url.rstrip('/').endswith('/vtop/login'):
-                    print(f"Redirected back to login page, refreshing session... (attempt {attempt + 1})")
-                    # Re-initialize the session
-                    try:
-                        resp = await self.client.get(ROUTES["open_page"])
-                        self.csrf_token = _find_csrf(resp.text)
-                        pre_data = {"_csrf": self.csrf_token, "flag": "VTOP"}
-                        await self.client.post(ROUTES["prelogin"], data=pre_data)
-                    except Exception:
-                        pass
-                    await asyncio.sleep(0.1)
-                    continue
-                
-                # True unknown response — fail
+                    
+                # 7. Unrecognized response
                 else:
-                    print(f"Unknown login response: {final_url}")
-                    print(resp.text[:2000])
-                    return "Failed to login. Please check credentials or VTOP status."
+                    print(f"Unknown login response: {detail}")
+                    if attempt >= 2:
+                        return "invalid_credentials"
+                    await asyncio.sleep(0.1)
+                    continue
                     
             except httpx.RequestError as e:
                 print(f"Network error: {e}")
@@ -536,10 +605,13 @@ class VTOPSession:
             "verifyMenu": "true",
             "authorizedID": self.registration_number,
             "_csrf": self.post_login_csrf or self.csrf_token,
-            "nocache": "@(new Date().getTime())",
+            "nocache": str(int(time.time() * 1000)),
         }
         resp = await self.client.post(url, data=data, headers=HEADERS)
         self._check_session_expired(resp)
+        fresh_csrf = _find_csrf(resp.text)
+        if fresh_csrf:
+            self.post_login_csrf = fresh_csrf
         return resp
     
     async def get_semesters(self) -> list:
@@ -2679,45 +2751,66 @@ class VTOPSession:
         return data
 
     async def get_outing_status(self) -> list:
-        """Fetch outing history and current status."""
+        """Fetch general outing history and current status."""
         try:
-            # Initialize page
-            await self._post_menu(ROUTES["outing"])
-            
-            resp = await self._post_authenticated(
-                ROUTES["outing"],
-                {
-                    "authorizedID": self.registration_number,
-                    "verifyMenu": "true"
-                }
-            )
-            
+            url = ROUTES["outing"]
+            data = {
+                "verifyMenu": "true",
+                "authorizedID": self.registration_number,
+                "_csrf": self.post_login_csrf or self.csrf_token,
+                "nocache": str(int(time.time() * 1000)),
+            }
+            resp = await self.client.post(url, data=data, headers=HEADERS)
+            self._check_session_expired(resp)
+            fresh_csrf = _find_csrf(resp.text)
+            if fresh_csrf:
+                self.post_login_csrf = fresh_csrf
             return self._parse_outing_table(resp.text)
         except Exception as e:
             raise Exception(f"Outing error: {e}")
 
     def _parse_outing_table(self, html: str) -> list:
-        """Parse outing table."""
+        """Parse general outing table."""
         soup = BeautifulSoup(html, "lxml")
         data = []
         
-        tables = soup.find_all("table")
-        for table in tables:
-            rows = table.find_all("tr")
-            for row in rows[1:]:  # skip header
-                cols = row.find_all("td")
-                if len(cols) >= 10:
-                    texts = [c.get_text(strip=True) for c in cols]
-                    
-                    data.append({
-                        "id": texts[0],
-                        "type": "General",
-                        "place": texts[2],
-                        "purpose": texts[3],
-                        "out_date": f"{texts[4]} {texts[5]}",
-                        "in_date": f"{texts[6]} {texts[7]}",
-                        "status": texts[9],
-                    })
+        table = soup.find("table", id="BookingRequests") or soup.find("table", class_="table-bordered") or soup.find("table")
+        if not table:
+            return data
+            
+        rows = table.find_all("tr")
+        for row in rows[1:]:  # skip header
+            cols = row.find_all("td")
+            if len(cols) >= 10:
+                texts = [c.get_text(strip=True) for c in cols]
+                row_html = str(row)
+                
+                # Extract leave_id from download link's data-url or regex
+                leave_id = ""
+                a_tag = row.find("a", attrs={"data-url": True})
+                if a_tag and a_tag.get("data-url"):
+                    leave_id = a_tag["data-url"].split("/")[-1].strip()
+                if not leave_id:
+                    m = re.search(r"downloadLeavePass/([A-Za-z0-9]+)", row_html) or re.search(r"deleteGeneralOuting\('([A-Za-z0-9]+)'\)", row_html)
+                    if m:
+                        leave_id = m.group(1)
+                if not leave_id:
+                    m = re.search(r"\b(L\d{8,14})\b", row_html)
+                    if m:
+                        leave_id = m.group(1)
+                
+                status_text = texts[9] if len(texts) > 9 else ""
+                
+                data.append({
+                    "id": leave_id or texts[0],
+                    "leaveId": leave_id,
+                    "type": "General",
+                    "place": texts[2] if len(texts) > 2 else "",
+                    "purpose": texts[3] if len(texts) > 3 else "",
+                    "out_date": f"{texts[4]} {texts[5]}" if len(texts) > 5 else (texts[4] if len(texts) > 4 else ""),
+                    "in_date": f"{texts[6]} {texts[7]}" if len(texts) > 7 else (texts[6] if len(texts) > 6 else ""),
+                    "status": status_text,
+                })
         return data
 
     async def get_payment_history(self) -> list:
@@ -2727,7 +2820,7 @@ class VTOPSession:
                 "verifyMenu": "true",
                 "authorizedID": self.registration_number,
                 "_csrf": self.post_login_csrf or self.csrf_token,
-                "nocache": "@(new Date().getTime())",
+                "nocache": str(int(time.time() * 1000)),
             }
             resp = await self.client.post(ROUTES["payments"], data=data, headers=HEADERS)
             return self._parse_payments_table(resp.text)
@@ -2987,38 +3080,53 @@ class VTOPSession:
         soup = BeautifulSoup(resp.text, "lxml")
         fields = {}
         
-        # Extract all input fields (hidden, text, etc.)
+        # Extract fresh CSRF if available on the form page
+        fresh_csrf = _find_csrf(resp.text)
+        if fresh_csrf:
+            self.post_login_csrf = fresh_csrf
+        
+        # Extract all input fields (hidden, text, etc.) by id and name
         for inp in soup.find_all("input"):
-            # Prefer 'name' over 'id' since forms submit by 'name'
-            field_name = inp.get("name") or inp.get("id")
-            if field_name and field_name not in ("_csrf",):  # Skip CSRF, we add it ourselves
-                fields[field_name] = inp.get("value", "")
+            val = inp.get("value", "")
+            field_id = inp.get("id")
+            field_name = inp.get("name")
+            if field_id and field_id != "_csrf":
+                fields[field_id] = val
+            if field_name and field_name != "_csrf":
+                fields[field_name] = val
         
         # Also extract selected values from <select> elements
         for sel in soup.find_all("select"):
-            field_name = sel.get("name") or sel.get("id")
+            selected = sel.find("option", selected=True)
+            val = selected.get("value", "") if selected else ""
+            field_id = sel.get("id")
+            field_name = sel.get("name")
+            if field_id:
+                fields[field_id] = val
             if field_name:
-                selected = sel.find("option", selected=True)
-                if selected:
-                    fields[field_name] = selected.get("value", "")
+                fields[field_name] = val
         
-        print(f"[OUTING DEBUG] Form fields: {fields}")
+        # Ensure student registration number is present
+        fields.setdefault("regNo", self.registration_number)
+        fields.setdefault("authorizedID", self.registration_number)
+        
+        print(f"[OUTING DEBUG] Form fields extracted: {fields}")
         
         if not fields.get("applicationNo"):
-            raise Exception("Could not parse outing form fields")
+            print(f"[OUTING WARNING] applicationNo not found in form fields. Available keys: {list(fields.keys())}")
         return fields
 
     async def apply_general_outing(self, out_place: str, purpose: str, out_date: str, out_time: str, in_date: str, in_time: str) -> str:
         """Submit a General Outing."""
         try:
-            from datetime import datetime, timezone
             fields = await self._fetch_outing_form_hidden_fields(is_weekend=False)
             
-            print(f"[OUTING DEBUG] Hidden fields extracted: {list(fields.keys())}")
-            
             # Times come as HH:MM
-            out_parts = out_time.split(":")
-            in_parts = in_time.split(":")
+            out_parts = out_time.split(":") if ":" in out_time else [out_time, "00"]
+            in_parts = in_time.split(":") if ":" in in_time else [in_time, "00"]
+            
+            norm_out_date = _normalize_outing_date(out_date)
+            norm_in_date = _normalize_outing_date(in_date)
             
             data = {
                 "authorizedID": self.registration_number,
@@ -3031,31 +3139,29 @@ class VTOPSession:
                 "roomNo": fields.get("roomNo", ""),
                 "placeOfVisit": out_place,
                 "purposeOfVisit": purpose,
-                "outDate": out_date,
-                "outTimeHr": out_parts[0],
-                "outTimeMin": out_parts[1],
-                "inDate": in_date,
-                "inTimeHr": in_parts[0],
-                "inTimeMin": in_parts[1],
+                "outDate": norm_out_date,
+                "outTimeHr": out_parts[0].strip(),
+                "outTimeMin": out_parts[1].strip() if len(out_parts) > 1 else "00",
+                "inDate": norm_in_date,
+                "inTimeHr": in_parts[0].strip(),
+                "inTimeMin": in_parts[1].strip() if len(in_parts) > 1 else "00",
                 "parentContactNumber": fields.get("parentContactNumber", ""),
                 "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
             }
             
-            # VTOP requires XMLHttpRequest header for AJAX form submissions
-            # (same pattern used by delete endpoints which work correctly)
             headers = {
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "X-Requested-With": "XMLHttpRequest",
                 "Referer": "https://vtop.vitap.ac.in/vtop/hostel/StudentGeneralOuting",
+                "Origin": "https://vtop.vitap.ac.in",
             }
             
             data["_csrf"] = self.post_login_csrf or self.csrf_token
-            print(f"[OUTING DEBUG] Submitting general outing: place={out_place}, outDate={out_date}, outTime={out_time}, inDate={in_date}, inTime={in_time}")
+            print(f"[OUTING DEBUG] Submitting general outing: place={out_place}, outDate={norm_out_date}, outTime={out_time}, inDate={norm_in_date}, inTime={in_time}")
             
             resp = await self.client.post("/vtop/hostel/saveGeneralOutingForm", data=data, headers=headers)
             self._check_session_expired(resp)
             
-            # Debug: log the response for troubleshooting
             resp_text = resp.text
             print(f"[OUTING DEBUG] Response status: {resp.status_code}, length: {len(resp_text)}")
             print(f"[OUTING DEBUG] Response preview: {resp_text[:500]}")
@@ -3065,14 +3171,15 @@ class VTOPSession:
             
             return result
         except Exception as e:
-            print(f"[OUTING DEBUG] Exception: {e}")
+            print(f"[OUTING DEBUG] Exception in apply_general_outing: {e}")
             raise Exception(f"Failed to apply for general outing: {e}")
 
     async def apply_weekend_outing(self, out_place: str, purpose: str, out_date: str, out_time: str, contact_number: str) -> str:
         """Submit a Weekend Outing."""
         try:
-            from datetime import datetime, timezone
             fields = await self._fetch_outing_form_hidden_fields(is_weekend=True)
+            
+            norm_outing_date = _normalize_outing_date(out_date)
             
             data = {
                 "authorizedID": self.registration_number,
@@ -3085,91 +3192,117 @@ class VTOPSession:
                 "roomNo": fields.get("roomNo", ""),
                 "outPlace": out_place,
                 "purposeOfVisit": purpose,
-                "outingDate": out_date,
+                "outingDate": norm_outing_date,
                 "outTime": out_time,
                 "contactNumber": contact_number,
                 "parentContactNumber": fields.get("parentContactNumber", ""),
                 "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
             }
-            resp = await self._post_authenticated("/vtop/hostel/saveOutingForm", data)
             
-            return self._parse_outing_response(resp.text)
+            headers = {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": "https://vtop.vitap.ac.in/vtop/hostel/StudentWeekendOuting",
+                "Origin": "https://vtop.vitap.ac.in",
+            }
+            
+            data["_csrf"] = self.post_login_csrf or self.csrf_token
+            print(f"[OUTING DEBUG] Submitting weekend outing: place={out_place}, date={norm_outing_date}, time={out_time}")
+            
+            resp = await self.client.post("/vtop/hostel/saveOutingForm", data=data, headers=headers)
+            self._check_session_expired(resp)
+            
+            resp_text = resp.text
+            print(f"[OUTING DEBUG] Weekend response status: {resp.status_code}, length: {len(resp_text)}")
+            print(f"[OUTING DEBUG] Weekend response preview: {resp_text[:500]}")
+            
+            result = self._parse_outing_response(resp_text)
+            print(f"[OUTING DEBUG] Parsed weekend result: {result}")
+            
+            return result
         except Exception as e:
+            print(f"[OUTING DEBUG] Exception in apply_weekend_outing: {e}")
             raise Exception(f"Failed to apply for weekend outing: {e}")
 
     def _parse_outing_response(self, html: str) -> str:
         """Parse VTOP outing submit/delete response.
         
         Checks for:
-        1. Error spans (red text, .error, .alert-danger)
-        2. Weekend success: green span with 'Successfully'/'Applied'/'Deleted'
-        3. General outing success: SweetAlert h2
+        1. Explicit error spans (red text, .error, .alert-danger)
+        2. Weekend success: green span with 'Successfully'/'Applied'/'Deleted'/'Saved'
+        3. General outing success: SweetAlert modal h2/p with 'Successfully'/'Applied'/'Saved'
         4. Fallback h2 with success/error keywords
-        5. If form page returned without message = silent failure
-        6. If VTOP redirected to dashboard/home = failure/expired session
+        5. Form page returned without success message = rejected
+        6. Dashboard redirected = session expired / failed
+        7. Default fallback
         """
         soup = BeautifulSoup(html, "lxml")
         
-        # 1. Check for error messages (red text)
-        for span in soup.select("span[style*='color: red'], span[style*='color:red'], .error, .alert-danger"):
+        # 1. Check for error messages (red text, error classes)
+        for span in soup.select("span[style*='color: red'], span[style*='color:red'], .error, .alert-danger, span.help-block-error"):
             text = span.get_text(strip=True)
-            if text:
+            if text and "disciplinary" not in text.lower() and "logs will be" not in text.lower():
                 return f"Error: {text}"
         
+        # Check for SweetAlert error modal
+        sweet_alert = soup.select_one("div.sweet-alert")
+        if sweet_alert:
+            has_error_icon = bool(sweet_alert.select(".sa-error, .sa-warning, .error"))
+            h2 = sweet_alert.select_one("h2")
+            p = sweet_alert.select_one("p")
+            title_text = h2.get_text(strip=True) if h2 else ""
+            body_text = p.get_text(strip=True) if p else ""
+            
+            combined = f"{title_text} {body_text}".strip()
+            if has_error_icon or any(kw in combined.lower() for kw in ("error", "failed", "cannot", "invalid", "not allowed", "already applied")):
+                return f"Error: {combined if combined else 'Request rejected by VTOP'}"
+            if any(kw in combined.lower() for kw in ("success", "applied", "saved", "deleted", "booked")):
+                return title_text or body_text or combined
+
         # 2. Check for weekend outing success (green span)
-        for span in soup.select("span.col-md-12[style*='color: green'], span.col-md-12[style*='color:green']"):
+        for span in soup.select("span.col-md-12[style*='color: green'], span.col-md-12[style*='color:green'], span[style*='color: green'], span[style*='color:green']"):
             text = span.get_text(strip=True)
-            if text and any(kw in text for kw in ("Successfully", "Applied", "Deleted")):
-                return text
-        
-        # Also check any green-colored span (not just col-md-12)
-        for span in soup.select("span[style*='color: green'], span[style*='color:green']"):
-            text = span.get_text(strip=True)
-            if text and any(kw in text.lower() for kw in ("success", "applied", "deleted", "saved")):
+            if text and any(kw in text.lower() for kw in ("success", "applied", "saved", "deleted", "booked")):
                 return text
 
-        # 3. Check for general outing success (SweetAlert modal h2)
-        sweet_h2 = soup.select_one("div.sweet-alert h2")
-        if sweet_h2:
-            text = sweet_h2.get_text(strip=True)
-            if text:
-                return text
-        
-        # Also check for SweetAlert p tag (some VTOP versions use <p> inside sweet-alert)
-        sweet_p = soup.select_one("div.sweet-alert p")
-        if sweet_p:
-            text = sweet_p.get_text(strip=True)
-            if text:
-                return text
+        # 3. Check for general outing success (SweetAlert modal h2 or p)
+        if sweet_alert:
+            sweet_h2 = sweet_alert.select_one("h2")
+            if sweet_h2:
+                text = sweet_h2.get_text(strip=True)
+                if text:
+                    return text
+            sweet_p = sweet_alert.select_one("p")
+            if sweet_p:
+                text = sweet_p.get_text(strip=True)
+                if text:
+                    return text
 
         # 4. Fallback: any h2 with success/error keywords
         for h2 in soup.find_all("h2"):
             text = h2.get_text(strip=True)
-            if text and any(kw in text for kw in ("Successfully", "Applied", "Deleted", "Error", "Failed")):
+            if text and any(kw in text.lower() for kw in ("successfully", "applied", "deleted", "saved", "booked")):
                 return text
+            if text and any(kw in text.lower() for kw in ("error", "failed")):
+                return f"Error: {text}"
         
-        # 5. If the outing form page was returned (silent failure — VTOP didn't process the request)
-        if "outingForm" in html and ("Weekend Outing Request" in html or "General Outing" in html):
+        # 5. If the outing form page was returned (silent failure — VTOP rejected the request)
+        if "outingForm" in html or "saveOutingForm" in html or "saveGeneralOutingForm" in html or "StudentWeekendOuting" in html or "StudentGeneralOuting" in html:
             # Look for any colored span messages on the form
-            for span in soup.select("span.col-sm-12[style*='color'], span.col-md-12[style*='color']"):
+            for span in soup.select("span.col-sm-12[style*='color'], span.col-md-12[style*='color'], span[style*='color']"):
                 text = span.get_text(strip=True)
-                if text and "disciplinary" not in text and "logs will be" not in text:
+                if text and "disciplinary" not in text.lower() and "logs will be" not in text.lower():
                     return f"Error: {text}"
-            return "Error: Submission may have failed - form page was returned. Please check outing history."
+            return "Error: Submission was rejected by VTOP. Please verify your details or check if you already have an active outing."
         
-        # 6. If VTOP redirected to dashboard/home page (no outing form, no success/error indicators)
-        #    With proper AJAX headers, VTOP should return the response directly.
-        #    Getting the dashboard means the session may have expired or the request wasn't processed.
+        # 6. If VTOP redirected to dashboard/home page (session expired or invalid request)
         page_text = soup.get_text(separator=" ", strip=True).lower()
         is_dashboard = any(kw in page_text for kw in ("quick links", "sign out", "login history", "my info"))
-        has_no_outing_form = "outingForm" not in html and "saveGeneralOutingForm" not in html and "saveOutingForm" not in html
-        
-        if is_dashboard and has_no_outing_form:
+        if is_dashboard:
             return "Error: VTOP did not process the outing request. Your session may have expired. Please pull-to-refresh and try again."
             
-        # 7. Final fallback — truly unable to determine outcome
-        return "Error: Unable to confirm submission. Please check your outing history to verify."
-
+        # 7. Final fallback
+        return "Error: Unable to confirm outing submission from VTOP response. Please check outing history."
 
     async def delete_general_outing(self, leave_id: str) -> str:
         from datetime import datetime, timezone
@@ -3178,10 +3311,11 @@ class VTOPSession:
             "authorizedID": self.registration_number,
             "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
         }
-        # Delete requires XMLHttpRequest header
         headers = {
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://vtop.vitap.ac.in/vtop/hostel/StudentGeneralOuting",
+            "Origin": "https://vtop.vitap.ac.in",
         }
         data["_csrf"] = self.post_login_csrf or self.csrf_token
         resp = await self.client.post("/vtop/hostel/deleteGeneralOutingInfo", data=data, headers=headers)
@@ -3194,10 +3328,11 @@ class VTOPSession:
             "authorizedID": self.registration_number,
             "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
         }
-        # Delete requires XMLHttpRequest header
         headers = {
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://vtop.vitap.ac.in/vtop/hostel/StudentWeekendOuting",
+            "Origin": "https://vtop.vitap.ac.in",
         }
         data["_csrf"] = self.post_login_csrf or self.csrf_token
         resp = await self.client.post("/vtop/hostel/deleteBookingInfo", data=data, headers=headers)
@@ -3207,58 +3342,86 @@ class VTOPSession:
         """Fetch weekend outings (distinct from general outings)."""
         try:
             url = "/vtop/hostel/StudentWeekendOuting"
-            await self._post_menu(url)
-            resp = await self._post_authenticated(url, {"authorizedID": self.registration_number, "verifyMenu": "true"})
-            
-            soup = BeautifulSoup(resp.text, "lxml")
-            data = []
-            tables = soup.find_all("table")
-            for table in tables:
-                for row in table.find_all("tr")[1:]:  # skip header
-                    cols = row.find_all("td")
-                    if len(cols) >= 11:
-                        texts = [c.get_text(strip=True) for c in cols]
-                        
-                        is_weekend_format = len(cols) >= 14
-                        
-                        if is_weekend_format:
-                            date_val = texts[9]
-                            status_val = texts[12]
-                        else:
-                            date_val = texts[7]
-                            status_val = texts[9]
-                            
-                        booking_id = ""
-                        if is_weekend_format and len(texts) > 10 and texts[10]:
-                            booking_id = texts[10]
-                            
-                        if not booking_id:
-                            row_html = str(row)
-                            m1 = re.search(r"deleteWeekendOuting\('([^']+)'\)", row_html)
-                            if m1:
-                                booking_id = m1.group(1)
-                            else:
-                                m2 = re.search(r"downloadOutingForm/([^/\"'\?]+)", row_html)
-                                if m2:
-                                    booking_id = m2.group(1)
-                                else:
-                                    # Fallback: look for any typical W-prefixed ID
-                                    m3 = re.search(r"(W\d{9,14})", row_html)
-                                    if m3:
-                                        booking_id = m3.group(1)
-                        data.append({
-                            "id": texts[0],
-                            "bookingId": booking_id,
-                            "type": "Weekend",
-                            "place": texts[4] if len(texts) > 4 else "",
-                            "purpose": texts[5] if len(texts) > 5 else "",
-                            "out_date": date_val,
-                            "in_date": date_val,  # weekend outing is same day
-                            "status": status_val,
-                        })
-            return data
+            data = {
+                "verifyMenu": "true",
+                "authorizedID": self.registration_number,
+                "_csrf": self.post_login_csrf or self.csrf_token,
+                "nocache": str(int(time.time() * 1000)),
+            }
+            resp = await self.client.post(url, data=data, headers=HEADERS)
+            self._check_session_expired(resp)
+            fresh_csrf = _find_csrf(resp.text)
+            if fresh_csrf:
+                self.post_login_csrf = fresh_csrf
+            return self._parse_weekend_outing_table(resp.text)
         except Exception as e:
             raise Exception(f"Weekend outing error: {e}")
+
+    def _parse_weekend_outing_table(self, html: str) -> list:
+        """Parse weekend outing table."""
+        soup = BeautifulSoup(html, "lxml")
+        data = []
+        table = soup.find("table", id="BookingRequests") or soup.find("table", class_="table-bordered") or soup.find("table")
+        if not table:
+            return data
+            
+        for row in table.find_all("tr")[1:]:  # skip header
+            cols = row.find_all("td")
+            if len(cols) >= 11:
+                texts = [c.get_text(strip=True) for c in cols]
+                row_html = str(row)
+                
+                # Check column structure:
+                # Full weekend format (13 or 14 cols):
+                # 0: S.No, 1: RegNo, 2: Block, 3: Room, 4: Place, 5: Purpose, 6: Time, 7: Contact, 8: ParentContact, 9: Date, 10: BookingId, 11: Action, 12: Status, (13: Download)
+                # Shorter format (11 cols):
+                # 0: S.No, 1: RegNo, 2: Block, 3: Room, 4: Place, 5: Purpose, 6: Time, 7: Date, 8: Action, 9: Status, 10: Download
+                is_full_weekend = len(cols) >= 13
+                
+                if is_full_weekend:
+                    place_val = texts[4]
+                    purpose_val = texts[5]
+                    time_val = texts[6]
+                    date_val = texts[9]
+                    booking_id_col = texts[10]
+                    status_val = texts[12] if len(texts) > 12 else texts[-1]
+                else:
+                    place_val = texts[4] if len(texts) > 4 else ""
+                    purpose_val = texts[5] if len(texts) > 5 else ""
+                    time_val = texts[6] if len(texts) > 6 else ""
+                    date_val = texts[7] if len(texts) > 7 else ""
+                    booking_id_col = ""
+                    status_val = texts[9] if len(texts) > 9 else texts[-1]
+                
+                booking_id = booking_id_col
+                if not booking_id:
+                    a_tag = row.find("a", attrs={"data-leave-url": True})
+                    if a_tag and a_tag.get("data-leave-url"):
+                        booking_id = a_tag["data-leave-url"].split("/")[-1].strip()
+                if not booking_id:
+                    m1 = re.search(r"deleteWeekendOuting\('([^']+)'\)", row_html) or re.search(r"deleteBookingInfo\('([^']+)'\)", row_html)
+                    if m1:
+                        booking_id = m1.group(1)
+                if not booking_id:
+                    m2 = re.search(r"downloadOutingForm/([^/\"'\?]+)", row_html)
+                    if m2:
+                        booking_id = m2.group(1)
+                if not booking_id:
+                    m3 = re.search(r"\b(W\d{8,14})\b", row_html)
+                    if m3:
+                        booking_id = m3.group(1)
+                        
+                data.append({
+                    "id": booking_id or texts[0],
+                    "bookingId": booking_id,
+                    "type": "Weekend",
+                    "place": place_val,
+                    "purpose": purpose_val,
+                    "out_date": f"{date_val} ({time_val})" if time_val else date_val,
+                    "in_date": date_val,
+                    "status": status_val,
+                })
+        return data
 
 
     async def get_payment_receipt_details(self, receipt_id: str) -> dict:
