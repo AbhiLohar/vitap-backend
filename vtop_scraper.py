@@ -3,6 +3,8 @@ VTOP HTTP-based scraper with automatic captcha solving.
 Replaces Playwright browser automation with pure HTTP requests.
 Inspired by vitap-vtop-client library.
 """
+import os
+import json
 import base64
 import io
 import re
@@ -44,6 +46,110 @@ ROUTES = {
     "outing":       "/vtop/hostel/StudentGeneralOuting",
     "da":           "/vtop/examinations/doDigitalAssignment",
     "payments":     "/vtop/p2p/getReceiptsApplno",
+}
+
+# ── VIT-AP Program & Branch Resolution Map ─────────────────
+VITAP_BRANCH_MAP = {
+    "BCE": {
+        "program": "B.Tech",
+        "branch": "Computer Science and Engineering",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "BCN": {
+        "program": "B.Tech",
+        "branch": "Computer Science and Engineering (Networking)",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "BAI": {
+        "program": "B.Tech",
+        "branch": "Computer Science and Engineering (Artificial Intelligence)",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "BDS": {
+        "program": "B.Tech",
+        "branch": "Computer Science and Engineering (Data Science)",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "BCS": {
+        "program": "B.Tech",
+        "branch": "Computer Science and Engineering (Cyber Security)",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "BSB": {
+        "program": "B.Tech",
+        "branch": "Computer Science and Business Systems",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "BIT": {
+        "program": "B.Tech",
+        "branch": "Information Technology",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "BEC": {
+        "program": "B.Tech",
+        "branch": "Electronics and Communication Engineering",
+        "school": "School of Electronics Engineering (SENSE)",
+    },
+    "ECE": {
+        "program": "B.Tech",
+        "branch": "Electronics and Communication Engineering",
+        "school": "School of Electronics Engineering (SENSE)",
+    },
+    "BVL": {
+        "program": "B.Tech",
+        "branch": "Electronics and Communication Engineering (VLSI)",
+        "school": "School of Electronics Engineering (SENSE)",
+    },
+    "BME": {
+        "program": "B.Tech",
+        "branch": "Mechanical Engineering",
+        "school": "School of Mechanical Engineering (SMEC)",
+    },
+    "MEE": {
+        "program": "B.Tech",
+        "branch": "Mechanical Engineering",
+        "school": "School of Mechanical Engineering (SMEC)",
+    },
+    "BBA": {
+        "program": "BBA",
+        "branch": "Bachelor of Business Administration",
+        "school": "VIT-AP School of Business (VSB)",
+    },
+    "BLA": {
+        "program": "B.A., LL.B. (Hons.)",
+        "branch": "Law",
+        "school": "VIT-AP School of Law (VITSOL)",
+    },
+    "BLB": {
+        "program": "BBA, LL.B. (Hons.)",
+        "branch": "Law",
+        "school": "VIT-AP School of Law (VITSOL)",
+    },
+    "MCE": {
+        "program": "M.Tech",
+        "branch": "Computer Science and Engineering",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "MSE": {
+        "program": "M.Tech",
+        "branch": "Software Engineering",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "MIS": {
+        "program": "Integrated M.Tech",
+        "branch": "Computer Science and Engineering",
+        "school": "School of Computer Science and Engineering (SCOPE)",
+    },
+    "MSC": {
+        "program": "M.Sc",
+        "branch": "Data Science",
+        "school": "School of Advanced Sciences (SAS)",
+    },
+    "PHD": {
+        "program": "Ph.D",
+        "branch": "Doctor of Philosophy",
+        "school": "Research",
+    },
 }
 
 # Known semester IDs for VIT-AP (fallback when dropdown not found)
@@ -1996,6 +2102,38 @@ class VTOPSession:
                     "course_distribution": clean(tds[8]) if len(tds) > 8 else "",
                 })
         
+        def get_exam_sort_key(course):
+            s = str(course.get("exam_month", "")).strip().lower()
+            year = 0
+            y_match = re.search(r'(20\d\d)', s)
+            if y_match:
+                year = int(y_match.group(1))
+            else:
+                y2 = re.search(r'[-/\s](\d{2})\b', s)
+                if y2:
+                    year = 2000 + int(y2.group(1))
+            
+            month = 0
+            if "jan" in s: month = 1
+            elif "feb" in s: month = 2
+            elif "mar" in s: month = 3
+            elif "apr" in s: month = 4
+            elif "may" in s: month = 5
+            elif "jun" in s: month = 6
+            elif "jul" in s: month = 7
+            elif "aug" in s: month = 8
+            elif "sep" in s: month = 9
+            elif "oct" in s: month = 10
+            elif "nov" in s: month = 11
+            elif "dec" in s: month = 12
+            elif "win" in s: month = 1
+            elif "sum" in s: month = 6
+            elif "fall" in s: month = 7
+            
+            return (year, month)
+
+        courses.sort(key=get_exam_sort_key)
+        
         return {
             "credits_registered": credits_registered,
             "credits_earned": credits_earned,
@@ -2160,7 +2298,7 @@ class VTOPSession:
         return data
     
     async def get_profile(self) -> dict:
-        """Fetch student profile with caching - matches vitap_student_app Rust parser logic."""
+        """Fetch student profile with caching, comprehensive field extraction, and label accuracy."""
         if "profile" in self._cache:
             return self._cache["profile"]
             
@@ -2171,30 +2309,74 @@ class VTOPSession:
             )
             
             soup = BeautifulSoup(resp.text, "lxml")
-            
-            def extract_table_value(label_text):
-                """Search for a table row whose first cell contains the label and return second cell value."""
-                for row in soup.find_all("tr"):
-                    tds = row.find_all("td")
-                    if len(tds) >= 2:
-                        label = tds[0].get_text(strip=True).upper()
-                        if label_text.upper() in label:
-                            return tds[1].get_text(strip=True)
+
+            def extract_field_value(container, target_labels, exclude_labels=None):
+                """Search for a field in HTML container supporting:
+                - Multi-column table rows (cells[i] as label, cells[i+1] as value)
+                - Separator colon cells (cells[i+1] == ':', cells[i+2] as value)
+                - Single cell 'Key : Value' patterns
+                - General sequential cells
+                """
+                if not container:
+                    return ""
+                if isinstance(target_labels, str):
+                    target_labels = [target_labels]
+                targets = [t.strip().upper() for t in target_labels if t.strip()]
+                excludes = [e.strip().upper() for e in (exclude_labels or []) if e.strip()]
+
+                # 1. Search tr rows (most common & structured)
+                for row in container.find_all("tr"):
+                    cells = row.find_all(["td", "th"])
+                    n = len(cells)
+                    for i in range(n - 1):
+                        lbl_raw = cells[i].get_text(strip=True).upper()
+                        clean_lbl = lbl_raw.rstrip(":").strip()
+                        if any(ex in clean_lbl for ex in excludes):
+                            continue
+                        for t in targets:
+                            if t == clean_lbl or t in clean_lbl:
+                                val_idx = i + 1
+                                if val_idx < n and cells[val_idx].get_text(strip=True) == ":":
+                                    val_idx += 1
+                                if val_idx < n:
+                                    val = cells[val_idx].get_text(strip=True).lstrip(":").strip()
+                                    if val:
+                                        return val
+
+                # 2. Search single-cell "Key : Value" in all elements
+                for el in container.find_all(["td", "th", "p", "div", "li"]):
+                    txt = el.get_text(strip=True)
+                    if ":" in txt:
+                        parts = txt.split(":", 1)
+                        k = parts[0].strip().upper()
+                        v = parts[1].strip()
+                        if any(ex in k for ex in excludes):
+                            continue
+                        for t in targets:
+                            if t == k or t in k:
+                                if v:
+                                    return v
+
+                # 3. Fallback: sequential scan of all td/th in container
+                all_cells = container.find_all(["td", "th"])
+                n = len(all_cells)
+                for i in range(n - 1):
+                    lbl_raw = all_cells[i].get_text(strip=True).upper()
+                    clean_lbl = lbl_raw.rstrip(":").strip()
+                    if any(ex in clean_lbl for ex in excludes):
+                        continue
+                    for t in targets:
+                        if t == clean_lbl or t in clean_lbl:
+                            val_idx = i + 1
+                            if val_idx < n and all_cells[val_idx].get_text(strip=True) == ":":
+                                val_idx += 1
+                            if val_idx < n:
+                                val = all_cells[val_idx].get_text(strip=True).lstrip(":").strip()
+                                if val:
+                                    return val
+
                 return ""
-            
-            # University details are usually in the first few tables. 
-            # High school details (which mistakenly match "Branch" and "School") are further down.
-            top_tables = soup.find_all("table")[:3]
-            def extract_from_top_tables(label_text):
-                for table in top_tables:
-                    for row in table.find_all("tr"):
-                        tds = row.find_all("td")
-                        if len(tds) >= 2:
-                            label = tds[0].get_text(strip=True).upper()
-                            if label_text.upper() in label:
-                                return tds[1].get_text(strip=True)
-                return ""
-            
+
             # Extract base64 profile picture
             base64_pfp = ""
             img = soup.find("img", class_=lambda c: c and "border" in c if c else False)
@@ -2202,27 +2384,8 @@ class VTOPSession:
                 src = img.get("src", "")
                 if "base64," in src:
                     base64_pfp = src.split("base64,", 1)[1]
-            
-            # Extract main profile fields
-            profile = {
-                "name": extract_table_value("STUDENT NAME"),
-                "reg_no": self.registration_number,
-                "application_number": extract_table_value("APPLICATION NUMBER"),
-                "dob": extract_table_value("DATE OF BIRTH"),
-                "gender": extract_table_value("GENDER"),
-                "blood_group": extract_table_value("BLOOD GROUP"),
-                "email": extract_table_value("EMAIL"),
-                "program": extract_from_top_tables("PROGRAMME") or extract_from_top_tables("DEGREE") or extract_from_top_tables("PROGRAM"),
-                "branch": extract_from_top_tables("SPECIALIZATION") or extract_from_top_tables("CORE") or extract_from_top_tables("BRANCH"),
-                "school": extract_from_top_tables("SCHOOL") or extract_from_top_tables("INSTITUTE"),
-                "base64_pfp": base64_pfp,
-            }
-            
-            # If name wasn't found with "STUDENT NAME", try just "NAME"
-            if not profile["name"]:
-                profile["name"] = extract_table_value("NAME")
-            
-            # Extract Mentor/Proctor details from the "PROCTOR INFORMATION" accordion section
+
+            # ── 1. Proctor / Mentor Information Section ──
             mentor = {
                 "faculty_id": "",
                 "faculty_name": "",
@@ -2234,37 +2397,202 @@ class VTOPSession:
                 "faculty_intercom": "",
                 "faculty_mobile": "",
             }
-            
-            # Look for the proctor information section
+
             proctor_section = None
-            for div in soup.find_all("div", class_="accordion-item"):
+            for div in soup.find_all(["div", "section"], class_=lambda c: c and ("accordion-item" in c or "card" in c) if c else True):
                 if "PROCTOR" in div.get_text().upper():
                     proctor_section = div
                     break
-            
+
             if proctor_section:
-                def extract_mentor_value(label_text):
-                    for row in proctor_section.find_all("tr"):
-                        tds = row.find_all("td")
-                        if len(tds) >= 2:
-                            label = tds[0].get_text(strip=True).upper()
-                            if label_text.upper() in label:
-                                return tds[1].get_text(strip=True)
-                    return ""
-                
-                mentor["faculty_id"] = extract_mentor_value("FACULTY ID")
-                mentor["faculty_name"] = extract_mentor_value("FACULTY NAME")
-                mentor["faculty_designation"] = extract_mentor_value("FACULTY DESIGNATION")
-                mentor["school"] = extract_mentor_value("SCHOOL")
-                mentor["cabin"] = extract_mentor_value("CABIN")
-                mentor["faculty_department"] = extract_mentor_value("FACULTY DEPARTMENT")
-                mentor["faculty_email"] = extract_mentor_value("FACULTY EMAIL")
-                mentor["faculty_intercom"] = extract_mentor_value("FACULTY INTERCOM")
-                mentor["faculty_mobile"] = extract_mentor_value("FACULTY MOBILE")
+                mentor["faculty_id"] = extract_field_value(
+                    proctor_section,
+                    ["FACULTY ID", "STAFF ID", "EMP ID", "EMPLOYEE ID", "FACULTY / STAFF ID"]
+                )
+                mentor["faculty_name"] = extract_field_value(
+                    proctor_section,
+                    ["FACULTY / STAFF NAME", "FACULTY/STAFF NAME", "STAFF NAME", "PROCTOR NAME", "MENTOR NAME", "FACULTY NAME", "NAME"],
+                    exclude_labels=["ID", "DESIGNATION", "DEPARTMENT", "SCHOOL", "CABIN", "EMAIL", "INTERCOM", "MOBILE"]
+                )
+                mentor["faculty_designation"] = extract_field_value(
+                    proctor_section,
+                    ["FACULTY DESIGNATION", "DESIGNATION"]
+                )
+                mentor["school"] = extract_field_value(
+                    proctor_section,
+                    ["FACULTY SCHOOL", "SCHOOL / CENTRE", "SCHOOL", "CENTRE"]
+                )
+                mentor["cabin"] = extract_field_value(
+                    proctor_section,
+                    ["CABIN NO", "CABIN", "ROOM"]
+                )
+                mentor["faculty_department"] = extract_field_value(
+                    proctor_section,
+                    ["FACULTY DEPARTMENT", "DEPARTMENT"]
+                )
+                mentor["faculty_email"] = extract_field_value(
+                    proctor_section,
+                    ["FACULTY EMAIL", "EMAIL"]
+                )
+                mentor["faculty_intercom"] = extract_field_value(
+                    proctor_section,
+                    ["FACULTY INTERCOM", "INTERCOM"]
+                )
+                mentor["faculty_mobile"] = extract_field_value(
+                    proctor_section,
+                    ["FACULTY MOBILE", "MOBILE NUMBER", "MOBILE"]
+                )
+
+            # If mentor faculty_name was missing but faculty_id (e.g. 70616) was found, look it up in faculty list
+            if not mentor["faculty_name"] and mentor["faculty_id"]:
+                emp_id = mentor["faculty_id"].strip()
+                try:
+                    faculty_file = os.path.join(os.path.dirname(__file__), "faculty_list.json")
+                    if os.path.exists(faculty_file):
+                        with open(faculty_file, "r", encoding="utf-8") as f:
+                            fac_list = json.load(f)
+                            for f_entry in fac_list:
+                                if str(f_entry.get("emp_id", "")).strip() == emp_id:
+                                    mentor["faculty_name"] = f_entry.get("faculty_name", "")
+                                    if not mentor["faculty_designation"]:
+                                        mentor["faculty_designation"] = f_entry.get("designation", "")
+                                    if not mentor["school"]:
+                                        mentor["school"] = f_entry.get("school_or_centre", "")
+                                    break
+                except Exception as fe:
+                    print(f"Faculty file lookup error: {fe}")
+
+                if not mentor["faculty_name"]:
+                    try:
+                        fac_results = await self.get_faculty_details(emp_id)
+                        if fac_results:
+                            mentor["faculty_name"] = fac_results[0].get("name", "")
+                            if not mentor["faculty_designation"]:
+                                mentor["faculty_designation"] = fac_results[0].get("designation", "")
+                            if not mentor["school"]:
+                                mentor["school"] = fac_results[0].get("school", "")
+                    except Exception:
+                        pass
+
+            # ── 2. Filter High School Tables vs University Academic Tables ──
+            HIGH_SCHOOL_KEYWORDS = [
+                "QUALIFYING", "PREVIOUS QUALIFICATION", "CLASS X", "CLASS XII",
+                "10TH", "12TH", "INTERMEDIATE", "HSC", "SSLC", "BOARD", "CBSE", "ICSE",
+                "PASSING YEAR", "PASSING_YEAR", "PREVIOUS EDUCATION", "PREVIOUS SCHOOL",
+                "YEAR OF PASSING", "QUALIFICATION DETAILS"
+            ]
+
+            def is_high_school(el) -> bool:
+                txt = el.get_text(" ", strip=True).upper()
+                return any(k in txt for k in HIGH_SCHOOL_KEYWORDS)
+
+            proctor_tables = set(proctor_section.find_all("table")) if proctor_section else set()
+            univ_tables = [
+                t for t in soup.find_all("table")
+                if not is_high_school(t) and t not in proctor_tables
+            ]
+
+            univ_containers = [
+                div for div in soup.find_all(["div", "section"])
+                if any(k in div.get_text().upper() for k in ["ACADEMIC", "ADMISSION", "DEGREE", "PROGRAMME", "ENROLLMENT"])
+                and not is_high_school(div)
+                and (not proctor_section or div != proctor_section)
+            ]
+            search_containers = univ_tables + univ_containers
+
+            # Extract university program (Degree)
+            raw_program = ""
+            for c in search_containers:
+                val = extract_field_value(
+                    c,
+                    ["PROGRAMME NAME", "PROGRAMME / DEGREE", "PROGRAMME DESCRIPTION", "DEGREE", "PROGRAMME", "PROGRAM"],
+                    exclude_labels=["PROGRAMME GROUP", "PROGRAM GROUP", "PROGRAMME TYPE", "PREVIOUS", "BOARD"]
+                )
+                if val and val.upper() not in ["UG", "PG", "PH.D", "PHD"]:
+                    raw_program = val
+                    break
+
+            # Extract university branch (Specialization)
+            INVALID_BRANCHES = ["PCM", "PCB", "PCMB", "MPC", "BIPC", "COMMERCE", "ARTS", "SCIENCE", "GENERAL"]
+            raw_branch = ""
+            for c in search_containers:
+                val = extract_field_value(
+                    c,
+                    ["BRANCH / SPECIALIZATION", "BRANCH NAME", "SPECIALIZATION", "BRANCH", "STREAM / SPECIALIZATION", "DISCIPLINE", "MAJOR"],
+                    exclude_labels=["PREVIOUS", "QUALIFYING", "10TH", "12TH", "BOARD", "PASSING"]
+                )
+                if val and val.upper() not in INVALID_BRANCHES:
+                    raw_branch = val
+                    break
+
+            # Extract university school
+            INVALID_SCHOOL_KEYWORDS = [
+                "VIDYALAYA", "HIGH SCHOOL", "HIGHER SECONDARY", "JUNIOR COLLEGE", "PUBLIC SCHOOL",
+                "INTERMEDIATE", "KENDRIYA", "MATRICULATION", "COLLEGE", "SECONDARY SCHOOL", "GRAMMAR SCHOOL"
+            ]
+            raw_school = ""
+            for c in search_containers:
+                val = extract_field_value(
+                    c,
+                    ["SCHOOL NAME", "SCHOOL / CENTRE", "SCHOOL", "CENTRE", "INSTITUTE"],
+                    exclude_labels=["PREVIOUS", "QUALIFYING", "10TH", "12TH", "BOARD", "HIGH SCHOOL", "PROCTOR"]
+                )
+                if val and not any(k in val.upper() for k in INVALID_SCHOOL_KEYWORDS):
+                    if not mentor["school"] or val.upper() != mentor["school"].upper():
+                        raw_school = val
+                        break
+
+            # ── 3. Fallback Decoding via VIT-AP Registration Number ──
+            branch_code = ""
+            reg_upper = (self.registration_number or "").upper().strip()
+            reg_m = re.search(r'\b(?:2[0-9])([A-Z]{3})[0-9]{4,5}\b', reg_upper)
+            if reg_m:
+                branch_code = reg_m.group(1)
+            elif len(reg_upper) >= 5:
+                sub = reg_upper[2:5]
+                if sub.isalpha():
+                    branch_code = sub
+
+            branch_info = VITAP_BRANCH_MAP.get(branch_code, {})
+
+            if not raw_program or raw_program.upper() in ["UG", "PG"]:
+                raw_program = branch_info.get("program", raw_program or "B.Tech")
+
+            if not raw_branch or raw_branch.upper() in INVALID_BRANCHES:
+                raw_branch = branch_info.get("branch", raw_branch or "")
+
+            if not raw_school or any(k in raw_school.upper() for k in INVALID_SCHOOL_KEYWORDS):
+                raw_school = branch_info.get("school", raw_school or "")
+
+            # ── 4. Main Profile Assembly ──
+            personal_containers = [t for t in soup.find_all("table") if not is_high_school(t) and t not in proctor_tables] or [soup]
             
-            profile["mentor"] = mentor["faculty_name"]
-            profile["mentor_details"] = mentor
-            
+            def extract_personal(targets, exclude_labels=None):
+                for pc in personal_containers:
+                    val = extract_field_value(pc, targets, exclude_labels)
+                    if val:
+                        return val
+                return extract_field_value(soup, targets, exclude_labels)
+
+            profile = {
+                "name": extract_personal(["STUDENT NAME", "NAME OF THE STUDENT", "NAME"], exclude_labels=["FACULTY", "PROCTOR", "FATHER", "MOTHER"]),
+                "reg_no": self.registration_number,
+                "application_number": extract_personal(["APPLICATION NUMBER", "APPLICATION NO", "APPL NO"]),
+                "dob": extract_personal(["DATE OF BIRTH", "D.O.B", "DOB", "BIRTH DATE"]),
+                "gender": extract_personal(["GENDER", "SEX"]),
+                "blood_group": extract_personal(["BLOOD GROUP", "BLOOD GRP", "BLOOD"]),
+                "email": extract_personal(["EMAIL", "EMAIL ID", "STUDENT EMAIL"], exclude_labels=["FACULTY", "PARENT", "FATHER", "MOTHER"]),
+                "program": raw_program,
+                "branch": raw_branch,
+                "school": raw_school,
+                "base64_pfp": base64_pfp,
+                "mentor": mentor["faculty_name"],
+                "mentor_details": mentor,
+            }
+
+            if not profile["name"]:
+                profile["name"] = extract_field_value(soup, ["STUDENT NAME", "NAME OF THE STUDENT", "NAME"])
+
             self._cache["profile"] = profile
             return profile
         except Exception as e:
@@ -2274,18 +2602,22 @@ class VTOPSession:
     async def get_curriculum(self) -> dict:
         """Fetch curriculum and credit distribution."""
         try:
-            # Try to fetch curriculum
-            await self._post_menu(ROUTES["curriculum"])
-            
-            resp = await self._post_authenticated(
-                ROUTES["curriculum"],
-                {"authorizedID": self.registration_number}
-            )
-            
-            data = self._parse_curriculum(resp.text)
-            
-            print(f"Initial parse: {data['summary']}")
-            
+            # 1. Try to fetch curriculum page (try primary route, and StudentCurriculum alternative)
+            data = {"summary": {"earned": "0", "total": "0", "left": "0"}, "distribution": []}
+            for route_name in [ROUTES.get("curriculum", "/vtop/academics/common/Curriculum"), "/vtop/academics/common/StudentCurriculum"]:
+                try:
+                    await self._post_menu(route_name)
+                    resp = await self._post_authenticated(
+                        route_name,
+                        {"authorizedID": self.registration_number, "verifyMenu": "true"}
+                    )
+                    data = self._parse_curriculum(resp.text)
+                    if data["distribution"] or (data["summary"]["earned"] != "0" and data["summary"]["total"] != "0"):
+                        print(f"Curriculum found via {route_name}: {data['summary']}")
+                        break
+                except Exception as e:
+                    print(f"Error fetching curriculum via {route_name}: {e}")
+
             # 2. If nothing found, try Grade History page for summary
             if data["summary"]["earned"] == "0" and not data["distribution"]:
                 print("Curriculum page empty, trying Grade History fallback...")
@@ -2295,120 +2627,154 @@ class VTOPSession:
                 )
                 gh_data = self._parse_curriculum(resp.text)
                 print(f"Grade History parse: {gh_data['summary']}")
-                data["summary"] = gh_data["summary"]
-                if not data["distribution"]:
+                if gh_data["distribution"]:
                     data["distribution"] = gh_data["distribution"]
+                if gh_data["summary"]["earned"] != "0":
+                    data["summary"] = gh_data["summary"]
 
-            # 3. If still nothing, extract from Grade History table
+            # 3. Always fetch grades to enrich with detailed courses and ensure 100% accurate earned numbers
             grades_data = await self.get_grades()
             grades_list = grades_data.get("courses", []) if isinstance(grades_data, dict) else []
-            
-            if data["summary"]["earned"] == "0":
-                print("Summary still 0, calculating from grades...")
-                if isinstance(grades_data, dict):
-                    earned_str = grades_data.get("credits_earned", "0")
-                    if earned_str and earned_str != "N/A":
-                        data["summary"]["earned"] = str(earned_str)
-                    else:
-                        earned = 0.0
-                        for g in grades_list:
-                            try:
-                                grade = g.get("grade", "").upper()
-                                if grade and grade not in ["F", "N", "W", "E", "FAIL"]:
-                                    earned += float(g.get("credits", 0))
-                            except: continue
-                        data["summary"]["earned"] = str(earned)
-                        
-                    try:
-                        e = float(data["summary"]["earned"])
-                        t = float(data["summary"]["total"])
-                        if t == 0: t = 160.0
-                        data["summary"]["total"] = str(t)
-                        data["summary"]["left"] = str(round(max(0.0, t - e), 2))
-                    except: pass
-            def normalize_type(raw_type):
+
+            # Delivery types that must NEVER appear as categories in credit distribution
+            DELIVERY_TYPES = {"ETL", "TH", "LO", "PJT", "NCC", "ETP", "SS", "OC", "AUDIT"}
+
+            def normalize_category_type(raw_type: str) -> str:
                 rt = raw_type.strip().upper()
-                if rt == "PC" or "PROGRAMME CORE" in rt: return "PC"
-                if rt == "PE" or "PROGRAMME ELECTIVE" in rt: return "PE"
+                if rt == "PC" or "PROGRAMME CORE" in rt or "PROGRAM CORE" in rt or "DISCIPLINE CORE" in rt: return "PC"
+                if rt == "PE" or "PROGRAMME ELECTIVE" in rt or "PROGRAM ELECTIVE" in rt or "DISCIPLINE ELECTIVE" in rt: return "PE"
                 if rt == "UC" or "UNIVERSITY CORE" in rt: return "UC"
-                if rt == "UE" or "UNIVERSITY ELECTIVE" in rt: return "UE"
+                if rt == "UE" or "UNIVERSITY ELECTIVE" in rt or "OPEN ELECTIVE" in rt: return "UE"
                 if rt == "NC" or "NON CREDIT" in rt: return "NC"
                 if rt == "BRIDGE" or "BRIDGE" in rt: return "BRIDGE"
                 if rt == "ECA" or "EXTRA" in rt or "CO-CURRIC" in rt: return "ECA"
                 return rt
 
-            if not data["distribution"] and grades_list:
-                print("Synthesizing distribution from grades...")
-                synth = {
-                    "PC": {"category": "Programme Core", "required": 40.0, "earned": 0.0},
-                    "PE": {"category": "Programme Elective", "required": 22.0, "earned": 0.0},
-                    "UC": {"category": "University Core", "required": 89.0, "earned": 0.0},
-                    "UE": {"category": "University Elective", "required": 9.0, "earned": 0.0},
-                    "NC": {"category": "Non Credit", "required": 0.0, "earned": 0.0},
-                    "BRIDGE": {"category": "Bridge Course", "required": 0.0, "earned": 0.0},
-                    "ECA": {"category": "Extra Curricular", "required": 0.0, "earned": 0.0},
-                }
+            def categorize_course(course: dict) -> str:
+                # 1. Primary: use course_distribution (VTOP column 8)
+                dist = str(course.get("course_distribution", "")).strip()
+                norm = normalize_category_type(dist)
+                if norm == "PC": return "Programme Core"
+                if norm == "PE": return "Programme Elective"
+                if norm == "UC": return "University Core"
+                if norm == "UE": return "University Elective"
+                if norm == "NC": return "Non Credit"
+                if norm == "BRIDGE": return "Bridge Course"
+                if norm == "ECA": return "University Core"
+
+                # 2. Fallback: course code prefixes
+                code = str(course.get("course_code", "")).strip().upper()
+                uc_prefixes = ("MAT", "PHY", "CHY", "ENG", "HUM", "FRL", "STS", "ENV", "EXC", "CSA", "SET", "SWY", "NCC")
+                if any(code.startswith(p) for p in uc_prefixes):
+                    return "University Core"
+                return "Programme Core"
+
+            standard_order = ["University Core", "Programme Core", "Programme Elective", "University Elective"]
+            standard_defaults = {
+                "University Core": 89.0,
+                "Programme Core": 40.0,
+                "Programme Elective": 22.0,
+                "University Elective": 9.0,
+            }
+
+            # Filter existing distribution to remove pedagogical delivery types and summary rows
+            clean_distribution = []
+            seen_categories = set()
+            for d in data.get("distribution", []):
+                cat = d.get("category", "").strip()
+                if not cat or cat.upper() in DELIVERY_TYPES:
+                    continue
+                if any(w in cat.lower() for w in ["total", "grand", "sl.", "s.no"]):
+                    continue
+
+                norm = normalize_category_type(cat)
+                canonical = cat
+                if norm == "UC": canonical = "University Core"
+                elif norm == "PC": canonical = "Programme Core"
+                elif norm == "PE": canonical = "Programme Elective"
+                elif norm == "UE": canonical = "University Elective"
                 
+                d["category"] = canonical
+                if canonical not in seen_categories:
+                    seen_categories.add(canonical)
+                    clean_distribution.append(d)
+
+            # Ensure all 4 standard degree categories are present
+            for std_cat in standard_order:
+                if std_cat not in seen_categories:
+                    clean_distribution.append({
+                        "category": std_cat,
+                        "required": str(standard_defaults[std_cat]),
+                        "earned": "0.0",
+                        "left": str(standard_defaults[std_cat]),
+                        "courses": []
+                    })
+                    seen_categories.add(std_cat)
+
+            # Sort so standard categories appear in the exact official order
+            def sort_key(d):
+                cat = d["category"]
+                if cat in standard_order:
+                    return (0, standard_order.index(cat))
+                return (1, cat)
+            clean_distribution.sort(key=sort_key)
+
+            # Inject courses and compute accurate earned credits from passed courses
+            for dist in clean_distribution:
+                dist["courses"] = []
+                cat_name = dist["category"]
+                calc_earned = 0.0
+
                 for g in grades_list:
-                    grade = g.get("grade", "").upper()
-                    if grade in ["F", "N", "W", "FAIL", ""]: continue
-                    
-                    raw_c_type = g.get("type", "")
-                    if not raw_c_type: continue
-                    
-                    c_type = normalize_type(raw_c_type)
-                    
-                    if c_type not in synth:
-                        synth[c_type] = {"category": raw_c_type.title(), "required": 0.0, "earned": 0.0}
-                        
-                    try:
-                        synth[c_type]["earned"] += float(g.get("credits", 0))
-                    except: pass
-                
-                dist_list = []
-                for k, v in synth.items():
-                    if v["earned"] > 0 or v["required"] > 0:
-                        dist_list.append({
-                            "category": v["category"],
-                            "required": str(v["required"]),
-                            "earned": str(v["earned"]),
-                            "left": str(max(0.0, v["required"] - v["earned"]))
+                    grade = g.get("grade", "").strip().upper()
+                    # Only passed courses contribute to earned credits (S, A, B, C, D, E)
+                    if grade in ["F", "N", "W", "FAIL", ""]:
+                        continue
+
+                    c_cat = categorize_course(g)
+                    if c_cat.lower() == cat_name.lower():
+                        c_credits = str(g.get("credits", "0")).strip()
+                        try:
+                            calc_earned += float(c_credits)
+                        except:
+                            pass
+
+                        dist["courses"].append({
+                            "course_code": g.get("course_code", ""),
+                            "subject": g.get("subject", ""),
+                            "type": g.get("type", ""),
+                            "credits": c_credits,
+                            "grade": grade,
+                            "exam_month": g.get("exam_month", ""),
                         })
-                data["distribution"] = dist_list
 
-            # Inject detailed courses into distribution using grades
-            try:
-                # Map course types to bucket names
-                def match_category(c_type, cat_name):
-                    c = normalize_type(c_type)
-                    n = cat_name.lower()
-                    if c == "PC" and "programme core" in n: return True
-                    if c == "PE" and "programme elective" in n: return True
-                    if c == "UC" and "university core" in n: return True
-                    if c == "UE" and "university elective" in n: return True
-                    if c == "NC" and "non credit" in n: return True
-                    if c == "BRIDGE" and "bridge" in n: return True
-                    if c == "ECA" and ("extra" in n or "co-curric" in n): return True
-                    return c.lower() in n or n in c.lower()
+                # If earned was 0.0 or not matching, use the sum of passed courses
+                curr_earned = float(dist.get("earned", 0) or 0)
+                if curr_earned == 0.0 and calc_earned > 0.0:
+                    dist["earned"] = str(calc_earned)
+                elif calc_earned > 0.0:
+                    dist["earned"] = str(calc_earned)
 
-                for dist in data["distribution"]:
-                    dist["courses"] = []
-                    cat_name = dist["category"]
-                    
-                    for g in grades_list:
-                        # Only add passed/completed courses
-                        grade = g.get("grade", "").upper()
-                        if grade in ["F", "N", "W", "FAIL", ""]: continue
-                        
-                        if match_category(g.get("type", ""), cat_name):
-                            dist["courses"].append({
-                                "course_code": g.get("course_code", ""),
-                                "subject": g.get("subject", ""),
-                                "credits": g.get("credits", ""),
-                                "grade": grade
-                            })
-            except Exception as ex:
-                print(f"Error enriching curriculum courses: {ex}")
+                req_val = float(dist.get("required", 0) or 0)
+                dist["left"] = str(round(max(0.0, req_val - float(dist["earned"])), 2))
+
+            data["distribution"] = clean_distribution
+
+            # Compute overall summary
+            tot_earned = sum(float(d["earned"]) for d in clean_distribution if d["category"] in standard_order)
+            tot_req = sum(float(d["required"]) for d in clean_distribution if d["category"] in standard_order)
+            
+            parsed_earned = float(data["summary"].get("earned", 0) or 0)
+            if parsed_earned == 0.0 or tot_earned > 0:
+                data["summary"]["earned"] = str(tot_earned) if tot_earned > 0 else str(parsed_earned)
+
+            parsed_total = float(data["summary"].get("total", 0) or 0)
+            if parsed_total < 100:
+                data["summary"]["total"] = str(tot_req) if tot_req >= 100 else "160.0"
+
+            t_val = float(data["summary"]["total"])
+            e_val = float(data["summary"]["earned"])
+            data["summary"]["left"] = str(round(max(0.0, t_val - e_val), 2))
 
             self._cache["curriculum"] = data
             return data
@@ -2424,145 +2790,144 @@ class VTOPSession:
         soup = BeautifulSoup(html, "lxml")
         summary = {"earned": "0", "total": "0", "left": "0"}
         distribution = []
+        DELIVERY_TYPES = {"ETL", "TH", "LO", "PJT", "NCC", "ETP", "SS", "OC", "AUDIT"}
         
         tables = soup.find_all("table")
         for table in tables:
             rows = table.find_all("tr")
             if not rows: continue
             
-            # Get header texts from first row
-            header_cells = rows[0].find_all(["th", "td"])
-            header_texts = [th.get_text(strip=True).lower() for th in header_cells]
-            header_str = " ".join(header_texts)
+            header_row_idx = -1
+            idx_cat = -1
+            idx_req = -1
+            idx_earned = -1
+            idx_left = -1
             
-            # Detect distribution table by looking for keywords in headers
-            is_dist_table = any(k in header_str for k in [
-                "category", "curriculum", "bucket", "component", 
-                "required", "earned", "completed", "credit type"
-            ])
-            
-            if is_dist_table:
-                # Find column indices dynamically
-                idx_cat = -1
-                idx_req = -1
-                idx_earned = -1
-                idx_left = -1
+            # Scan the first few rows for header columns (row 0 might be "CREDITS DISTRIBUTION" banner)
+            for r_idx, row in enumerate(rows[:4]):
+                cells = row.find_all(["th", "td"])
+                texts = [c.get_text(strip=True).lower() for c in cells]
                 
-                for i, h in enumerate(header_texts):
-                    h_lower = h.lower()
-                    if any(k in h_lower for k in ["category", "component", "bucket", "type", "credit type"]):
-                        idx_cat = i
-                    elif any(k in h_lower for k in ["earned", "completed", "done", "acquired"]):
-                        idx_earned = i
-                    elif any(k in h_lower for k in ["left", "remaining", "pending"]):
-                        idx_left = i
-                    elif any(k in h_lower for k in ["required", "minimum", "curriculum", "total credit", "total", "credits"]) and not any(x in h_lower for x in ["earned", "registered", "completed", "done", "left"]):
-                        idx_req = i
+                c_idx = -1
+                for i, h in enumerate(texts):
+                    if any(k in h for k in ["category", "component", "bucket", "basket", "course distribution", "credit distribution"]):
+                        c_idx = i
+                        break
                 
-                # If no explicit category column, try to guess based on 'basket' or skip
-                if idx_cat == -1:
-                    for i, h in enumerate(header_texts):
-                        if "basket" in h.lower() or "title" in h.lower():
-                            idx_cat = i
+                r_idx_col = -1
+                for i, h in enumerate(texts):
+                    if any(k in h for k in ["total credit", "required", "minimum", "curriculum credit", "total"]):
+                        if not any(x in h for x in ["earned", "registered", "completed", "done", "left", "remaining"]):
+                            r_idx_col = i
                             break
                             
-                # Strict check: skip if we still couldn't confidently find category and required columns
-                if idx_cat == -1:
-                    continue
+                e_idx_col = -1
+                for i, h in enumerate(texts):
+                    if any(k in h for k in ["earned", "completed", "done", "acquired"]):
+                        e_idx_col = i
+                        break
+                        
+                if c_idx != -1:
+                    header_row_idx = r_idx
+                    idx_cat = c_idx
+                    if r_idx_col != -1: idx_req = r_idx_col
+                    if e_idx_col != -1: idx_earned = e_idx_col
+                    for i, h in enumerate(texts):
+                        if any(k in h for k in ["left", "remaining", "pending"]):
+                            idx_left = i
+                    break
+                    
+            if header_row_idx == -1 or idx_cat == -1:
+                continue
                 
-                if idx_cat != -1:
-                    total_earned = 0.0
-                    total_required = 0.0
-                    
-                    for row in rows[1:]:
-                        cols = row.find_all("td")
-                        if len(cols) <= idx_cat:
-                            continue
-                        texts = [c.get_text(strip=True) for c in cols]
-                        cat_name = texts[idx_cat] if idx_cat < len(texts) else ""
-                        
-                        # Skip header/footer/total rows
-                        if not cat_name or any(s in cat_name.lower() for s in [
-                            "total", "sl.", "serial", "s.no", "grand"
-                        ]):
-                            # But check if it's a summary/total row
-                            if "total" in cat_name.lower():
-                                for t in texts:
-                                    nums = re.findall(r'\d+\.?\d*', t)
-                                    if nums:
-                                        val = float(nums[0])
-                                        if val > 100:
-                                            summary["total"] = str(val)
-                            continue
-                        
-                        try:
-                            req_val = texts[idx_req] if idx_req != -1 and idx_req < len(texts) else "0"
-                            earned_val = texts[idx_earned] if idx_earned != -1 and idx_earned < len(texts) else "0"
-                            
-                            rv = re.findall(r'\d+\.?\d*', req_val)
-                            ev = re.findall(r'\d+\.?\d*', earned_val)
-                            
-                            r_num = float(rv[0]) if rv else 0.0
-                            e_num = float(ev[0]) if ev else 0.0
-                            
-                            if r_num > 0 or e_num > 0:
-                                left_num = max(0.0, r_num - e_num)
-                                
-                                # Check if left column exists
-                                if idx_left != -1 and idx_left < len(texts):
-                                    lv = re.findall(r'\d+\.?\d*', texts[idx_left])
-                                    if lv:
-                                        left_num = float(lv[0])
-                                
-                                distribution.append({
-                                    "category": cat_name,
-                                    "required": str(r_num),
-                                    "earned": str(e_num),
-                                    "left": str(left_num)
-                                })
-                                total_earned += e_num
-                                total_required += r_num
-                        except:
-                            continue
-                    
-                    if total_earned > 0:
-                        summary["earned"] = str(total_earned)
-                    if total_required > 0:
-                        summary["total"] = str(total_required)
-
-            # Check for summary rows (Total Credits Earned, etc.) in ALL tables
-            for row in rows:
-                cols = row.find_all(["td", "th"])
-                if len(cols) >= 2:
-                    label = cols[0].get_text(strip=True).lower()
-                    val_text = cols[-1].get_text(strip=True) 
-                    
-                    if "earned" in label or "completed" in label:
-                        if "registered" not in label:
-                            nums = re.findall(r'\d+\.?\d*', val_text)
-                            if nums: 
-                                summary["earned"] = nums[0]
-                                print(f"Found Earned: {nums[0]} via label {label}")
-                    elif "total" in label and any(k in label for k in ["required", "curriculum", "minimum", "credit"]):
-                        nums = re.findall(r'\d+\.?\d*', val_text)
-                        if nums: 
-                            summary["total"] = nums[0]
-                            print(f"Found Total: {nums[0]} via label {label}")
-
-        # Final Summary Logic
-        if summary["earned"] == "0" and distribution:
-            summary["earned"] = str(sum(float(d["earned"]) for d in distribution))
-            summary["total"] = str(sum(float(d["required"]) for d in distribution))
+            total_earned = 0.0
+            total_required = 0.0
             
+            for row in rows[header_row_idx + 1:]:
+                cols = row.find_all(["td", "th"])
+                if len(cols) <= idx_cat:
+                    continue
+                texts = [c.get_text(strip=True) for c in cols]
+                cat_name = texts[idx_cat] if idx_cat < len(texts) else ""
+                
+                # Exclude delivery types
+                if cat_name.upper() in DELIVERY_TYPES:
+                    continue
+                    
+                # Check for total/summary row
+                if any(w in cat_name.lower() for w in ["total", "grand"]):
+                    for t in texts:
+                        nums = re.findall(r'\d+\.?\d*', t)
+                        if nums:
+                            val = float(nums[0])
+                            if val > 100 and summary["total"] == "0":
+                                summary["total"] = str(val)
+                    if idx_req != -1 and idx_req < len(texts):
+                        nums = re.findall(r'\d+\.?\d*', texts[idx_req])
+                        if nums: summary["total"] = nums[0]
+                    if idx_earned != -1 and idx_earned < len(texts):
+                        nums = re.findall(r'\d+\.?\d*', texts[idx_earned])
+                        if nums: summary["earned"] = nums[0]
+                    continue
+                    
+                if not cat_name or any(s in cat_name.lower() for s in ["sl.", "serial", "s.no"]):
+                    continue
+                    
+                try:
+                    req_val = texts[idx_req] if idx_req != -1 and idx_req < len(texts) else "0"
+                    earned_val = texts[idx_earned] if idx_earned != -1 and idx_earned < len(texts) else "0"
+                    
+                    rv = re.findall(r'\d+\.?\d*', req_val)
+                    ev = re.findall(r'\d+\.?\d*', earned_val)
+                    
+                    r_num = float(rv[0]) if rv else 0.0
+                    e_num = float(ev[0]) if ev else 0.0
+                    
+                    if r_num > 0 or e_num > 0:
+                        left_num = max(0.0, r_num - e_num)
+                        if idx_left != -1 and idx_left < len(texts):
+                            lv = re.findall(r'\d+\.?\d*', texts[idx_left])
+                            if lv: left_num = float(lv[0])
+                            
+                        distribution.append({
+                            "category": cat_name,
+                            "required": str(r_num),
+                            "earned": str(e_num),
+                            "left": str(left_num),
+                            "courses": []
+                        })
+                        total_earned += e_num
+                        total_required += r_num
+                except Exception:
+                    continue
+                    
+            if total_earned > 0 and summary["earned"] == "0":
+                summary["earned"] = str(total_earned)
+            if total_required > 0 and summary["total"] == "0":
+                summary["total"] = str(total_required)
+
+        # Check for summary rows in other tables if not yet found
+        if summary["earned"] == "0" or summary["total"] == "0":
+            for table in tables:
+                for row in table.find_all("tr"):
+                    cols = row.find_all(["td", "th"])
+                    if len(cols) >= 2:
+                        label = cols[0].get_text(strip=True).lower()
+                        val_text = cols[-1].get_text(strip=True) 
+                        if ("earned" in label or "completed" in label) and "registered" not in label and summary["earned"] == "0":
+                            nums = re.findall(r'\d+\.?\d*', val_text)
+                            if nums: summary["earned"] = nums[0]
+                        elif "total" in label and any(k in label for k in ["required", "curriculum", "minimum", "credit"]) and summary["total"] == "0":
+                            nums = re.findall(r'\d+\.?\d*', val_text)
+                            if nums: summary["total"] = nums[0]
+
         try:
             e = float(summary["earned"])
             t = float(summary["total"])
             if t == 0: t = 160.0
             summary["total"] = str(t)
             summary["left"] = str(round(max(0.0, t - e), 2))
-            print(f"Final calculation: Earned={e}, Total={t}, Left={summary['left']}")
-        except Exception as ex: 
-            print(f"Calc error: {ex}")
+        except Exception:
             pass
             
         return {"summary": summary, "distribution": distribution}
