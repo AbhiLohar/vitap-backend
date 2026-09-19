@@ -48,6 +48,9 @@ jobs:
         working-directory: vitap_super_app
         run: flutter pub get
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x vitap_super_app/android/gradlew
+
       - name: Build Release APK
         working-directory: vitap_super_app
         run: flutter build apk --release
