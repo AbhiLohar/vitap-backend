@@ -1,0 +1,50 @@
+name: vitap_super_app
+description: "VTOP Super App - Access VTOP student data seamlessly."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.6.0
+  fl_chart: ^1.2.0
+  cupertino_icons: ^1.0.8
+  google_fonts: any
+  shared_preferences: ^2.2.2
+  url_launcher: ^6.2.4
+  flutter_secure_storage: ^10.3.0
+  share_plus: ^10.1.4
+  package_info_plus: ^8.1.0
+  intl: ^0.20.2
+  local_auth: ^2.3.0
+  pdf: ^3.12.0
+  printing: ^5.14.3
+  image_picker: ^1.1.2
+  path_provider: ^2.1.2
+  flutter_local_notifications: ^22.0.0
+  qr_flutter: ^4.1.0
+  flutter_inappwebview: ^6.1.5
+  image: ^4.1.7
+  timezone: ^0.11.0
+  file_picker: ^8.1.7
+  excel: ^4.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/weights.json

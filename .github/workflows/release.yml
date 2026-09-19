@@ -1,0 +1,86 @@
+name: Build & Release APK
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on version tags like v1.0.1, v1.0.2
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.0.1)'
+        required: true
+        default: 'v1.0.1'
+      release_notes:
+        description: 'Release notes / changelog'
+        required: false
+        default: 'Bug fixes and performance improvements.'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build Flutter APK & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Verify Flutter & Android SDK
+        run: flutter doctor -v
+
+      - name: Install dependencies
+        working-directory: vitap_super_app
+        run: flutter pub get
+
+      - name: Build Release APK
+        working-directory: vitap_super_app
+        run: flutter build apk --release
+
+      - name: Prepare Release Artifacts
+        run: |
+          VERSION="${{ github.ref_name || inputs.version }}"
+          cp vitap_super_app/build/app/outputs/flutter-apk/app-release.apk app-release.apk
+          sha256sum app-release.apk > app-release.apk.sha256
+          echo "Built APK successfully for $VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "VTOP Super App ${{ github.ref_name || inputs.version }}"
+          tag_name: ${{ github.ref_name || inputs.version }}
+          body: |
+            ## What's New in ${{ github.ref_name || inputs.version }}
+            
+            ${{ inputs.release_notes || 'Automated release build.' }}
+            
+            ### Download
+            - **[app-release.apk](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name || inputs.version }}/app-release.apk)** (Direct APK installer)
+            
+            ---
+            *SHA-256 Checksum:*
+            ```
+            $(cat app-release.apk.sha256)
+            ```
+          files: |
+            app-release.apk
+            app-release.apk.sha256
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
