@@ -41,6 +41,7 @@ ROUTES = {
     "exam_sched":   "/vtop/examinations/StudExamSchedule",
     "view_exam":    "/vtop/examinations/doSearchExamScheduleForStudent",
     "profile":      "/vtop/studentsRecord/StudentProfileAllView",
+    "proctor":      "/vtop/proctor/viewProctorDetails",
     "curriculum":   "/vtop/academics/common/Curriculum",
     "faculty":      "/vtop/hrms/EmployeeSearchForStudent",
     "outing":       "/vtop/hostel/StudentGeneralOuting",
@@ -2297,6 +2298,61 @@ class VTOPSession:
         
         return data
     
+    async def get_proctor_details(self) -> dict:
+        """Fetch dedicated proctor/mentor details directly from /vtop/proctor/viewProctorDetails."""
+        if "proctor_details" in self._cache:
+            return self._cache["proctor_details"]
+            
+        mentor = {
+            "faculty_id": "",
+            "faculty_name": "",
+            "faculty_designation": "",
+            "school": "",
+            "cabin": "",
+            "faculty_department": "",
+            "faculty_email": "",
+            "faculty_intercom": "",
+            "faculty_mobile": "",
+        }
+        
+        try:
+            resp = await self._post_menu(ROUTES["proctor"])
+            soup = BeautifulSoup(resp.text, "lxml")
+            
+            for row in soup.find_all("tr"):
+                cells = row.find_all(["td", "th"])
+                if len(cells) < 2:
+                    continue
+                k = re.sub(r'\s+', ' ', cells[0].get_text(" ", strip=True)).upper().rstrip(":").strip()
+                v = re.sub(r'\s+', ' ', cells[1].get_text(" ", strip=True)).lstrip(":").strip()
+                if not v:
+                    continue
+                if "FACULTY ID" in k:
+                    mentor["faculty_id"] = v
+                elif "FACULTY NAME" in k or "STAFF NAME" in k:
+                    mentor["faculty_name"] = v
+                elif "DESIGNATION" in k:
+                    mentor["faculty_designation"] = v
+                elif "SCHOOL" in k:
+                    mentor["school"] = v
+                elif "CABIN" in k:
+                    mentor["cabin"] = v
+                elif "DEPARTMENT" in k:
+                    mentor["faculty_department"] = v
+                elif "EMAIL" in k:
+                    mentor["faculty_email"] = v
+                elif "INTERCOM" in k:
+                    mentor["faculty_intercom"] = v
+                elif "MOBILE" in k or "PHONE" in k:
+                    mentor["faculty_mobile"] = v
+                    
+            if any(mentor.values()):
+                self._cache["proctor_details"] = mentor
+            return mentor
+        except Exception as e:
+            print(f"Failed to fetch dedicated proctor details: {e}")
+            return mentor
+
     async def get_profile(self) -> dict:
         """Fetch student profile with caching, comprehensive field extraction, and label accuracy."""
         if "profile" in self._cache:
@@ -2329,8 +2385,7 @@ class VTOPSession:
                     cells = row.find_all(["td", "th"])
                     n = len(cells)
                     for i in range(n - 1):
-                        lbl_raw = cells[i].get_text(strip=True).upper()
-                        clean_lbl = lbl_raw.rstrip(":").strip()
+                        clean_lbl = re.sub(r'\s+', ' ', cells[i].get_text(" ", strip=True)).upper().rstrip(":").strip()
                         if any(ex in clean_lbl for ex in excludes):
                             continue
                         for t in targets:
@@ -2339,13 +2394,13 @@ class VTOPSession:
                                 if val_idx < n and cells[val_idx].get_text(strip=True) == ":":
                                     val_idx += 1
                                 if val_idx < n:
-                                    val = cells[val_idx].get_text(strip=True).lstrip(":").strip()
+                                    val = re.sub(r'\s+', ' ', cells[val_idx].get_text(" ", strip=True)).lstrip(":").strip()
                                     if val:
                                         return val
 
                 # 2. Search single-cell "Key : Value" in all elements
                 for el in container.find_all(["td", "th", "p", "div", "li"]):
-                    txt = el.get_text(strip=True)
+                    txt = re.sub(r'\s+', ' ', el.get_text(" ", strip=True))
                     if ":" in txt:
                         parts = txt.split(":", 1)
                         k = parts[0].strip().upper()
@@ -2361,8 +2416,7 @@ class VTOPSession:
                 all_cells = container.find_all(["td", "th"])
                 n = len(all_cells)
                 for i in range(n - 1):
-                    lbl_raw = all_cells[i].get_text(strip=True).upper()
-                    clean_lbl = lbl_raw.rstrip(":").strip()
+                    clean_lbl = re.sub(r'\s+', ' ', all_cells[i].get_text(" ", strip=True)).upper().rstrip(":").strip()
                     if any(ex in clean_lbl for ex in excludes):
                         continue
                     for t in targets:
@@ -2371,7 +2425,7 @@ class VTOPSession:
                             if val_idx < n and all_cells[val_idx].get_text(strip=True) == ":":
                                 val_idx += 1
                             if val_idx < n:
-                                val = all_cells[val_idx].get_text(strip=True).lstrip(":").strip()
+                                val = re.sub(r'\s+', ' ', all_cells[val_idx].get_text(" ", strip=True)).lstrip(":").strip()
                                 if val:
                                     return val
 
@@ -2398,53 +2452,91 @@ class VTOPSession:
                 "faculty_mobile": "",
             }
 
-            proctor_section = None
-            for div in soup.find_all(["div", "section"], class_=lambda c: c and ("accordion-item" in c or "card" in c) if c else True):
-                if "PROCTOR" in div.get_text().upper():
-                    proctor_section = div
+            # Search specifically for a dedicated proctor table inside the page
+            proctor_table = None
+            for tbl in soup.find_all("table"):
+                tbl_txt = tbl.get_text(" ", strip=True).upper()
+                if any(k in tbl_txt for k in ["FACULTY ID", "FACULTY NAME", "FACULTY / STAFF NAME", "FACULTY/STAFF NAME", "PROCTOR NAME"]):
+                    proctor_table = tbl
                     break
 
-            if proctor_section:
+            proctor_section = None
+            if not proctor_table:
+                # Find accordion item / card that specifically mentions PROCTOR
+                for div in soup.find_all(["div", "section"]):
+                    c_classes = div.get("class", [])
+                    c_str = " ".join(c_classes).lower() if isinstance(c_classes, list) else str(c_classes).lower()
+                    if any(acc in c_str for acc in ["accordion-item", "card", "panel", "tab-pane"]):
+                        div_txt = div.get_text(" ", strip=True).upper()
+                        if ("PROCTOR" in div_txt or "MENTOR" in div_txt) and len(div_txt) < 4000:
+                            proctor_section = div
+                            break
+
+            mentor_container = proctor_table or proctor_section
+            if mentor_container:
                 mentor["faculty_id"] = extract_field_value(
-                    proctor_section,
+                    mentor_container,
                     ["FACULTY ID", "STAFF ID", "EMP ID", "EMPLOYEE ID", "FACULTY / STAFF ID"]
                 )
                 mentor["faculty_name"] = extract_field_value(
-                    proctor_section,
-                    ["FACULTY / STAFF NAME", "FACULTY/STAFF NAME", "STAFF NAME", "PROCTOR NAME", "MENTOR NAME", "FACULTY NAME", "NAME"],
-                    exclude_labels=["ID", "DESIGNATION", "DEPARTMENT", "SCHOOL", "CABIN", "EMAIL", "INTERCOM", "MOBILE"]
+                    mentor_container,
+                    ["FACULTY / STAFF NAME", "FACULTY/STAFF NAME", "STAFF NAME", "PROCTOR NAME", "MENTOR NAME", "FACULTY NAME"],
+                    exclude_labels=["STUDENT", "APPLICANT", "FATHER", "MOTHER", "PARENT", "GUARDIAN", "ID", "DESIGNATION", "DEPARTMENT", "SCHOOL", "CABIN", "EMAIL", "INTERCOM", "MOBILE"]
                 )
                 mentor["faculty_designation"] = extract_field_value(
-                    proctor_section,
-                    ["FACULTY DESIGNATION", "DESIGNATION"]
+                    mentor_container,
+                    ["FACULTY DESIGNATION", "STAFF DESIGNATION", "PROCTOR DESIGNATION", "DESIGNATION"] if proctor_table else ["FACULTY DESIGNATION", "STAFF DESIGNATION", "PROCTOR DESIGNATION"],
+                    exclude_labels=["FATHER", "MOTHER", "PARENT", "OCCUPATION"]
                 )
                 mentor["school"] = extract_field_value(
-                    proctor_section,
-                    ["FACULTY SCHOOL", "SCHOOL / CENTRE", "SCHOOL", "CENTRE"]
+                    mentor_container,
+                    ["FACULTY SCHOOL", "SCHOOL / CENTRE"] if not proctor_table else ["FACULTY SCHOOL", "SCHOOL / CENTRE", "SCHOOL"],
+                    exclude_labels=["HIGH SCHOOL", "PREVIOUS", "QUALIFYING", "10TH", "12TH", "BOARD"]
                 )
                 mentor["cabin"] = extract_field_value(
-                    proctor_section,
-                    ["CABIN NO", "CABIN", "ROOM"]
+                    mentor_container,
+                    ["CABIN NO", "CABIN NUMBER", "CABIN", "ROOM NO", "ROOM"]
                 )
                 mentor["faculty_department"] = extract_field_value(
-                    proctor_section,
+                    mentor_container,
                     ["FACULTY DEPARTMENT", "DEPARTMENT"]
                 )
                 mentor["faculty_email"] = extract_field_value(
-                    proctor_section,
-                    ["FACULTY EMAIL", "EMAIL"]
+                    mentor_container,
+                    ["FACULTY EMAIL", "FACULTY EMAIL ID", "PROCTOR EMAIL"] if not proctor_table else ["FACULTY EMAIL", "FACULTY EMAIL ID", "PROCTOR EMAIL", "EMAIL"],
+                    exclude_labels=["STUDENT", "PARENT", "FATHER", "MOTHER", "PERSONAL"]
                 )
                 mentor["faculty_intercom"] = extract_field_value(
-                    proctor_section,
+                    mentor_container,
                     ["FACULTY INTERCOM", "INTERCOM"]
                 )
                 mentor["faculty_mobile"] = extract_field_value(
-                    proctor_section,
-                    ["FACULTY MOBILE", "MOBILE NUMBER", "MOBILE"]
+                    mentor_container,
+                    ["FACULTY MOBILE NUMBER", "FACULTY MOBILE", "PROCTOR MOBILE", "FACULTY PHONE"] if not proctor_table else ["FACULTY MOBILE NUMBER", "FACULTY MOBILE", "PROCTOR MOBILE", "FACULTY PHONE", "MOBILE NUMBER"],
+                    exclude_labels=["STUDENT", "PARENT", "FATHER", "MOTHER", "PERSONAL"]
                 )
 
-            # If mentor faculty_name was missing but faculty_id (e.g. 70616) was found, look it up in faculty list
-            if not mentor["faculty_name"] and mentor["faculty_id"]:
+            # Clean invalid proctor designations (like father's occupation)
+            INVALID_DESIGNATIONS = ["SUPERVISOR", "BUSINESS", "HOMEMAKER", "HOUSEWIFE", "SELF EMPLOYED", "AGRICULTURE", "FATHER", "MOTHER"]
+            if mentor["faculty_designation"].upper() in INVALID_DESIGNATIONS:
+                mentor["faculty_designation"] = ""
+
+            # Clean invalid proctor schools (like high schools)
+            if any(hs in mentor["school"].upper() for hs in ["VIDYALAYA", "HIGH SCHOOL", "CHINMAYA", "SECONDARY", "JUNIOR COLLEGE"]):
+                mentor["school"] = ""
+
+            # If mentor faculty_name is missing or incomplete, fetch from dedicated proctor route
+            if not mentor["faculty_name"] or not mentor["faculty_id"]:
+                try:
+                    dedicated_mentor = await self.get_proctor_details()
+                    for k, v in dedicated_mentor.items():
+                        if v and not mentor.get(k):
+                            mentor[k] = v
+                except Exception as proctor_err:
+                    print(f"Error checking dedicated proctor route: {proctor_err}")
+
+            # If faculty_id (e.g. 70616) is available, look up in faculty_list.json to resolve or verify details
+            if mentor["faculty_id"]:
                 emp_id = mentor["faculty_id"].strip()
                 try:
                     faculty_file = os.path.join(os.path.dirname(__file__), "faculty_list.json")
@@ -2453,10 +2545,11 @@ class VTOPSession:
                             fac_list = json.load(f)
                             for f_entry in fac_list:
                                 if str(f_entry.get("emp_id", "")).strip() == emp_id:
-                                    mentor["faculty_name"] = f_entry.get("faculty_name", "")
-                                    if not mentor["faculty_designation"]:
+                                    if not mentor["faculty_name"]:
+                                        mentor["faculty_name"] = f_entry.get("faculty_name", "")
+                                    if not mentor["faculty_designation"] or mentor["faculty_designation"].upper() in INVALID_DESIGNATIONS:
                                         mentor["faculty_designation"] = f_entry.get("designation", "")
-                                    if not mentor["school"]:
+                                    if not mentor["school"] or any(hs in mentor["school"].upper() for hs in ["VIDYALAYA", "HIGH SCHOOL", "CHINMAYA"]):
                                         mentor["school"] = f_entry.get("school_or_centre", "")
                                     break
                 except Exception as fe:
@@ -2486,7 +2579,12 @@ class VTOPSession:
                 txt = el.get_text(" ", strip=True).upper()
                 return any(k in txt for k in HIGH_SCHOOL_KEYWORDS)
 
-            proctor_tables = set(proctor_section.find_all("table")) if proctor_section else set()
+            proctor_tables = set()
+            if proctor_table:
+                proctor_tables.add(proctor_table)
+            if proctor_section:
+                proctor_tables.update(proctor_section.find_all("table"))
+
             univ_tables = [
                 t for t in soup.find_all("table")
                 if not is_high_school(t) and t not in proctor_tables
@@ -2574,14 +2672,42 @@ class VTOPSession:
                         return val
                 return extract_field_value(soup, targets, exclude_labels)
 
+            student_name = extract_personal(["STUDENT NAME", "NAME OF THE STUDENT", "NAME"], exclude_labels=["FACULTY", "PROCTOR", "STAFF", "FATHER", "MOTHER", "PARENT"])
+            if not student_name:
+                student_name = extract_field_value(soup, ["STUDENT NAME", "NAME OF THE STUDENT", "NAME"], exclude_labels=["FACULTY", "PROCTOR", "STAFF", "FATHER", "MOTHER", "PARENT"])
+
+            student_email = extract_personal(["EMAIL", "EMAIL ID", "STUDENT EMAIL"], exclude_labels=["FACULTY", "PROCTOR", "STAFF", "PARENT", "FATHER", "MOTHER"])
+
+            # Robust Date of Birth extraction
+            dob = extract_personal(["DATE OF BIRTH", "D.O.B", "DOB", "BIRTH DATE", "DATE_OF_BIRTH"], exclude_labels=["FATHER", "MOTHER", "PARENT"])
+            if not dob:
+                # Direct scan of all td elements across the entire soup
+                all_tds = soup.find_all(["td", "th"])
+                for idx, td in enumerate(all_tds):
+                    td_txt = re.sub(r'\s+', ' ', td.get_text(" ", strip=True)).upper().rstrip(":").strip()
+                    if td_txt in ["DATE OF BIRTH", "D.O.B", "DOB", "BIRTH DATE"] or ("DATE OF BIRTH" in td_txt and not any(p in td_txt for p in ["FATHER", "MOTHER", "PARENT", "GUARDIAN"])):
+                        if idx + 1 < len(all_tds):
+                            next_val = re.sub(r'\s+', ' ', all_tds[idx + 1].get_text(" ", strip=True)).lstrip(":").strip()
+                            if next_val == ":" and idx + 2 < len(all_tds):
+                                next_val = re.sub(r'\s+', ' ', all_tds[idx + 2].get_text(" ", strip=True)).lstrip(":").strip()
+                            if next_val and next_val != "-" and next_val.upper() not in ["NOT AVAILABLE", "N/A"]:
+                                dob = next_val
+                                break
+
+            # Sanity guard: Ensure mentor data never leaks student's personal info
+            if mentor["faculty_name"] and student_name and mentor["faculty_name"].strip().upper() == student_name.strip().upper():
+                mentor["faculty_name"] = ""
+            if mentor["faculty_email"] and student_email and mentor["faculty_email"].strip().lower() == student_email.strip().lower():
+                mentor["faculty_email"] = ""
+
             profile = {
-                "name": extract_personal(["STUDENT NAME", "NAME OF THE STUDENT", "NAME"], exclude_labels=["FACULTY", "PROCTOR", "FATHER", "MOTHER"]),
+                "name": student_name,
                 "reg_no": self.registration_number,
                 "application_number": extract_personal(["APPLICATION NUMBER", "APPLICATION NO", "APPL NO"]),
-                "dob": extract_personal(["DATE OF BIRTH", "D.O.B", "DOB", "BIRTH DATE"]),
+                "dob": dob,
                 "gender": extract_personal(["GENDER", "SEX"]),
                 "blood_group": extract_personal(["BLOOD GROUP", "BLOOD GRP", "BLOOD"]),
-                "email": extract_personal(["EMAIL", "EMAIL ID", "STUDENT EMAIL"], exclude_labels=["FACULTY", "PARENT", "FATHER", "MOTHER"]),
+                "email": student_email,
                 "program": raw_program,
                 "branch": raw_branch,
                 "school": raw_school,
@@ -2589,9 +2715,6 @@ class VTOPSession:
                 "mentor": mentor["faculty_name"],
                 "mentor_details": mentor,
             }
-
-            if not profile["name"]:
-                profile["name"] = extract_field_value(soup, ["STUDENT NAME", "NAME OF THE STUDENT", "NAME"])
 
             self._cache["profile"] = profile
             return profile
