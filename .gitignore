@@ -41,8 +41,10 @@ scratch_repo/
 scratch_vitapmate/
 temp_clone/
 reference_app/
+backend/vitap-vtop-client/
 backend/.git_backup/
 .git_backup/
+app-release.apk*
 
 # Root scratch and debug scripts
 cleanup.py

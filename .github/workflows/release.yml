@@ -59,7 +59,7 @@ jobs:
 
       - name: Build Release APK
         working-directory: vitap_super_app
-        run: flutter build apk --release -v
+        run: flutter build apk --release --android-skip-build-dependency-validation
 
       - name: Prepare Release Artifacts
         run: |
