@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+httpx
+python-multipart
+beautifulsoup4
+lxml
+Pillow
+ddddocr
+ujson
+uvloop; sys_platform != "win32"
