@@ -52,7 +52,7 @@ decoded_otp.html
 download_flutter_artifacts.py
 fix*.py
 otp_scripts.js
-outing*
+/outing*
 parse_html.py
 patch*.py
 payments_oldurl.txt
