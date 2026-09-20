@@ -2080,27 +2080,51 @@ class VTOPSession:
             if "Course Code" not in table.get_text():
                 continue
             
+            # Dynamically determine column indices from header
+            col_code = 1
+            col_subj = 2
+            col_type = 3
+            col_cred = 4
+            col_grade = 5
+            col_month = 6
+            col_dist = 8
+
+            for tr in table.find_all("tr"):
+                cells = tr.find_all(["th", "td"])
+                texts = [c.get_text(strip=True).lower() for c in cells]
+                if any("course code" in t for t in texts):
+                    for idx, t in enumerate(texts):
+                        if "course code" in t: col_code = idx
+                        elif any(k in t for k in ["title", "subject", "name"]): col_subj = idx
+                        elif "type" in t: col_type = idx
+                        elif any(k in t for k in ["credit", "cr"]): col_cred = idx
+                        elif "grade" in t: col_grade = idx
+                        elif any(k in t for k in ["exam", "month", "session"]): col_month = idx
+                        elif any(k in t for k in ["distribution", "category", "basket", "component"]): col_dist = idx
+                        elif "option" in t and col_dist == 8: col_dist = idx
+                    break
+            
             for row in table.find_all("tr", class_="tableContent"):
                 tds = row.find_all("td")
-                if len(tds) < 10:
+                if len(tds) <= max(col_code, col_subj, col_cred, col_grade):
                     continue
                 
                 def clean(cell):
                     return cell.get_text(strip=True)
                 
-                course_code = clean(tds[1])
+                course_code = clean(tds[col_code])
                 # Skip header rows
                 if course_code == "Course Code" or not course_code:
                     continue
                 
                 courses.append({
                     "course_code": course_code,
-                    "subject": clean(tds[2]),
-                    "type": clean(tds[3]),
-                    "credits": clean(tds[4]),
-                    "grade": clean(tds[5]),
-                    "exam_month": clean(tds[6]) if len(tds) > 6 else "",
-                    "course_distribution": clean(tds[8]) if len(tds) > 8 else "",
+                    "subject": clean(tds[col_subj]) if col_subj < len(tds) else "",
+                    "type": clean(tds[col_type]) if col_type < len(tds) else "",
+                    "credits": clean(tds[col_cred]) if col_cred < len(tds) else "",
+                    "grade": clean(tds[col_grade]) if col_grade < len(tds) else "",
+                    "exam_month": clean(tds[col_month]) if col_month < len(tds) else "",
+                    "course_distribution": clean(tds[col_dist]) if col_dist != -1 and col_dist < len(tds) else (clean(tds[8]) if len(tds) > 8 else ""),
                 })
         
         def get_exam_sort_key(course):
@@ -2871,12 +2895,13 @@ class VTOPSession:
                             "exam_month": g.get("exam_month", ""),
                         })
 
-                # If earned was 0.0 or not matching, use the sum of passed courses
+                # Preserving authentic VTOP earned credits from official curriculum table.
+                # Only use calc_earned if VTOP did not report earned credits (curr_earned == 0.0).
                 curr_earned = float(dist.get("earned", 0) or 0)
                 if curr_earned == 0.0 and calc_earned > 0.0:
                     dist["earned"] = str(calc_earned)
-                elif calc_earned > 0.0:
-                    dist["earned"] = str(calc_earned)
+                elif curr_earned > 0.0:
+                    dist["earned"] = str(curr_earned)
 
                 req_val = float(dist.get("required", 0) or 0)
                 dist["left"] = str(round(max(0.0, req_val - float(dist["earned"])), 2))
@@ -2888,12 +2913,18 @@ class VTOPSession:
             tot_req = sum(float(d["required"]) for d in clean_distribution if d["category"] in standard_order)
             
             parsed_earned = float(data["summary"].get("earned", 0) or 0)
-            if parsed_earned == 0.0 or tot_earned > 0:
-                data["summary"]["earned"] = str(tot_earned) if tot_earned > 0 else str(parsed_earned)
+            if parsed_earned > 0.0:
+                data["summary"]["earned"] = str(parsed_earned)
+            elif tot_earned > 0:
+                data["summary"]["earned"] = str(tot_earned)
 
             parsed_total = float(data["summary"].get("total", 0) or 0)
-            if parsed_total < 100:
-                data["summary"]["total"] = str(tot_req) if tot_req >= 100 else "160.0"
+            if parsed_total >= 100:
+                data["summary"]["total"] = str(parsed_total)
+            elif tot_req >= 100:
+                data["summary"]["total"] = str(tot_req)
+            else:
+                data["summary"]["total"] = "160.0"
 
             t_val = float(data["summary"]["total"])
             e_val = float(data["summary"]["earned"])

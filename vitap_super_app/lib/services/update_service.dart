@@ -33,7 +33,7 @@ class UpdateService {
   static const String repoOwner = "AbhiLohar";
   static const String repoName = "vitap-backend";
   
-  static const String fallbackVersion = "1.0.0";
+  static const String fallbackVersion = "1.0.2";
   static const String releasesApiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest";
   static const String releasesWebUrl = "https://github.com/$repoOwner/$repoName/releases/latest";
 

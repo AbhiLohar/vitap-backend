@@ -136,7 +136,7 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
           : errorMessage != null
               ? _errorView()
               : RefreshIndicator(
-                  onRefresh: _fetchCredits,
+                  onRefresh: () => _fetchCredits(forceSync: true),
                   color: AppColors.primary,
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
