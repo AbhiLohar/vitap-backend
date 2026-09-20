@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vitap_super_app/services/update_service.dart';
 
@@ -32,6 +33,46 @@ void main() {
 
     test('handles build metadata (+1)', () {
       expect(UpdateService.compareVersions('1.0.1+2', '1.0.0+1'), greaterThan(0));
+    });
+  });
+
+  group('UpdateService Multi-Tier URL & Parsing', () {
+    test('CDN URL points to raw githubusercontent Fastly endpoint', () {
+      expect(UpdateService.cdnVersionUrl,
+          contains('raw.githubusercontent.com/AbhiLohar/vitap-backend/main/version.json'));
+    });
+
+    test('Web URL points to GitHub releases latest', () {
+      expect(UpdateService.releasesWebUrl,
+          equals('https://github.com/AbhiLohar/vitap-backend/releases/latest'));
+    });
+
+    test('Parses version.json structure properly', () {
+      const rawJson = '''{
+        "version": "1.0.4",
+        "versionCode": 5,
+        "title": "Version 1.0.4",
+        "notes": "Bug fixes and improvements.",
+        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.4/app-release.apk",
+        "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/latest"
+      }''';
+
+      final data = json.decode(rawJson) as Map<String, dynamic>;
+      final ver = (data["version"] ?? "").toString().replaceAll(RegExp(r'^[v\s]+'), '');
+      expect(ver, equals('1.0.4'));
+      expect(UpdateService.compareVersions(ver, '1.0.3'), greaterThan(0));
+      expect(data["apkUrl"], endsWith('.apk'));
+    });
+
+    test('Parses 302 Location header correctly for GitHub web releases', () {
+      const location = 'https://github.com/AbhiLohar/vitap-backend/releases/tag/v1.0.4';
+      final tagMatch = RegExp(r'releases/tag/([^/?#]+)').firstMatch(location);
+      expect(tagMatch, isNotNull);
+      final tag = tagMatch!.group(1)!;
+      expect(tag, equals('v1.0.4'));
+      final ver = tag.replaceAll(RegExp(r'^[v\s]+'), '').trim();
+      expect(ver, equals('1.0.4'));
+      expect(UpdateService.compareVersions(ver, '1.0.3'), greaterThan(0));
     });
   });
 }

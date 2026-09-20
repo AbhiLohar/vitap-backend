@@ -1,0 +1,9 @@
+{
+  "version": "1.0.3",
+  "versionCode": 4,
+  "title": "Version 1.0.3",
+  "notes": "• Fixed University Elective total & earned credits calculation\n• Resilient multi-tier update detection (zero rate limits)\n• Performance optimizations and bug fixes",
+  "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.3/app-release.apk",
+  "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/latest",
+  "publishedAt": "2026-09-20T19:00:00Z"
+}

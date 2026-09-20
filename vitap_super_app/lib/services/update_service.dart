@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../config/api_config.dart';
 import '../widgets/update_dialog.dart';
 import 'notification_service.dart';
 
@@ -33,10 +34,24 @@ class UpdateService {
   // GitHub repository details
   static const String repoOwner = "AbhiLohar";
   static const String repoName = "vitap-backend";
-  
+
   static const String fallbackVersion = "1.0.3";
-  static const String releasesApiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest";
-  static const String releasesWebUrl = "https://github.com/$repoOwner/$repoName/releases/latest";
+
+  // Multi-tier URLs
+  // Tier 1: Fastly CDN raw file - zero rate limits, cached globally
+  static const String cdnVersionUrl =
+      "https://raw.githubusercontent.com/$repoOwner/$repoName/main/version.json";
+
+  // Tier 2: Backend API endpoint
+  static String get backendVersionUrl => "${ApiConfig.baseUrl}/app/version";
+
+  // Tier 3: GitHub Web UI redirect (no 60 req/hr API restriction)
+  static const String releasesWebUrl =
+      "https://github.com/$repoOwner/$repoName/releases/latest";
+
+  // Tier 4: GitHub REST API (fallback)
+  static const String releasesApiUrl =
+      "https://api.github.com/repos/$repoOwner/$repoName/releases/latest";
 
   static const String _prefLastCheckKey = "last_update_check_time";
   static const String _prefIgnoredVersionKey = "ignored_update_version";
@@ -78,97 +93,221 @@ class UpdateService {
     return fallbackVersion;
   }
 
-  /// Check GitHub Releases for any new APK version.
-  static Future<UpdateInfo?> checkForUpdate({bool isManual = false}) async {
+  /// Tier 1: GitHub Raw CDN (Fastly CDN - zero rate limits)
+  static Future<UpdateInfo?> _fetchFromCdn(String currentVersion) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final response = await http.get(
+        Uri.parse(cdnVersionUrl),
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+      ).timeout(const Duration(seconds: 6));
 
-      // For automatic launch checks: throttle to at most once every 15 minutes
-      if (!isManual) {
-        final lastCheckMillis = prefs.getInt(_prefLastCheckKey) ?? 0;
-        final now = DateTime.now().millisecondsSinceEpoch;
-        if (now - lastCheckMillis < const Duration(minutes: 15).inMilliseconds) {
-          return null; // Recently checked, skip to save network & rate limits
-        }
-        await prefs.setInt(_prefLastCheckKey, now);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final rawVer = (data["version"] ?? "").toString();
+        final latestVersion = rawVer.replaceAll(RegExp(r'^[v\s]+'), '').trim();
+        if (latestVersion.isEmpty) return null;
+
+        final releaseTitle = (data["title"] ?? "Version $latestVersion").toString();
+        final releaseNotes = (data["notes"] ?? "Bug fixes and improvements.").toString();
+        final apkUrl = (data["apkUrl"] as String?) ??
+            "https://github.com/$repoOwner/$repoName/releases/download/v$latestVersion/app-release.apk";
+        final releasePageUrl = (data["releaseUrl"] ?? releasesWebUrl).toString();
+        final publishedStr = data["publishedAt"] as String?;
+        final publishedAt = publishedStr != null ? DateTime.tryParse(publishedStr) : null;
+
+        return UpdateInfo(
+          hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+          releaseTitle: releaseTitle,
+          releaseNotes: releaseNotes,
+          apkDownloadUrl: apkUrl,
+          releasePageUrl: releasePageUrl,
+          publishedAt: publishedAt,
+        );
       }
+    } catch (_) {}
+    return null;
+  }
 
-      final currentVersion = await getCurrentVersion();
+  /// Tier 2: FastAPI Backend (/app/version)
+  static Future<UpdateInfo?> _fetchFromBackend(String currentVersion) async {
+    try {
+      final response = await http.get(
+        Uri.parse(backendVersionUrl),
+        headers: {'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 6));
 
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final rawVer = (data["version"] ?? "").toString();
+        final latestVersion = rawVer.replaceAll(RegExp(r'^[v\s]+'), '').trim();
+        if (latestVersion.isEmpty) return null;
+
+        final releaseTitle = (data["title"] ?? "Version $latestVersion").toString();
+        final releaseNotes = (data["notes"] ?? "Bug fixes and improvements.").toString();
+        final apkUrl = (data["apkUrl"] as String?) ??
+            "https://github.com/$repoOwner/$repoName/releases/download/v$latestVersion/app-release.apk";
+        final releasePageUrl = (data["releaseUrl"] ?? releasesWebUrl).toString();
+        final publishedStr = data["publishedAt"] as String?;
+        final publishedAt = publishedStr != null ? DateTime.tryParse(publishedStr) : null;
+
+        return UpdateInfo(
+          hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+          releaseTitle: releaseTitle,
+          releaseNotes: releaseNotes,
+          apkDownloadUrl: apkUrl,
+          releasePageUrl: releasePageUrl,
+          publishedAt: publishedAt,
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Tier 3: GitHub Web UI 302 Redirect (inspects Location header, no API rate limits)
+  static Future<UpdateInfo?> _fetchFromWebRedirect(String currentVersion) async {
+    try {
+      final client = http.Client();
+      try {
+        final headReq = http.Request('HEAD', Uri.parse(releasesWebUrl))
+          ..followRedirects = false;
+        var streamed = await client.send(headReq).timeout(const Duration(seconds: 6));
+
+        // If HEAD is rejected or redirects with body, try GET with followRedirects: false
+        if (streamed.statusCode != 302 && streamed.statusCode != 301) {
+          final getReq = http.Request('GET', Uri.parse(releasesWebUrl))
+            ..followRedirects = false;
+          streamed = await client.send(getReq).timeout(const Duration(seconds: 6));
+        }
+
+        final location = streamed.headers['location'] ?? '';
+        if (location.isNotEmpty) {
+          final tagMatch = RegExp(r'releases/tag/([^/?#]+)').firstMatch(location);
+          if (tagMatch != null) {
+            final tag = tagMatch.group(1)!;
+            final latestVersion = tag.replaceAll(RegExp(r'^[v\s]+'), '').trim();
+            final directApk =
+                "https://github.com/$repoOwner/$repoName/releases/download/$tag/app-release.apk";
+            final pageUrl = "https://github.com/$repoOwner/$repoName/releases/tag/$tag";
+
+            return UpdateInfo(
+              hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
+              currentVersion: currentVersion,
+              latestVersion: latestVersion,
+              releaseTitle: "Version $latestVersion",
+              releaseNotes: "A new update for VTOP Super App is available! Tap Update Now to download the latest APK.",
+              apkDownloadUrl: directApk,
+              releasePageUrl: pageUrl,
+            );
+          }
+        }
+      } finally {
+        client.close();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Tier 4: GitHub REST API (gracefully catches 403 without throwing)
+  static Future<UpdateInfo?> _fetchFromGitHubApi(String currentVersion) async {
+    try {
       final response = await http.get(
         Uri.parse(releasesApiUrl),
         headers: {
           'Accept': 'application/vnd.github.v3+json',
           'User-Agent': 'VTOP-Super-App',
         },
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 6));
 
-      if (response.statusCode == 404) {
-        // No release published on GitHub yet
-        return UpdateInfo(
-          hasUpdate: false,
-          currentVersion: currentVersion,
-          latestVersion: currentVersion,
-          releaseTitle: "Latest",
-          releaseNotes: "No releases found on GitHub.",
-          releasePageUrl: releasesWebUrl,
-        );
-      }
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final rawTag = (data["tag_name"] ?? "").toString();
+        final latestVersion = rawTag.replaceAll(RegExp(r'^[v\s]+'), '').trim();
+        final releaseTitle = (data["name"] ?? "Version $latestVersion").toString();
+        final releaseNotes = (data["body"] ?? "Bug fixes and improvements.").toString();
+        final htmlUrl = (data["html_url"] ?? releasesWebUrl).toString();
+        final publishedStr = data["published_at"] as String?;
+        final publishedAt = publishedStr != null ? DateTime.tryParse(publishedStr) : null;
 
-      if (response.statusCode != 200) {
-        throw Exception("GitHub API returned status ${response.statusCode}");
-      }
-
-      final data = json.decode(response.body) as Map<String, dynamic>;
-      final rawTag = (data["tag_name"] ?? "").toString();
-      final latestVersion = rawTag.replaceAll(RegExp(r'^[v\s]+'), '').trim();
-      final releaseTitle = (data["name"] ?? "Version $latestVersion").toString();
-      final releaseNotes = (data["body"] ?? "Bug fixes and improvements.").toString();
-      final htmlUrl = (data["html_url"] ?? releasesWebUrl).toString();
-      final publishedStr = data["published_at"] as String?;
-      final publishedAt = publishedStr != null ? DateTime.tryParse(publishedStr) : null;
-
-      // Find direct .apk asset download URL
-      String? apkUrl;
-      final assets = data["assets"] as List<dynamic>? ?? [];
-      for (final asset in assets) {
-        if (asset is Map<String, dynamic>) {
-          final name = (asset["name"] ?? "").toString().toLowerCase();
-          final downloadUrl = (asset["browser_download_url"] ?? "").toString();
-          if (name.endsWith(".apk") && downloadUrl.isNotEmpty) {
-            apkUrl = downloadUrl;
-            // Prefer app-release.apk
-            if (name.contains("release")) {
-              break;
+        String? apkUrl;
+        final assets = data["assets"] as List<dynamic>? ?? [];
+        for (final asset in assets) {
+          if (asset is Map<String, dynamic>) {
+            final name = (asset["name"] ?? "").toString().toLowerCase();
+            final downloadUrl = (asset["browser_download_url"] ?? "").toString();
+            if (name.endsWith(".apk") && downloadUrl.isNotEmpty) {
+              apkUrl = downloadUrl;
+              if (name.contains("release")) break;
             }
           }
         }
+
+        return UpdateInfo(
+          hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
+          currentVersion: currentVersion,
+          latestVersion: latestVersion.isNotEmpty ? latestVersion : currentVersion,
+          releaseTitle: releaseTitle,
+          releaseNotes: releaseNotes,
+          apkDownloadUrl: apkUrl ?? "https://github.com/$repoOwner/$repoName/releases/download/$rawTag/app-release.apk",
+          releasePageUrl: htmlUrl,
+          publishedAt: publishedAt,
+        );
       }
+    } catch (_) {}
+    return null;
+  }
 
-      final hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
+  /// Check for any new APK version across multi-tiered fallbacks.
+  static Future<UpdateInfo?> checkForUpdate({bool isManual = false}) async {
+    final prefs = await SharedPreferences.getInstance();
 
-      // If user previously chose "Don't remind me again" for this exact version, ignore on auto check
-      if (hasUpdate && !isManual) {
-        final ignoredVersion = prefs.getString(_prefIgnoredVersionKey);
-        if (ignoredVersion == latestVersion) {
-          return null;
-        }
+    // Throttling for automatic background checks (at most once every 15 mins)
+    if (!isManual) {
+      final lastCheckMillis = prefs.getInt(_prefLastCheckKey) ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - lastCheckMillis < const Duration(minutes: 15).inMilliseconds) {
+        return null;
       }
+      await prefs.setInt(_prefLastCheckKey, now);
+    }
 
-      return UpdateInfo(
-        hasUpdate: hasUpdate,
-        currentVersion: currentVersion,
-        latestVersion: latestVersion.isNotEmpty ? latestVersion : currentVersion,
-        releaseTitle: releaseTitle,
-        releaseNotes: releaseNotes,
-        apkDownloadUrl: apkUrl,
-        releasePageUrl: htmlUrl,
-        publishedAt: publishedAt,
-      );
-    } catch (e) {
-      if (isManual) rethrow;
+    final currentVersion = await getCurrentVersion();
+
+    // 1. Tier 1: Fastly CDN raw JSON (fastest, zero rate limits)
+    UpdateInfo? info = await _fetchFromCdn(currentVersion);
+
+    // 2. Tier 2: Backend API endpoint
+    info ??= await _fetchFromBackend(currentVersion);
+
+    // 3. Tier 3: GitHub Web UI redirect (bypasses GitHub REST API limits)
+    info ??= await _fetchFromWebRedirect(currentVersion);
+
+    // 4. Tier 4: GitHub REST API (handles 403 silently)
+    info ??= await _fetchFromGitHubApi(currentVersion);
+
+    // If completely offline or all network requests failed:
+    if (info == null) {
+      if (isManual) {
+        throw Exception("Unable to reach update servers. Please check your internet connection.");
+      }
       return null;
     }
+
+    // Check if user previously muted notifications for this version
+    if (info.hasUpdate && !isManual) {
+      final ignoredVersion = prefs.getString(_prefIgnoredVersionKey);
+      if (ignoredVersion == info.latestVersion) {
+        return null;
+      }
+    }
+
+    return info;
   }
 
   /// Launch APK download in the device browser / download manager
@@ -223,10 +362,17 @@ class UpdateService {
       }
     } catch (e) {
       if (isManual && context.mounted) {
+        final message = e.toString().replaceFirst("Exception: ", "");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Unable to check updates: $e"),
-            duration: const Duration(seconds: 3),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline_rounded, color: Colors.orangeAccent, size: 20),
+                const SizedBox(width: 10),
+                Expanded(child: Text(message)),
+              ],
+            ),
+            duration: const Duration(seconds: 4),
           ),
         );
       }

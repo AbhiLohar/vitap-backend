@@ -472,5 +472,30 @@ async def courses(username: str, semester_id: Optional[str] = None):
         handle_exception(e)
 
 
+# ── App Version / Updates ───────────────────────────────────────────────────
+@app.get("/app/version")
+@app.get("/app/update")
+async def app_version():
+    import os
+    import json
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    version_file = os.path.join(root_dir, "version.json")
+    if os.path.exists(version_file):
+        try:
+            with open(version_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "version": "1.0.3",
+        "versionCode": 4,
+        "title": "Version 1.0.3",
+        "notes": "• Fixed University Elective total & earned credits calculation\n• Resilient multi-tier update detection\n• Performance optimizations and bug fixes",
+        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.3/app-release.apk",
+        "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/latest",
+        "publishedAt": "2026-09-20T19:00:00Z"
+    }
+
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
