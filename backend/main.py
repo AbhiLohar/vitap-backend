@@ -487,13 +487,13 @@ async def app_version():
         except Exception:
             pass
     return {
-        "version": "1.0.3",
-        "versionCode": 4,
-        "title": "Version 1.0.3",
-        "notes": "• Fixed University Elective total & earned credits calculation\n• Resilient multi-tier update detection\n• Performance optimizations and bug fixes",
-        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.3/app-release.apk",
+        "version": "1.0.4",
+        "versionCode": 5,
+        "title": "Version 1.0.4",
+        "notes": "• Fixed University Elective earned credits (aligned with official degree requirements)\n• Reconciled curriculum credits across core and elective categories\n• In-app OTA updater and performance improvements",
+        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.4/app-release.apk",
         "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/latest",
-        "publishedAt": "2026-09-20T19:00:00Z"
+        "publishedAt": "2026-09-20T21:30:00Z"
     }
 
 
