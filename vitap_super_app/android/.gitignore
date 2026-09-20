@@ -8,4 +8,5 @@ GeneratedPluginRegistrant.java
 # See https://flutter.dev/to/reference-keystore
 key.properties
 **/*.keystore
+!keystore/release.keystore
 **/*.jks
