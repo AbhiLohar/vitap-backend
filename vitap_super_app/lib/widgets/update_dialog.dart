@@ -101,7 +101,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
         return;
       }
 
-      // 2. Launch native Package Installer
+      // 2. Record installed version and launch native Package Installer
+      await UpdateService.recordInstalledVersion(widget.info.latestVersion);
       final launched = await UpdateService.installApk(file.path);
       if (!launched) {
         throw Exception("Could not start installer");

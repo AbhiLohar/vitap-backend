@@ -24,6 +24,17 @@ void main() {
     test('returns 0 for equal versions', () {
       expect(UpdateService.compareVersions('1.0.0', '1.0.0'), equals(0));
       expect(UpdateService.compareVersions('v1.0.0', '1.0.0'), equals(0));
+      expect(UpdateService.compareVersions('1.0.4', '1.0.4'), equals(0));
+      expect(UpdateService.compareVersions('v1.0.4', '1.0.4'), equals(0));
+      expect(UpdateService.compareVersions('1.0.4', '1.0.4+5'), equals(0));
+      expect(UpdateService.compareVersions('1.0.4+5', '1.0.4'), equals(0));
+    });
+
+    test('no update when installed version is equal to or greater than available', () {
+      // compareVersions(latest, current) > 0 means update available
+      expect(UpdateService.compareVersions('1.0.4', '1.0.4') > 0, isFalse);
+      expect(UpdateService.compareVersions('1.0.4', '1.0.5') > 0, isFalse);
+      expect(UpdateService.compareVersions('1.0.4', '1.0.3') > 0, isTrue);
     });
 
     test('handles multi-digit semantic numbers correctly (1.10.0 > 1.9.0)', () {
@@ -33,6 +44,12 @@ void main() {
 
     test('handles build metadata (+1)', () {
       expect(UpdateService.compareVersions('1.0.1+2', '1.0.0+1'), greaterThan(0));
+    });
+
+    test('currentAppVersion and fallbackVersion are set to 1.0.4', () {
+      expect(UpdateService.currentAppVersion, equals('1.0.4'));
+      expect(UpdateService.fallbackVersion, equals('1.0.4'));
+      expect(UpdateService.currentVersionCode, equals(5));
     });
   });
 

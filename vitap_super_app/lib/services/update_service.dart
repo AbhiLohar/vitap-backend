@@ -39,7 +39,10 @@ class UpdateService {
   static const String repoOwner = "AbhiLohar";
   static const String repoName = "vitap-backend";
 
-  static const String fallbackVersion = "1.0.3";
+  // Central compile-time version for this app release
+  static const String currentAppVersion = "1.0.4";
+  static const int currentVersionCode = 5;
+  static const String fallbackVersion = currentAppVersion;
 
   // Native Android package installer channel
   static const MethodChannel _installerChannel =
@@ -63,6 +66,7 @@ class UpdateService {
 
   static const String _prefLastCheckKey = "last_update_check_time";
   static const String _prefIgnoredVersionKey = "ignored_update_version";
+  static const String prefInstalledVersionKey = "last_installed_version";
 
   /// Compares two semver version strings (e.g. "1.0.1" vs "1.0.0").
   /// Returns > 0 if v1 > v2, < 0 if v1 < v2, 0 if equal.
@@ -92,13 +96,51 @@ class UpdateService {
 
   /// Get the current installed app version.
   static Future<String> getCurrentVersion() async {
+    String detectedVersion = "";
+
+    // 1. Try native Android packageManager via our installer channel (most accurate, zero caching)
+    if (Platform.isAndroid) {
+      try {
+        final res = await _installerChannel.invokeMapMethod<String, dynamic>('getAppVersion');
+        if (res != null) {
+          final ver = res['versionName']?.toString().trim();
+          if (ver != null && ver.isNotEmpty) {
+            detectedVersion = ver.replaceAll(RegExp(r'^[v\s]+'), '');
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Try PackageInfo plugin
+    if (detectedVersion.isEmpty) {
+      try {
+        final info = await PackageInfo.fromPlatform();
+        final ver = info.version.trim();
+        if (ver.isNotEmpty && ver != "0.0.0") {
+          detectedVersion = ver.replaceAll(RegExp(r'^[v\s]+'), '');
+        }
+      } catch (_) {}
+    }
+
+    // 3. Check SharedPreferences for last recorded installed version (safeguard if user updated
+    // while app process was kept alive in background)
     try {
-      final info = await PackageInfo.fromPlatform();
-      if (info.version.isNotEmpty) {
-        return info.version;
+      final prefs = await SharedPreferences.getInstance();
+      final installedVer = prefs.getString(prefInstalledVersionKey)?.trim();
+      if (installedVer != null && installedVer.isNotEmpty) {
+        if (detectedVersion.isEmpty || compareVersions(installedVer, detectedVersion) > 0) {
+          detectedVersion = installedVer;
+        }
       }
     } catch (_) {}
-    return fallbackVersion;
+
+    // 4. If detected version is still empty or older than this binary's compiled version,
+    // default to the compile-time currentAppVersion
+    if (detectedVersion.isEmpty || compareVersions(currentAppVersion, detectedVersion) > 0) {
+      detectedVersion = currentAppVersion;
+    }
+
+    return detectedVersion;
   }
 
   /// Check whether the app has permission to install unknown apps (Android 8.0+)
@@ -418,6 +460,15 @@ class UpdateService {
     } catch (_) {}
   }
 
+  /// Record that an APK update was launched/installed
+  static Future<void> recordInstalledVersion(String version) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final clean = version.replaceAll(RegExp(r'^[v\s]+'), '').trim();
+      await prefs.setString(prefInstalledVersionKey, clean);
+    } catch (_) {}
+  }
+
   /// Auto-check on app startup or manual trigger
   static Future<void> checkAndShow(BuildContext context, {bool isManual = false}) async {
     try {
@@ -440,11 +491,19 @@ class UpdateService {
         final current = info?.currentVersion ?? fallbackVersion;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             content: Row(
               children: [
-                const Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
-                const SizedBox(width: 10),
-                Expanded(child: Text("You're on the latest version (v$current)!")),
+                const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "VTOP Super App is up to date (v$current)!",
+                    style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                  ),
+                ),
               ],
             ),
             duration: const Duration(seconds: 3),
