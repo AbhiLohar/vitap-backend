@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
@@ -36,6 +40,10 @@ class UpdateService {
   static const String repoName = "vitap-backend";
 
   static const String fallbackVersion = "1.0.3";
+
+  // Native Android package installer channel
+  static const MethodChannel _installerChannel =
+      MethodChannel("com.example.vitap_super_app/installer");
 
   // Multi-tier URLs
   // Tier 1: Fastly CDN raw file - zero rate limits, cached globally
@@ -91,6 +99,89 @@ class UpdateService {
       }
     } catch (_) {}
     return fallbackVersion;
+  }
+
+  /// Check whether the app has permission to install unknown apps (Android 8.0+)
+  static Future<bool> canRequestPackageInstalls() async {
+    try {
+      final res = await _installerChannel.invokeMethod<bool>('canRequestPackageInstalls');
+      return res ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Open Android settings to toggle "Allow from this source" for VTOP Super App
+  static Future<void> openInstallSettings() async {
+    try {
+      await _installerChannel.invokeMethod('openInstallSettings');
+    } catch (_) {}
+  }
+
+  /// Trigger the native Android package installer using FileProvider
+  static Future<bool> installApk(String filePath) async {
+    try {
+      final res = await _installerChannel.invokeMethod<bool>('installApk', {'filePath': filePath});
+      return res ?? false;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Downloads the release APK into local app cache with live byte progress
+  static Future<File> downloadApk(
+    String downloadUrl, {
+    required void Function(int receivedBytes, int totalBytes, double progress) onProgress,
+    bool Function()? isCancelled,
+    http.Client? customClient,
+  }) async {
+    final client = customClient ?? http.Client();
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final apkFile = File('${tempDir.path}/app-update.apk');
+      if (await apkFile.exists()) {
+        try {
+          await apkFile.delete();
+        } catch (_) {}
+      }
+
+      final request = http.Request('GET', Uri.parse(downloadUrl));
+      request.followRedirects = true;
+      request.headers['Accept'] = '*/*';
+      request.headers['User-Agent'] = 'VTOP-Super-App';
+
+      final response = await client.send(request).timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) {
+        throw Exception("Server responded with HTTP ${response.statusCode} while downloading update");
+      }
+
+      final totalBytes = response.contentLength ?? 0;
+      int receivedBytes = 0;
+      final sink = apkFile.openWrite();
+
+      await for (final chunk in response.stream) {
+        if (isCancelled != null && isCancelled()) {
+          await sink.close();
+          try {
+            await apkFile.delete();
+          } catch (_) {}
+          throw Exception("Download cancelled");
+        }
+        sink.add(chunk);
+        receivedBytes += chunk.length;
+        final progress = totalBytes > 0 ? (receivedBytes / totalBytes).clamp(0.0, 1.0) : 0.0;
+        onProgress(receivedBytes, totalBytes, progress);
+      }
+
+      await sink.flush();
+      await sink.close();
+
+      return apkFile;
+    } finally {
+      if (customClient == null) {
+        client.close();
+      }
+    }
   }
 
   /// Tier 1: GitHub Raw CDN (Fastly CDN - zero rate limits)
@@ -310,7 +401,7 @@ class UpdateService {
     return info;
   }
 
-  /// Launch APK download in the device browser / download manager
+  /// Launch APK download in the device browser / download manager (as fallback)
   static Future<bool> launchDownload(String url) async {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
