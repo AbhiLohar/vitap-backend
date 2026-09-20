@@ -3,6 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../models/note_model.dart';
+import 'update_service.dart';
 
 class NotificationService {
   NotificationService._();
@@ -19,7 +20,12 @@ class NotificationService {
 
     await _plugin.initialize(
       settings: initSettings,
-      onDidReceiveNotificationResponse: (details) {},
+      onDidReceiveNotificationResponse: (details) {
+        final payload = details.payload;
+        if (payload != null && (payload.startsWith('http://') || payload.startsWith('https://'))) {
+          UpdateService.launchDownload(payload);
+        }
+      },
     );
 
     final androidImplementation = _plugin.resolvePlatformSpecificImplementation<
@@ -27,6 +33,38 @@ class NotificationService {
     await androidImplementation?.requestNotificationsPermission();
 
     _initialized = true;
+  }
+
+  /// Post a high-priority system status bar notification for a new app release.
+  /// Tapping this notification directly triggers the APK download.
+  Future<void> showUpdateNotification(UpdateInfo info) async {
+    final downloadUrl = info.apkDownloadUrl ?? info.releasePageUrl;
+    final version = info.latestVersion;
+
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'vitap_updates',
+        'App Updates',
+        channelDescription: 'Notifications when a new app update is available',
+        importance: Importance.max,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+        autoCancel: true,
+        styleInformation: BigTextStyleInformation(
+          'Version $version is ready to install with new features and bug fixes. Tap here to download and install.',
+          contentTitle: '🚀 Update Available: v$version',
+          summaryText: 'Tap to Download APK',
+        ),
+      ),
+    );
+
+    await _plugin.show(
+      id: 888,
+      title: '🚀 Update Available: v$version',
+      body: 'Tap to download and install the latest update.',
+      notificationDetails: details,
+      payload: downloadUrl,
+    );
   }
 
   Future<void> _showNotification(String title, String body, int id) async {

@@ -7,6 +7,7 @@ import 'package:local_auth/local_auth.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/error_formatter.dart';
+import '../services/update_service.dart';
 import '../widgets/running_login_button.dart';
 import 'main_screen.dart';
 
@@ -105,7 +106,10 @@ class _LoginScreenState extends State<LoginScreen>
 
     regController.addListener(_onRegTextChange);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkAutoLogin());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAutoLogin();
+      UpdateService.checkAndShow(context);
+    });
   }
 
   void _startBlinkTimer() {

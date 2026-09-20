@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/update_dialog.dart';
+import 'notification_service.dart';
 
 class UpdateInfo {
   final bool hasUpdate;
@@ -33,7 +34,7 @@ class UpdateService {
   static const String repoOwner = "AbhiLohar";
   static const String repoName = "vitap-backend";
   
-  static const String fallbackVersion = "1.0.2";
+  static const String fallbackVersion = "1.0.3";
   static const String releasesApiUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest";
   static const String releasesWebUrl = "https://github.com/$repoOwner/$repoName/releases/latest";
 
@@ -82,11 +83,11 @@ class UpdateService {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // For automatic launch checks: throttle to at most once every 3 hours
+      // For automatic launch checks: throttle to at most once every 15 minutes
       if (!isManual) {
         final lastCheckMillis = prefs.getInt(_prefLastCheckKey) ?? 0;
         final now = DateTime.now().millisecondsSinceEpoch;
-        if (now - lastCheckMillis < const Duration(hours: 3).inMilliseconds) {
+        if (now - lastCheckMillis < const Duration(minutes: 15).inMilliseconds) {
           return null; // Recently checked, skip to save network & rate limits
         }
         await prefs.setInt(_prefLastCheckKey, now);
@@ -194,6 +195,12 @@ class UpdateService {
       if (!context.mounted) return;
 
       if (info != null && info.hasUpdate) {
+        // 1. Post persistent Android system status bar notification (tap to download)
+        try {
+          NotificationService.instance.showUpdateNotification(info);
+        } catch (_) {}
+
+        // 2. Display modal dialog
         showDialog(
           context: context,
           barrierDismissible: false,

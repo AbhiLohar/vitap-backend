@@ -19,7 +19,7 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 3; // Default to Dashboard
   DateTime? lastBackPressed;
 
@@ -29,6 +29,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     ApiService.onOtpRequired = () => showReAuthOtpDialog(context);
     _screens = [
       TimetableScreen(username: widget.username, semesterNotifier: _semesterNotifier),
@@ -47,6 +48,20 @@ class _MainScreenState extends State<MainScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       UpdateService.checkAndShow(context);
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _semesterNotifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      UpdateService.checkAndShow(context);
+    }
   }
 
   Future<bool> _onWillPop() async {
