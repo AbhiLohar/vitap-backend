@@ -78,7 +78,17 @@ class _UpdateDialogState extends State<UpdateDialog> {
       setState(() {
         _isDownloading = false;
         _isInstalling = false;
-        _errorMessage = e.toString().replaceFirst("Exception: ", "");
+        final rawError = e.toString().replaceFirst("Exception: ", "");
+        if (rawError.contains("ClientConnection closed") ||
+            rawError.contains("Connection closed") ||
+            rawError.contains("SocketException") ||
+            rawError.contains("ClientException") ||
+            rawError.contains("timeout") ||
+            rawError.contains("interrupted")) {
+          _errorMessage = "Network connection interrupted while downloading. Tap 'Retry' or 'Download via Browser'.";
+        } else {
+          _errorMessage = rawError;
+        }
       });
     }
   }
@@ -156,10 +166,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
       child: Container(
         constraints: const BoxConstraints(maxWidth: 420),
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
             // Header Icon & Title
             Center(
               child: Container(
@@ -432,14 +444,17 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   elevation: 2,
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.download_rounded, size: 18),
-                    SizedBox(width: 8),
+                    Icon(
+                      _errorMessage != null ? Icons.refresh_rounded : Icons.download_rounded,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
                     Text(
-                      "Update Now",
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      _errorMessage != null ? "Retry Update" : "Update Now",
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -457,14 +472,18 @@ class _UpdateDialogState extends State<UpdateDialog> {
                     ),
                   ),
                   Expanded(
-                    child: TextButton(
+                    child: TextButton.icon(
                       onPressed: () {
                         final targetUrl = widget.info.apkDownloadUrl ?? widget.info.releasePageUrl;
                         UpdateService.launchDownload(targetUrl);
                       },
-                      child: const Text(
+                      icon: const Icon(Icons.open_in_browser_rounded, size: 16),
+                      label: const Text(
                         "Download via Browser",
-                        style: TextStyle(color: AppColors.primary, fontSize: 13),
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.primary,
                       ),
                     ),
                   ),
@@ -474,6 +493,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }

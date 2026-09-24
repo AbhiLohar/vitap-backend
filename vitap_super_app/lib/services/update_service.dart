@@ -174,55 +174,151 @@ class UpdateService {
     }
   }
 
-  /// Downloads the release APK into local app cache with live byte progress
+  /// Downloads the release APK into local app cache with live byte progress,
+  /// automatic HTTP Range-based resume, and retry capability for unstable networks.
   static Future<File> downloadApk(
     String downloadUrl, {
     required void Function(int receivedBytes, int totalBytes, double progress) onProgress,
     bool Function()? isCancelled,
     http.Client? customClient,
+    int maxRetries = 5,
   }) async {
+    final tempDir = await getTemporaryDirectory();
+    final apkFile = File('${tempDir.path}/app-update.apk');
+
+    int receivedBytes = 0;
+    int totalBytes = 0;
+    int attempt = 0;
+
+    // Clean slate for new download
+    if (await apkFile.exists()) {
+      try {
+        await apkFile.delete();
+      } catch (_) {}
+    }
+
     final client = customClient ?? http.Client();
+
     try {
-      final tempDir = await getTemporaryDirectory();
-      final apkFile = File('${tempDir.path}/app-update.apk');
-      if (await apkFile.exists()) {
+      while (attempt < maxRetries) {
+        attempt++;
+        IOSink? sink;
         try {
-          await apkFile.delete();
-        } catch (_) {}
-      }
+          if (isCancelled != null && isCancelled()) {
+            throw Exception("Download cancelled");
+          }
 
-      final request = http.Request('GET', Uri.parse(downloadUrl));
-      request.followRedirects = true;
-      request.headers['Accept'] = '*/*';
-      request.headers['User-Agent'] = 'VTOP-Super-App';
+          final request = http.Request('GET', Uri.parse(downloadUrl));
+          request.followRedirects = true;
+          request.headers['Accept'] = '*/*';
+          request.headers['User-Agent'] = 'VTOP-Super-App';
 
-      final response = await client.send(request).timeout(const Duration(seconds: 20));
-      if (response.statusCode != 200) {
-        throw Exception("Server responded with HTTP ${response.statusCode} while downloading update");
-      }
+          // If resuming partial download, send HTTP Range header
+          if (receivedBytes > 0) {
+            request.headers['Range'] = 'bytes=$receivedBytes-';
+          }
 
-      final totalBytes = response.contentLength ?? 0;
-      int receivedBytes = 0;
-      final sink = apkFile.openWrite();
+          final response = await client.send(request).timeout(const Duration(seconds: 30));
 
-      await for (final chunk in response.stream) {
-        if (isCancelled != null && isCancelled()) {
+          // HTTP 200 = Full file, HTTP 206 = Partial file (resumed)
+          if (response.statusCode != 200 && response.statusCode != 206) {
+            throw Exception("Server responded with HTTP ${response.statusCode} while downloading update");
+          }
+
+          // If server returned 200 instead of 206, it restarted from 0
+          if (response.statusCode == 200 && receivedBytes > 0) {
+            receivedBytes = 0;
+            if (await apkFile.exists()) {
+              await apkFile.delete();
+            }
+          }
+
+          if (totalBytes == 0) {
+            if (response.statusCode == 206) {
+              final contentRange = response.headers['content-range'] ?? '';
+              final slashIdx = contentRange.lastIndexOf('/');
+              if (slashIdx != -1) {
+                totalBytes = int.tryParse(contentRange.substring(slashIdx + 1).trim()) ?? 0;
+              }
+              if (totalBytes == 0 && response.contentLength != null) {
+                totalBytes = receivedBytes + response.contentLength!;
+              }
+            } else {
+              totalBytes = response.contentLength ?? 0;
+            }
+          }
+
+          sink = apkFile.openWrite(mode: receivedBytes > 0 ? FileMode.append : FileMode.write);
+
+          await for (final chunk in response.stream) {
+            if (isCancelled != null && isCancelled()) {
+              await sink.close();
+              try {
+                await apkFile.delete();
+              } catch (_) {}
+              throw Exception("Download cancelled");
+            }
+            sink.add(chunk);
+            receivedBytes += chunk.length;
+            final progress = totalBytes > 0 ? (receivedBytes / totalBytes).clamp(0.0, 1.0) : 0.0;
+            onProgress(receivedBytes, totalBytes, progress);
+          }
+
+          await sink.flush();
           await sink.close();
-          try {
-            await apkFile.delete();
-          } catch (_) {}
-          throw Exception("Download cancelled");
+          sink = null;
+
+          if (totalBytes > 0 && receivedBytes >= totalBytes) {
+            return apkFile;
+          }
+          if (totalBytes == 0 && receivedBytes > 10 * 1024 * 1024) {
+            return apkFile;
+          }
+
+          // Stream ended prematurely without reaching totalBytes
+          if (totalBytes > 0 && receivedBytes < totalBytes) {
+            if (attempt >= maxRetries) {
+              throw Exception("Download interrupted: received $receivedBytes of $totalBytes bytes");
+            }
+            await Future.delayed(Duration(milliseconds: 500 * attempt));
+            continue;
+          }
+
+          return apkFile;
+        } catch (e) {
+          if (sink != null) {
+            try {
+              await sink.flush();
+              await sink.close();
+            } catch (_) {}
+          }
+
+          if (isCancelled != null && isCancelled()) {
+            try {
+              await apkFile.delete();
+            } catch (_) {}
+            rethrow;
+          }
+
+          if (attempt >= maxRetries) {
+            final errStr = e.toString();
+            if (errStr.contains("ClientConnection closed") ||
+                errStr.contains("Connection closed") ||
+                errStr.contains("SocketException") ||
+                errStr.contains("ClientException") ||
+                errStr.contains("TimeoutException") ||
+                errStr.contains("timeout")) {
+              throw Exception("Download interrupted due to unstable network connection. Please retry or download via browser.");
+            }
+            rethrow;
+          }
+
+          // Exponential backoff before retrying
+          await Future.delayed(Duration(milliseconds: 1000 * attempt));
         }
-        sink.add(chunk);
-        receivedBytes += chunk.length;
-        final progress = totalBytes > 0 ? (receivedBytes / totalBytes).clamp(0.0, 1.0) : 0.0;
-        onProgress(receivedBytes, totalBytes, progress);
       }
 
-      await sink.flush();
-      await sink.close();
-
-      return apkFile;
+      throw Exception("Unable to complete download after $maxRetries attempts. Please try downloading via browser.");
     } finally {
       if (customClient == null) {
         client.close();

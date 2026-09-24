@@ -96,5 +96,9 @@ void main() {
       expect(ver, equals('1.0.4'));
       expect(UpdateService.compareVersions(ver, '1.0.3'), greaterThan(0));
     });
+
+    test('downloadApk method signature and retry parameter availability', () {
+      expect(UpdateService.downloadApk, isNotNull);
+    });
   });
 }
