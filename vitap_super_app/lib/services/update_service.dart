@@ -40,8 +40,8 @@ class UpdateService {
   static const String repoName = "vitap-backend";
 
   // Central compile-time version for this app release
-  static const String currentAppVersion = "1.0.4";
-  static const int currentVersionCode = 5;
+  static const String currentAppVersion = "1.0.5";
+  static const int currentVersionCode = 6;
   static const String fallbackVersion = currentAppVersion;
 
   // Native Android package installer channel
