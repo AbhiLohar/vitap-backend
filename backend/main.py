@@ -497,5 +497,25 @@ async def app_version():
     }
 
 
+@app.get("/app/download")
+async def app_download():
+    """Redirects directly to the latest APK download asset."""
+    from fastapi.responses import RedirectResponse
+    apk_url = "https://github.com/AbhiLohar/vitap-backend/releases/latest/download/app-release.apk"
+    import os
+    import json
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    version_file = os.path.join(root_dir, "version.json")
+    if os.path.exists(version_file):
+        try:
+            with open(version_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("apkUrl"):
+                    apk_url = data["apkUrl"]
+        except Exception:
+            pass
+    return RedirectResponse(url=apk_url, status_code=302)
+
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

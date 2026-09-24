@@ -64,6 +64,11 @@ void main() {
           equals('https://github.com/AbhiLohar/vitap-backend/releases/latest'));
     });
 
+    test('directApkDownloadUrl points to GitHub releases latest direct apk download', () {
+      expect(UpdateService.directApkDownloadUrl,
+          equals('https://github.com/AbhiLohar/vitap-backend/releases/latest/download/app-release.apk'));
+    });
+
     test('Parses version.json structure properly', () {
       const rawJson = '''{
         "version": "1.0.4",

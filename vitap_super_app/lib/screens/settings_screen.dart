@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -98,7 +99,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showAppQrCode() {
-    const String downloadUrl = "https://github.com/AbhiLohar/vitap-backend/releases/latest"; 
+    const String downloadUrl = UpdateService.directApkDownloadUrl;
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
@@ -117,18 +118,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: AppColors.textPrimary(context),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
-                "Scan this QR code to download the app.",
+                "Scan with your phone camera or QR scanner to download the APK directly.",
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary(context)),
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: QrImageView(
                   data: downloadUrl,
@@ -138,23 +146,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.share, size: 18),
-                  label: const Text("Share Link"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text("Copy Link"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: BorderSide(color: AppColors.primary.withOpacity(0.4)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                      onPressed: () {
+                        Clipboard.setData(const ClipboardData(text: downloadUrl));
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: const Color(0xFF1E293B),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            content: const Row(
+                              children: [
+                                Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
+                                SizedBox(width: 10),
+                                Expanded(child: Text("Direct download link copied to clipboard!")),
+                              ],
+                            ),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                  onPressed: () {
-                    Share.share("Download VTOP Super App here: $downloadUrl"); // Note: using Share.share
-                  },
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.share_rounded, size: 16),
+                      label: const Text("Share"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                      ),
+                      onPressed: () {
+                        Share.share(
+                          "🚀 Download VTOP Super App (Latest APK):\n$downloadUrl\n\nAccess your timetable, attendance, marks, mess menu & more seamlessly!",
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
                 child: Text("Close", style: TextStyle(color: AppColors.textSecondary(context))),

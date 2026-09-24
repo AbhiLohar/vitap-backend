@@ -60,6 +60,10 @@ class UpdateService {
   static const String releasesWebUrl =
       "https://github.com/$repoOwner/$repoName/releases/latest";
 
+  // Direct APK download URL for the latest release (used for QR code & direct sharing)
+  static const String directApkDownloadUrl =
+      "https://github.com/$repoOwner/$repoName/releases/latest/download/app-release.apk";
+
   // Tier 4: GitHub REST API (fallback)
   static const String releasesApiUrl =
       "https://api.github.com/repos/$repoOwner/$repoName/releases/latest";
