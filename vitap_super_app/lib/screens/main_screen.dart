@@ -119,17 +119,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             ],
           ),
           child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _navItem(Icons.calendar_today, Icons.calendar_today_outlined, "Timetable", 0),
-                  _navItem(Icons.people, Icons.people_outline, "Attendance", 1),
-                  _navItem(Icons.menu_book, Icons.menu_book_outlined, "More", 2),
-                  _navItem(Icons.dashboard, Icons.dashboard_outlined, "Dashboard", 3),
-                  _navItem(Icons.settings, Icons.settings_outlined, "Settings", 4),
-                ],
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.15,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                child: Row(
+                  children: [
+                    _navItem(Icons.calendar_today, Icons.calendar_today_outlined, "Timetable", 0),
+                    _navItem(Icons.people, Icons.people_outline, "Attendance", 1),
+                    _navItem(Icons.menu_book, Icons.menu_book_outlined, "More", 2),
+                    _navItem(Icons.dashboard, Icons.dashboard_outlined, "Dashboard", 3),
+                    _navItem(Icons.settings, Icons.settings_outlined, "Settings", 4),
+                  ],
+                ),
               ),
             ),
           ),
@@ -141,15 +143,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget _navItem(IconData filledIcon, IconData outlinedIcon, String label, int index) {
     final isSelected = _currentIndex == index;
 
-    return GestureDetector(
-      onTap: () {
-        if (_currentIndex != index) {
-          setState(() => _currentIndex = index);
-        }
-      },
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 64,
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          if (_currentIndex != index) {
+            setState(() => _currentIndex = index);
+          }
+        },
+        behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
@@ -159,8 +160,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 padding: EdgeInsets.symmetric(
-                  horizontal: isSelected ? 16 : 0,
-                  vertical: isSelected ? 6 : 0,
+                  horizontal: isSelected ? 12 : 0,
+                  vertical: isSelected ? 4 : 0,
                 ),
                 decoration: BoxDecoration(
                   color: isSelected ? AppColors.primary.withOpacity(0.12) : Colors.transparent,
@@ -172,13 +173,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   color: isSelected ? AppColors.primary : AppColors.textMuted(context),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: isSelected ? AppColors.primary : AppColors.textMuted(context),
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+              const SizedBox(height: 3),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: isSelected ? AppColors.primary : AppColors.textMuted(context),
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 2),

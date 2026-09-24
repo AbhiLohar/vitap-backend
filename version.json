@@ -1,9 +1,9 @@
 {
-  "version": "1.0.5",
-  "versionCode": 6,
-  "title": "Version 1.0.5",
-  "notes": "• Direct APK download QR code (scan to immediately download APK)\n• Enhanced share sheet with one-tap Copy Link\n• Permanent embedded release keystore for seamless in-place updates",
-  "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.5/app-release.apk",
+  "version": "1.0.6",
+  "versionCode": 7,
+  "title": "Version 1.0.6",
+  "notes": "• Navigation bar UI/UX compatibility fix: Labels dynamically scale and fit on a single line across all device screen sizes and font scales\n• Attendance tab label guaranteed single-line display\n• Direct APK download QR code & share options",
+  "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.6/app-release.apk",
   "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/latest",
-  "publishedAt": "2026-09-24T10:15:00Z"
+  "publishedAt": "2026-09-24T11:05:00Z"
 }
