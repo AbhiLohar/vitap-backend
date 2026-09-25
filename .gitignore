@@ -26,17 +26,20 @@ vitap_super_app/.flutter-plugins-dependencies
 vitap_super_app/build/
 vitap_super_app/.pub-cache/
 vitap_super_app/.pub/
+analyze_output.txt
+vitap_super_app/analyze_output.txt
+test_*.dart
+vitap_super_app/test_*.dart
 
 # Android Studio & Gradle
 .gradle/
+**/build/
+**/android/build/
 **/android/app/debug
 **/android/app/profile
 **/android/app/release
 
-# Temporary image crops & scratch files
-cap_*.png
-cap_*.jpg
-captcha_*.jpg
+# Cloned reference repositories
 scratch_repo/
 scratch_vitapmate/
 temp_clone/
@@ -44,9 +47,19 @@ reference_app/
 backend/vitap-vtop-client/
 backend/.git_backup/
 .git_backup/
+
+# Release artifacts & binaries
 app-release.apk*
 
-# Root scratch and debug scripts
+# Temporary image crops & captcha test assets
+cap_*.png
+cap_*.jpg
+captcha_*.jpg
+captcha_*.png
+last_test_captcha.png
+test_captcha.jpg
+
+# Scratch and debug scripts
 cleanup.py
 decoded_otp.html
 download_flutter_artifacts.py
@@ -62,4 +75,3 @@ search_duckduckgo.py
 test_*.py
 vtop_open.html
 webhook_*
-
