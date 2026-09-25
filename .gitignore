@@ -75,3 +75,7 @@ search_duckduckgo.py
 test_*.py
 vtop_open.html
 webhook_*
+
+# Personal study and local preparation notes
+VITAP_APP_TECHNICAL_INTERVIEW_GUIDE.md
+*_INTERVIEW_GUIDE.md
