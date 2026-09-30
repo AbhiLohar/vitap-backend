@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../services/error_formatter.dart';
 import '../services/update_service.dart';
 import '../widgets/running_login_button.dart';
+import '../widgets/cyber_otp_dialog.dart';
 import 'main_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -545,272 +546,61 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   void showOtpSheet() {
-    final otpController = TextEditingController();
-    bool otpLoading = false;
-    String? otpError;
-
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      isDismissible: false,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.8),
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Container(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBg(context),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.cardBorder(context)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                AppColors.primary.withValues(alpha: 0.15),
-                                AppColors.accent.withValues(alpha: 0.08),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.lock_outline,
-                            color: AppColors.primary,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Enter OTP",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary(context),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                "Sent to your registered email/phone",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary(context),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: otpController,
-                      keyboardType: TextInputType.number,
-                      style: TextStyle(
-                        fontSize: 20,
-                        letterSpacing: 8,
-                        color: AppColors.textPrimary(context),
-                      ),
-                      textAlign: TextAlign.center,
-                      decoration: InputDecoration(
-                        hintText: "• • • • • •",
-                        hintStyle: TextStyle(
-                          color: AppColors.textMuted(context),
-                          letterSpacing: 8,
-                        ),
-                        filled: true,
-                        fillColor: AppColors.scaffoldBg(context),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: AppColors.cardBorder(context),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: AppColors.cardBorder(context),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (otpError != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        otpError!,
-                        style: const TextStyle(
-                          color: AppColors.red,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: otpLoading
-                            ? null
-                            : () async {
-                                if (otpController.text.trim().isEmpty) {
-                                  setSheetState(
-                                    () => otpError = "Enter the OTP",
-                                  );
-                                  return;
-                                }
-                                setSheetState(() {
-                                  otpLoading = true;
-                                  otpError = null;
-                                });
-                                try {
-                                  final data = await ApiService.verifyOtp(
-                                    username: regController.text.trim(),
-                                    otp: otpController.text.trim(),
-                                  );
-                                  if (data["status"] == "success") {
-                                    final prefs =
-                                        await SharedPreferences.getInstance();
-                                    const storage = FlutterSecureStorage();
-                                    await prefs.setString(
-                                      'username',
-                                      regController.text.trim(),
-                                    );
-                                    await storage.write(
-                                      key: 'password',
-                                      value: passController.text.trim(),
-                                    );
-                                    if (context.mounted) {
-                                      Navigator.pop(ctx);
-                                      fetchSemestersAndNavigate();
-                                    }
-                                  } else {
-                                    setSheetState(() {
-                                      otpError =
-                                          data["detail"] ?? "Invalid OTP";
-                                      otpLoading = false;
-                                    });
-                                  }
-                                } catch (e) {
-                                  setSheetState(() {
-                                    otpError = ErrorFormatter.format(e);
-                                    otpLoading = false;
-                                  });
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: otpLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(
-                                "Verify OTP",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton.icon(
-                      onPressed: otpLoading
-                          ? null
-                          : () async {
-                              setSheetState(() {
-                                otpLoading = true;
-                                otpError = null;
-                              });
-                              try {
-                                final data = await ApiService.resendOtp(
-                                  username: regController.text.trim(),
-                                );
-                                if (data["status"] == "success") {
-                                  setSheetState(() {
-                                    otpLoading = false;
-                                    otpError = null;
-                                  });
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          "OTP resent to your registered email",
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                } else {
-                                  setSheetState(() {
-                                    otpLoading = false;
-                                    otpError =
-                                        data["detail"] ??
-                                        "Failed to resend OTP. Try logging in again.";
-                                  });
-                                }
-                              } catch (e) {
-                                setSheetState(() {
-                                  otpLoading = false;
-                                  otpError =
-                                      "Connection error. Please check your internet.";
-                                });
-                              }
-                            },
-                      icon: const Icon(
-                        Icons.refresh,
-                        size: 16,
-                        color: AppColors.primary,
-                      ),
-                      label: const Text(
-                        "Resend OTP",
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
+        return CyberOtpDialog(
+          title: "Enter your code",
+          subtitle: "We sent a 6-digit code to verify your VTOP session.",
+          accountTag: regController.text.trim(),
+          onVerify: (otp) async {
+            try {
+              final data = await ApiService.verifyOtp(
+                username: regController.text.trim(),
+                otp: otp,
+              );
+              if (data["status"] == "success") {
+                final prefs = await SharedPreferences.getInstance();
+                const storage = FlutterSecureStorage();
+                await prefs.setString(
+                  'username',
+                  regController.text.trim(),
+                );
+                await storage.write(
+                  key: 'password',
+                  value: passController.text.trim(),
+                );
+                if (context.mounted) {
+                  Navigator.pop(ctx);
+                  fetchSemestersAndNavigate();
+                }
+                return null;
+              } else {
+                return data["detail"] ?? "Invalid OTP code. Please try again.";
+              }
+            } catch (e) {
+              return ErrorFormatter.format(e);
+            }
+          },
+          onResend: () async {
+            try {
+              final data = await ApiService.resendOtp(
+                username: regController.text.trim(),
+              );
+              if (data["status"] == "success") {
+                return null; // Success, triggers countdown & toast
+              } else {
+                return data["detail"] ??
+                    "Failed to resend OTP. Try logging in again.";
+              }
+            } catch (e) {
+              return "Connection error. Please check your internet.";
+            }
+          },
+          onCancel: () {
+            Navigator.pop(ctx);
           },
         );
       },
