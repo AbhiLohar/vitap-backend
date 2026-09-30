@@ -262,6 +262,32 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
     final currentCode = _otpController.text;
     final activeIndex = currentCode.length.clamp(0, 5);
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primary = theme.primaryColor;
+    final isDefaultPrimary = primary == AppColors.primary;
+    final gradientColors = isDefaultPrimary
+        ? const [Color(0xFF7C4DFF), Color(0xFF448AFF)]
+        : [primary, primary.withValues(alpha: 0.85)];
+    final focusGlowColor = isDefaultPrimary ? const Color(0xFF7C4DFF) : primary;
+
+    final cardBg = isDark ? const Color(0xFF0F1218) : Colors.white;
+    final cardBorder = isDark
+        ? (_errorMessage != null
+            ? const Color(0xFFEF4444).withValues(alpha: 0.5)
+            : const Color(0xFF262C38))
+        : (_errorMessage != null
+            ? const Color(0xFFEF4444).withValues(alpha: 0.6)
+            : const Color(0xFFE2E8F0));
+    final titleColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
+    final subtitleColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final badgeBg = isDark ? const Color(0xFF141923) : const Color(0xFFF1F5F9);
+    final badgeBorder = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
+    final badgeTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final hintColor = const Color(0xFF64748B);
+    final tipColor = isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8);
+    final dividerColor = isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1);
+
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -281,26 +307,21 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
               constraints: const BoxConstraints(maxWidth: 420),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
               decoration: BoxDecoration(
-                // Dark charcoal obsidian background
-                color: const Color(0xFF0F1218),
+                color: cardBg,
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(
-                  color: _errorMessage != null
-                      ? const Color(0xFFEF4444).withValues(alpha: 0.5)
-                      : const Color(0xFF262C38),
+                  color: cardBorder,
                   width: 1.2,
                 ),
                 boxShadow: [
-                  // Ambient dark elevation
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.7),
+                    color: isDark ? Colors.black.withValues(alpha: 0.7) : Colors.black.withValues(alpha: 0.12),
                     blurRadius: 36,
                     spreadRadius: 4,
                     offset: const Offset(0, 14),
                   ),
-                  // Soft cyber neon glow
                   BoxShadow(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.05),
+                    color: focusGlowColor.withValues(alpha: isDark ? 0.08 : 0.04),
                     blurRadius: 28,
                     spreadRadius: 2,
                   ),
@@ -337,17 +358,17 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF141923),
+                          color: badgeBg,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF1E293B)),
+                          border: Border.all(color: badgeBorder),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.verified_user_outlined,
                               size: 13,
-                              color: Color(0xFF38BDF8),
+                              color: focusGlowColor,
                             ),
                             const SizedBox(width: 6),
                             Text(
@@ -356,7 +377,7 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 2.0,
-                                color: const Color(0xFF94A3B8),
+                                color: badgeTextColor,
                               ),
                             ),
                           ],
@@ -371,7 +392,7 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                         style: GoogleFonts.inter(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
-                          color: const Color(0xFFF8FAFC),
+                          color: titleColor,
                           letterSpacing: -0.3,
                         ),
                       ),
@@ -386,7 +407,7 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           height: 1.4,
-                          color: const Color(0xFF94A3B8),
+                          color: subtitleColor,
                         ),
                       ),
                       const SizedBox(height: 28),
@@ -413,6 +434,9 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                                     activeIndex: activeIndex,
                                     width: boxWidth,
                                     height: boxHeight,
+                                    isDark: isDark,
+                                    accentColor: focusGlowColor,
+                                    isDefaultTheme: isDefaultPrimary,
                                   ),
                                   if (i < 2) const SizedBox(width: 6),
                                 ],
@@ -423,7 +447,7 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                                   height: 2.5,
                                   margin: const EdgeInsets.symmetric(horizontal: 8),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF475569),
+                                    color: dividerColor,
                                     borderRadius: BorderRadius.circular(2),
                                   ),
                                 ),
@@ -436,6 +460,9 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                                     activeIndex: activeIndex,
                                     width: boxWidth,
                                     height: boxHeight,
+                                    isDark: isDark,
+                                    accentColor: focusGlowColor,
+                                    isDefaultTheme: isDefaultPrimary,
                                   ),
                                   if (i < 5) const SizedBox(width: 6),
                                 ],
@@ -453,8 +480,8 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                           Container(
                             width: 5,
                             height: 5,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF64748B),
+                            decoration: BoxDecoration(
+                              color: hintColor,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -463,7 +490,7 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                             "Enter the 6-digit code",
                             style: GoogleFonts.inter(
                               fontSize: 12,
-                              color: const Color(0xFF64748B),
+                              color: hintColor,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -476,7 +503,7 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                         "Tip: paste to fill every box at once.",
                         style: GoogleFonts.inter(
                           fontSize: 11.5,
-                          color: const Color(0xFF475569),
+                          color: tipColor,
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -490,23 +517,23 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+                              color: focusGlowColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+                                color: focusGlowColor.withValues(alpha: 0.3),
                               ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.paste_rounded, size: 14, color: Color(0xFF38BDF8)),
+                                Icon(Icons.paste_rounded, size: 14, color: focusGlowColor),
                                 const SizedBox(width: 6),
                                 Text(
                                   "Paste $_clipboardCandidate from clipboard",
                                   style: GoogleFonts.inter(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF38BDF8),
+                                    color: focusGlowColor,
                                   ),
                                 ),
                               ],
@@ -551,21 +578,21 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                       ],
                       const SizedBox(height: 24),
 
-                      // Primary Verify Button (High-tech glow & gradient)
+                      // Primary Verify Button (High-tech glow & signature theme gradient)
                       SizedBox(
                         width: double.infinity,
                         height: 50,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(14),
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF0284C7), Color(0xFF38BDF8)],
+                            gradient: LinearGradient(
+                              colors: gradientColors,
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF38BDF8).withValues(alpha: 0.35),
+                                color: gradientColors.first.withValues(alpha: 0.35),
                                 blurRadius: 16,
                                 spreadRadius: 1,
                                 offset: const Offset(0, 4),
@@ -632,7 +659,7 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                             child: Text(
                               "Cancel",
                               style: GoogleFonts.inter(
-                                color: const Color(0xFF94A3B8),
+                                color: subtitleColor,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -652,8 +679,8 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                                 Icons.refresh_rounded,
                                 size: 15,
                                 color: _canResend
-                                    ? const Color(0xFF38BDF8)
-                                    : const Color(0xFF64748B),
+                                    ? focusGlowColor
+                                    : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
                               ),
                               label: FittedBox(
                                 fit: BoxFit.scaleDown,
@@ -665,8 +692,8 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: _canResend
-                                        ? const Color(0xFF38BDF8)
-                                        : const Color(0xFF64748B),
+                                        ? focusGlowColor
+                                        : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
                                   ),
                                 ),
                               ),
@@ -692,11 +719,36 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
     required int activeIndex,
     required double width,
     required double height,
+    required bool isDark,
+    required Color accentColor,
+    required bool isDefaultTheme,
   }) {
     final hasChar = index < currentCode.length;
     final char = hasChar ? currentCode[index] : '';
     final isFocused = _focusNode.hasFocus && index == activeIndex;
     final isError = _errorMessage != null;
+
+    final boxBg = isDark
+        ? (isFocused
+            ? const Color(0xFF141923)
+            : hasChar
+                ? const Color(0xFF161B24)
+                : const Color(0xFF12151C))
+        : (isFocused
+            ? Colors.white
+            : hasChar
+                ? const Color(0xFFF1F5F9)
+                : const Color(0xFFF8FAFC));
+
+    final boxBorder = isError
+        ? const Color(0xFFEF4444)
+        : isFocused
+            ? accentColor
+            : hasChar
+                ? accentColor.withValues(alpha: 0.45)
+                : (isDark ? const Color(0xFF262C38) : const Color(0xFFCBD5E1));
+
+    final digitColor = isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -704,21 +756,10 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
       width: width,
       height: height,
       decoration: BoxDecoration(
-        // Subtle elevated / neomorphic charcoal surface
-        color: isFocused
-            ? const Color(0xFF141923)
-            : hasChar
-                ? const Color(0xFF161B24)
-                : const Color(0xFF12151C),
+        color: boxBg,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isError
-              ? const Color(0xFFEF4444)
-              : isFocused
-                  ? const Color(0xFF38BDF8)
-                  : hasChar
-                      ? const Color(0xFF38BDF8).withValues(alpha: 0.4)
-                      : const Color(0xFF262C38),
+          color: boxBorder,
           width: isFocused ? 1.8 : 1.2,
         ),
         boxShadow: isError
@@ -731,14 +772,15 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
               ]
             : isFocused
                 ? [
-                    // Soft blue neon focus glow
+                    // Neon focus glow using theme accent color
                     BoxShadow(
-                      color: const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                      color: accentColor.withValues(alpha: 0.4),
                       blurRadius: 14,
                       spreadRadius: 1,
                     ),
                     BoxShadow(
-                      color: const Color(0xFF0284C7).withValues(alpha: 0.18),
+                      color: (isDefaultTheme ? const Color(0xFF448AFF) : accentColor)
+                          .withValues(alpha: 0.2),
                       blurRadius: 22,
                       spreadRadius: 2,
                     ),
@@ -746,14 +788,18 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                 : hasChar
                     ? [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
+                          color: isDark
+                              ? Colors.black.withValues(alpha: 0.4)
+                              : Colors.black.withValues(alpha: 0.05),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
                       ]
                     : [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
+                          color: isDark
+                              ? Colors.black.withValues(alpha: 0.25)
+                              : Colors.black.withValues(alpha: 0.03),
                           blurRadius: 4,
                           offset: const Offset(0, 1),
                         ),
@@ -766,24 +812,22 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                 style: GoogleFonts.inter(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: const Color(0xFFF1F5F9),
+                  color: digitColor,
                 ),
               )
             : isFocused
-                // Blinking vertical neon cursor
                 ? FadeTransition(
                     opacity: _cursorOpacity,
                     child: Container(
                       width: 2,
                       height: 22,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF38BDF8),
+                        color: accentColor,
                         borderRadius: BorderRadius.circular(1),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF38BDF8).withValues(alpha: 0.8),
-                            blurRadius: 6,
-                            spreadRadius: 1,
+                            color: accentColor.withValues(alpha: 0.8),
+                            blurRadius: 4,
                           ),
                         ],
                       ),
