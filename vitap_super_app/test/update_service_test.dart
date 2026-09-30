@@ -46,10 +46,10 @@ void main() {
       expect(UpdateService.compareVersions('1.0.1+2', '1.0.0+1'), greaterThan(0));
     });
 
-    test('currentAppVersion and fallbackVersion are set to 1.0.7', () {
-      expect(UpdateService.currentAppVersion, equals('1.0.7'));
-      expect(UpdateService.fallbackVersion, equals('1.0.7'));
-      expect(UpdateService.currentVersionCode, equals(8));
+    test('currentAppVersion and fallbackVersion are set to 1.0.8', () {
+      expect(UpdateService.currentAppVersion, equals('1.0.8'));
+      expect(UpdateService.fallbackVersion, equals('1.0.8'));
+      expect(UpdateService.currentVersionCode, equals(9));
     });
   });
 

@@ -87,18 +87,36 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
     // Check clipboard for 6-digit OTP
     _checkClipboard();
 
-    // Request keyboard focus after frame render
+    _focusNode.addListener(_onFocusChanged);
+    _otpController.addListener(_onTextChanged);
+
+    // Request keyboard focus and trigger Android IME number pad after frame render
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _focusNode.requestFocus();
+        _showKeyboard();
       }
     });
+  }
 
-    _otpController.addListener(_onTextChanged);
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _showKeyboard() {
+    if (!_focusNode.hasFocus) {
+      _focusNode.requestFocus();
+    }
+    _otpController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _otpController.text.length),
+    );
+    try {
+      SystemChannels.textInput.invokeMethod('TextInput.show');
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _focusNode.removeListener(_onFocusChanged);
     _otpController.removeListener(_onTextChanged);
     _otpController.dispose();
     _focusNode.dispose();
@@ -303,57 +321,37 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                 child: child,
               );
             },
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 420),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: cardBorder,
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: isDark ? Colors.black.withValues(alpha: 0.7) : Colors.black.withValues(alpha: 0.12),
-                    blurRadius: 36,
-                    spreadRadius: 4,
-                    offset: const Offset(0, 14),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _showKeyboard,
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 420),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: cardBorder,
+                    width: 1.2,
                   ),
-                  BoxShadow(
-                    color: focusGlowColor.withValues(alpha: isDark ? 0.08 : 0.04),
-                    blurRadius: 28,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Stack(
-                children: [
-                  // Invisible backing text field to handle native typing, paste & IME
-                  Opacity(
-                    opacity: 0.0,
-                    child: SizedBox(
-                      width: 1,
-                      height: 1,
-                      child: TextField(
-                        controller: _otpController,
-                        focusNode: _focusNode,
-                        keyboardType: TextInputType.number,
-                        autofocus: true,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(6),
-                        ],
-                        onSubmitted: (_) => _handleVerify(),
-                      ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark ? Colors.black.withValues(alpha: 0.7) : Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 36,
+                      spreadRadius: 4,
+                      offset: const Offset(0, 14),
                     ),
-                  ),
-
-                  // Interactive visible UI
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
+                    BoxShadow(
+                      color: focusGlowColor.withValues(alpha: isDark ? 0.08 : 0.04),
+                      blurRadius: 28,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
                       // Sub-header: Security Check Badge
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -412,64 +410,109 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                       ),
                       const SizedBox(height: 28),
 
-                      // Segmented 6-digit inputs with hyphen separator
-                      GestureDetector(
-                        onTap: () => _focusNode.requestFocus(),
-                        behavior: HitTestBehavior.opaque,
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            // 4 gaps of 6px (24px) + middle divider (10px + 16px margins = 26px) = 50px fixed width
-                            final totalAvailable = constraints.maxWidth;
-                            final boxWidth = ((totalAvailable - 52) / 6).floorToDouble().clamp(28.0, 46.0);
-                            final boxHeight = (boxWidth * 1.25).clamp(36.0, 58.0);
+                      // Segmented 6-digit inputs with overlay interactive TextField
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          // 4 gaps of 6px (24px) + middle divider (10px + 16px margins = 26px) = 50px fixed width
+                          final totalAvailable = constraints.maxWidth;
+                          final boxWidth = ((totalAvailable - 52) / 6).floorToDouble().clamp(28.0, 46.0);
+                          final boxHeight = (boxWidth * 1.25).clamp(36.0, 58.0);
 
-                            return Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                          return SizedBox(
+                            height: boxHeight,
+                            child: Stack(
+                              alignment: Alignment.center,
                               children: [
-                                // Left 3 digits
-                                for (int i = 0; i < 3; i++) ...[
-                                  _buildDigitBox(
-                                    index: i,
-                                    currentCode: currentCode,
-                                    activeIndex: activeIndex,
-                                    width: boxWidth,
-                                    height: boxHeight,
-                                    isDark: isDark,
-                                    accentColor: focusGlowColor,
-                                    isDefaultTheme: isDefaultPrimary,
-                                  ),
-                                  if (i < 2) const SizedBox(width: 6),
-                                ],
+                                // Visual digit boxes underneath (IgnorePointer lets touches reach TextField)
+                                IgnorePointer(
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      // Left 3 digits
+                                      for (int i = 0; i < 3; i++) ...[
+                                        _buildDigitBox(
+                                          index: i,
+                                          currentCode: currentCode,
+                                          activeIndex: activeIndex,
+                                          width: boxWidth,
+                                          height: boxHeight,
+                                          isDark: isDark,
+                                          accentColor: focusGlowColor,
+                                          isDefaultTheme: isDefaultPrimary,
+                                        ),
+                                        if (i < 2) const SizedBox(width: 6),
+                                      ],
 
-                                // Middle divider hyphen (matching the reference design)
-                                Container(
-                                  width: 10,
-                                  height: 2.5,
-                                  margin: const EdgeInsets.symmetric(horizontal: 8),
-                                  decoration: BoxDecoration(
-                                    color: dividerColor,
-                                    borderRadius: BorderRadius.circular(2),
+                                      // Middle divider hyphen (matching the reference design)
+                                      Container(
+                                        width: 10,
+                                        height: 2.5,
+                                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                                        decoration: BoxDecoration(
+                                          color: dividerColor,
+                                          borderRadius: BorderRadius.circular(2),
+                                        ),
+                                      ),
+
+                                      // Right 3 digits
+                                      for (int i = 3; i < 6; i++) ...[
+                                        _buildDigitBox(
+                                          index: i,
+                                          currentCode: currentCode,
+                                          activeIndex: activeIndex,
+                                          width: boxWidth,
+                                          height: boxHeight,
+                                          isDark: isDark,
+                                          accentColor: focusGlowColor,
+                                          isDefaultTheme: isDefaultPrimary,
+                                        ),
+                                        if (i < 5) const SizedBox(width: 6),
+                                      ],
+                                    ],
                                   ),
                                 ),
 
-                                // Right 3 digits
-                                for (int i = 3; i < 6; i++) ...[
-                                  _buildDigitBox(
-                                    index: i,
-                                    currentCode: currentCode,
-                                    activeIndex: activeIndex,
-                                    width: boxWidth,
-                                    height: boxHeight,
-                                    isDark: isDark,
-                                    accentColor: focusGlowColor,
-                                    isDefaultTheme: isDefaultPrimary,
+                                // Real interactive TextField spanning the entire segmented inputs area
+                                Positioned.fill(
+                                  child: TextField(
+                                    controller: _otpController,
+                                    focusNode: _focusNode,
+                                    keyboardType: const TextInputType.numberWithOptions(
+                                      decimal: false,
+                                      signed: false,
+                                    ),
+                                    autofocus: true,
+                                    showCursor: false,
+                                    cursorWidth: 0,
+                                    cursorHeight: 0,
+                                    cursorColor: Colors.transparent,
+                                    enableInteractiveSelection: true,
+                                    style: const TextStyle(
+                                      color: Colors.transparent,
+                                      fontSize: 1,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      errorBorder: InputBorder.none,
+                                      disabledBorder: InputBorder.none,
+                                      filled: false,
+                                      counterText: "",
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.digitsOnly,
+                                      LengthLimitingTextInputFormatter(6),
+                                    ],
+                                    onTap: _showKeyboard,
+                                    onSubmitted: (_) => _handleVerify(),
                                   ),
-                                  if (i < 5) const SizedBox(width: 6),
-                                ],
+                                ),
                               ],
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 20),
 
@@ -702,8 +745,7 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                         ],
                       ),
                     ],
-                  ),
-                ],
+                ),
               ),
             ),
           ),

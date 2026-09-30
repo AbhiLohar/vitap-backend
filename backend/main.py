@@ -487,11 +487,11 @@ async def app_version():
         except Exception:
             pass
     return {
-        "version": "1.0.7",
-        "versionCode": 8,
-        "title": "Version 1.0.7",
+        "version": "1.0.8",
+        "versionCode": 9,
+        "title": "Version 1.0.8",
         "notes": "• Premium Dark-Mode Cybersecurity OTP Verification Screen: Segmented 6-digit inputs with subtle neomorphic surfaces, soft neon focus glow, and blinking cursor\n• App Theme Harmonization: OTP verification dynamically integrates with the signature VTOP purple-blue gradient and adaptive dark/light theme tokens\n• Smart Clipboard OTP detection with 1-tap paste button\n• Live 30s resend timer and error shake animation feedback\n• Direct APK download & seamless in-app update experience",
-        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.7/app-release.apk",
+        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.8/app-release.apk",
         "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/latest",
         "publishedAt": "2026-10-01T00:30:00Z"
     }

@@ -50,4 +50,45 @@ void main() {
     // Verify onVerify was triggered
     expect(verifiedOtp, equals("123456"));
   });
+
+  testWidgets('CyberOtpDialog configures numeric keypad and handles backspace deletion', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: CyberOtpDialog(
+            autoSubmit: false,
+          ),
+        ),
+      ),
+    );
+
+    final textFieldFinder = find.byType(TextField);
+    expect(textFieldFinder, findsOneWidget);
+    final TextField textFieldWidget = tester.widget<TextField>(textFieldFinder);
+
+    // Verify keyboard is set to numeric number pad
+    expect(textFieldWidget.keyboardType, equals(const TextInputType.numberWithOptions(decimal: false, signed: false)));
+    expect(textFieldWidget.autofocus, isTrue);
+
+    // Enter partial digits "45"
+    await tester.enterText(textFieldFinder, "45");
+    await tester.pump();
+    expect(find.byWidgetPredicate((w) => w is Text && w.data == "4"), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is Text && w.data == "5"), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is Text && w.data == "6"), findsNothing);
+
+    // Simulate backspacing "5" -> leaves "4"
+    await tester.enterText(textFieldFinder, "4");
+    await tester.pump();
+    expect(find.byWidgetPredicate((w) => w is Text && w.data == "4"), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is Text && w.data == "5"), findsNothing);
+
+    // Tap on the text field
+    await tester.tap(textFieldFinder);
+    await tester.pump();
+  });
 }
