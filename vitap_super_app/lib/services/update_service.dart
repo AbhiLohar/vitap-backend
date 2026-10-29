@@ -49,9 +49,9 @@ class UpdateService {
       MethodChannel("com.example.vitap_super_app/installer");
 
   // Multi-tier URLs
-  // Tier 1: Fastly CDN raw file - zero rate limits, cached globally
-  static const String cdnVersionUrl =
-      "https://raw.githubusercontent.com/$repoOwner/$repoName/main/version.json";
+  // Tier 1: Fastly CDN raw file - zero rate limits, cached globally with cache buster
+  static String get cdnVersionUrl =>
+      "https://raw.githubusercontent.com/$repoOwner/$repoName/main/version.json?t=${DateTime.now().millisecondsSinceEpoch}";
 
   // Tier 2: Backend API endpoint
   static String get backendVersionUrl => "${ApiConfig.baseUrl}/app/version";
@@ -500,11 +500,11 @@ class UpdateService {
   static Future<UpdateInfo?> checkForUpdate({bool isManual = false}) async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Throttling for automatic background checks (at most once every 15 mins)
+    // Throttling for automatic background checks (at most once every 1 minute)
     if (!isManual) {
       final lastCheckMillis = prefs.getInt(_prefLastCheckKey) ?? 0;
       final now = DateTime.now().millisecondsSinceEpoch;
-      if (now - lastCheckMillis < const Duration(minutes: 15).inMilliseconds) {
+      if (now - lastCheckMillis < const Duration(minutes: 1).inMilliseconds) {
         return null;
       }
       await prefs.setInt(_prefLastCheckKey, now);

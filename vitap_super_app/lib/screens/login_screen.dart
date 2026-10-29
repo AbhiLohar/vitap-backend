@@ -831,6 +831,44 @@ class _LoginScreenState extends State<LoginScreen>
                         ],
                       ),
 
+                      const SizedBox(height: 12),
+
+                      // Manual check for update button on login screen
+                      InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => UpdateService.checkAndShow(context, isManual: true),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: const Color(0xFF334155).withValues(alpha: 0.6),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.system_update_alt_rounded,
+                                size: 13,
+                                color: Color(0xFF38BDF8),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                "v${UpdateService.currentAppVersion} • Check for update",
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF94A3B8),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
                       const SizedBox(height: 16),
                     ],
                   ),
