@@ -587,8 +587,12 @@ class VTOPSession:
         
         raise Exception("Login failed after maximum captcha retries. Please check your credentials or try again.")
         
-    async def submit_otp(self, otp: str) -> str:
-        """Submit OTP for two-factor auth using multipart/form-data (required by VTOP)."""
+    async def submit_otp(self, otp: str) -> tuple[str, str]:
+        """
+        Submit OTP for two-factor auth.
+        VTOP expects application/x-www-form-urlencoded (otpCode, _csrf) with AJAX headers.
+        Returns a tuple of (status, detail_message).
+        """
         try:
             clean_otp = str(otp).strip()
             headers = {
@@ -596,28 +600,31 @@ class VTOPSession:
                 "Accept": "application/json, text/javascript, */*; q=0.01",
                 "Referer": f"{VTOP_BASE}/vtop/login",
                 "Origin": VTOP_BASE,
+                "X-CSRF-TOKEN": self.csrf_token,
             }
             
-            # Primary: VTOP expects multipart/form-data matching browser FormData()
-            multipart_files = {
-                "otpCode": (None, clean_otp),
-                "_csrf": (None, self.csrf_token),
+            # Primary: VTOP expects standard application/x-www-form-urlencoded form data
+            data_payload = {
+                "otpCode": clean_otp,
+                "_csrf": self.csrf_token,
             }
             
-            print(f"Submitting OTP to /vtop/validateSecurityOtp (csrf={self.csrf_token[:15]}...)")
-            resp = await self.client.post("/vtop/validateSecurityOtp", files=multipart_files, headers=headers)
+            print(f"Submitting OTP to /vtop/validateSecurityOtp (urlencoded, csrf={self.csrf_token[:15]}...)")
+            resp = await self.client.post("/vtop/validateSecurityOtp", data=data_payload, headers=headers)
             
-            # Fallback to standard urlencoded form-data if multipart returned 400 or empty
-            if resp.status_code >= 400 or not resp.text.strip():
-                print(f"Multipart response was {resp.status_code}, trying urlencoded fallback...")
-                data_payload = {
-                    "otpCode": clean_otp,
-                    "_csrf": self.csrf_token,
+            # Fallback: if VTOP returns status 233 (custom filter rejection) or 400+, try multipart/form-data
+            if resp.status_code == 233 or resp.status_code >= 400:
+                print(f"Urlencoded response was {resp.status_code}, trying multipart fallback...")
+                multipart_files = {
+                    "otpCode": (None, clean_otp),
+                    "_csrf": (None, self.csrf_token),
                 }
-                resp = await self.client.post("/vtop/validateSecurityOtp", data=data_payload, headers=headers)
+                resp_multi = await self.client.post("/vtop/validateSecurityOtp", files=multipart_files, headers=headers)
+                if resp_multi.status_code == 200:
+                    resp = resp_multi
 
             print(f"OTP response status: {resp.status_code}, content-type: {resp.headers.get('content-type', 'unknown')}")
-            print(f"OTP response body: {resp.text[:250]}")
+            print(f"OTP response body: {resp.text[:300]}")
             
             # Check for JSON response
             body_text = resp.text.strip()
@@ -630,51 +637,63 @@ class VTOPSession:
             
             if data and isinstance(data, dict):
                 raw_status = str(data.get("status", "")).upper()
-                print(f"OTP validation parsed status: {raw_status}")
+                message = data.get("message") or data.get("detail") or ""
+                print(f"OTP validation parsed status: {raw_status}, message: {message}")
                 
                 if raw_status == "SUCCESS":
-                    redirect_url = data.get("redirectUrl", ROUTES["content"])
-                    content_resp = await self.client.get(redirect_url)
-                    content_html = content_resp.text
-                    self.post_login_csrf = _find_csrf(content_html)
+                    redirect_url = data.get("redirectUrl") or ROUTES["content"]
+                    if not redirect_url.startswith("/"):
+                        redirect_url = f"/vtop/{redirect_url}"
+                    elif not redirect_url.startswith("/vtop"):
+                        redirect_url = f"/vtop{redirect_url}"
                     
-                    # Extract REAL registration number
-                    import re
-                    reg_match = re.search(r'\b(\d{2}[A-Z]{2,5}\d{3,5})\b', content_html, re.IGNORECASE)
-                    if reg_match:
-                        real_reg_no = reg_match.group(1).upper()
-                        print(f"Extracted actual Registration Number: {real_reg_no} (Login ID: {self.registration_number})")
-                        self.registration_number = real_reg_no
+                    try:
+                        content_resp = await self.client.get(redirect_url)
+                        content_html = content_resp.text
+                        fresh_csrf = _find_csrf(content_html)
+                        if fresh_csrf:
+                            self.post_login_csrf = fresh_csrf
+                        
+                        # Extract REAL registration number
+                        import re
+                        reg_match = re.search(r'\b(\d{2}[A-Z]{2,5}\d{3,5})\b', content_html, re.IGNORECASE)
+                        if reg_match:
+                            real_reg_no = reg_match.group(1).upper()
+                            print(f"Extracted actual Registration Number: {real_reg_no} (Login ID: {self.registration_number})")
+                            self.registration_number = real_reg_no
+                    except Exception as fetch_err:
+                        print(f"Warning: redirect fetch error: {fetch_err}")
                         
                     self.logged_in = True
-                    return "success"
+                    return ("success", "OTP verified successfully")
                 elif raw_status == "INVALID":
-                    return "invalid_otp"
+                    return ("invalid_otp", message or "Invalid OTP code. Please check your latest email and try again.")
                 elif raw_status == "EXPIRED":
-                    return "otp_expired"
+                    return ("otp_expired", message or "OTP has expired. Please tap 'Resend code' to get a fresh code.")
                 else:
-                    message = data.get("message", "Unknown error")
-                    print(f"OTP unexpected status: {raw_status} - {message}")
-                    if "expire" in message.lower():
-                        return "otp_expired"
-                    if "invalid" in message.lower() or "wrong" in message.lower():
-                        return "invalid_otp"
-                    return "failed"
+                    msg_lower = str(message).lower()
+                    if any(k in msg_lower for k in ["expire", "timeout", "timed out", "session expired"]):
+                        return ("otp_expired", message or "Session expired on VTOP. Please log in again.")
+                    elif any(k in msg_lower for k in ["invalid", "wrong", "incorrect", "mismatch", "not match"]):
+                        return ("invalid_otp", message or "Invalid OTP code. Please check your latest email and try again.")
+                    return ("failed", message or f"OTP validation failed ({raw_status}). Please try again.")
             
             # Non-JSON response — check if redirected to content page
             final_url = str(resp.url)
             if "/vtop/content" in final_url or "/vtop/home" in final_url:
                 self.post_login_csrf = _find_csrf(resp.text)
                 self.logged_in = True
-                return "success"
+                return ("success", "OTP verified successfully")
             
             print(f"OTP: Unexpected non-JSON response at {final_url}")
-            return "failed"
+            if resp.status_code == 233:
+                return ("failed", "VTOP rejected request (Security error 233). Please tap 'Resend code' or log in again.")
+            return ("failed", f"Unexpected response from VTOP (HTTP {resp.status_code}).")
         except Exception as e:
             print(f"OTP submission error: {e}")
-            return "failed"
+            return ("failed", f"Verification connection error: {e}")
     
-    async def resend_otp(self) -> str:
+    async def resend_otp(self) -> tuple[str, str]:
         """Resend OTP using VTOP's resendSecurityOtp endpoint."""
         try:
             print(f"Resending OTP. CSRF: {self.csrf_token[:15]}...")
@@ -683,42 +702,54 @@ class VTOPSession:
                 "Accept": "application/json, text/javascript, */*; q=0.01",
                 "Referer": f"{VTOP_BASE}/vtop/login",
                 "Origin": VTOP_BASE,
+                "X-CSRF-TOKEN": self.csrf_token,
             }
             
-            # Method 1: Multipart form data (matches browser FormData)
+            # Primary: Regular form-data (VTOP expects urlencoded)
             try:
-                multipart_files = {"_csrf": (None, self.csrf_token)}
-                resp = await self.client.post("/vtop/resendSecurityOtp", files=multipart_files, headers=headers)
-                print(f"Resend Method 1 (multipart) status: {resp.status_code}, body: {resp.text[:120]}")
+                resp = await self.client.post("/vtop/resendSecurityOtp", data={"_csrf": self.csrf_token}, headers=headers)
+                print(f"Resend (data) status: {resp.status_code}, body: {resp.text[:150]}")
                 
-                # Update CSRF if returned
+                # Check for JSON response
+                try:
+                    data = resp.json()
+                    status = str(data.get("status", "")).upper()
+                    msg = data.get("message", "")
+                    if status == "SUCCESS":
+                        return ("success", msg or "A fresh 6-digit OTP has been sent to your registered email.")
+                    elif "expire" in msg.lower() or "session" in msg.lower():
+                        return ("otp_expired", msg or "Session expired on VTOP. Please log in again to receive a fresh OTP.")
+                    return ("failed", msg or "Failed to resend OTP.")
+                except Exception:
+                    pass
+                
                 fresh_csrf = _find_csrf(resp.text)
                 if fresh_csrf:
                     self.csrf_token = fresh_csrf
-                    
                 body_lower = resp.text.lower()
                 if "success" in body_lower or "sent" in body_lower or "true" in body_lower:
-                    return "success"
+                    return ("success", "A fresh 6-digit OTP has been sent to your registered email.")
             except Exception as e:
-                print(f"Resend Method 1 error: {e}")
+                print(f"Resend urlencoded error: {e}")
 
-            # Method 2: Regular form-data fallback
+            # Fallback: Multipart
             try:
-                resp2 = await self.client.post("/vtop/resendSecurityOtp", data={"_csrf": self.csrf_token}, headers=headers)
-                print(f"Resend Method 2 (data) status: {resp2.status_code}, body: {resp2.text[:120]}")
+                multipart_files = {"_csrf": (None, self.csrf_token)}
+                resp2 = await self.client.post("/vtop/resendSecurityOtp", files=multipart_files, headers=headers)
+                print(f"Resend (multipart) status: {resp2.status_code}, body: {resp2.text[:120]}")
                 fresh_csrf = _find_csrf(resp2.text)
                 if fresh_csrf:
                     self.csrf_token = fresh_csrf
                 body_lower = resp2.text.lower()
                 if "success" in body_lower or "sent" in body_lower or "true" in body_lower:
-                    return "success"
+                    return ("success", "A fresh 6-digit OTP has been sent to your registered email.")
             except Exception as e:
-                print(f"Resend Method 2 error: {e}")
+                print(f"Resend multipart fallback error: {e}")
 
-            return "failed"
+            return ("failed", "Could not resend OTP. Please try logging in again.")
         except Exception as e:
             print(f"Resend OTP error: {e}")
-            return "failed"
+            return ("failed", f"Error resending OTP: {e}")
     
     def _check_session_expired(self, resp: httpx.Response):
         """Check if the response indicates the session has expired."""

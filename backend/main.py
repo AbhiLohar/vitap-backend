@@ -21,6 +21,15 @@ app.add_middleware(
 )
 
 sessions = {}
+AUTH_LOGS = []
+
+def log_auth(msg: str):
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    entry = f"[{timestamp}] {msg}"
+    print(entry)
+    AUTH_LOGS.append(entry)
+    if len(AUTH_LOGS) > 300:
+        AUTH_LOGS.pop(0)
 
 def get_session(username: str) -> Optional[VTOPSession]:
     if not username:
@@ -40,15 +49,21 @@ def handle_exception(e: Exception):
     raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── Health ──────────────────────────────────────────────────────────────────
+# ── Health & Debug ────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+@app.get("/debug/auth-logs")
+async def get_auth_logs():
+    return {"count": len(AUTH_LOGS), "logs": AUTH_LOGS}
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 @app.post("/login")
 async def login(username: str = Form(...), password: str = Form(...)):
+    user_tag = f"{username[:4]}****" if len(username) >= 4 else username
+    log_auth(f"Login request initiated for user {user_tag}")
     scraper = VTOPSession()
     try:
         status = await scraper.login(username, password)
@@ -56,23 +71,28 @@ async def login(username: str = Form(...), password: str = Form(...)):
             sessions[username] = scraper
             sessions[username.strip()] = scraper
             sessions[username.strip().upper()] = scraper
+            log_auth(f"Login successful for {user_tag}")
             return {"status": "success", "detail": "Login successful"}
         elif status == "otp_required":
             sessions[username] = scraper
             sessions[username.strip()] = scraper
             sessions[username.strip().upper()] = scraper
+            log_auth(f"Login OTP required for {user_tag}")
             return {"status": "otp_required", "detail": "OTP Required"}
         elif status == "invalid_credentials":
+            log_auth(f"Login rejected: invalid credentials for {user_tag}")
             raise HTTPException(
                 status_code=401,
                 detail="Invalid Username or Password. Please check your credentials and try again."
             )
         elif "account locked" in status.lower() or "maximum fail attempts" in status.lower():
+            log_auth(f"Login rejected: account locked for {user_tag}")
             raise HTTPException(
                 status_code=403,
                 detail="Account locked due to maximum failed attempts. Please use Forgot Password on VTOP."
             )
         else:
+            log_auth(f"Login failed for {user_tag}: {status[:100]}")
             raise HTTPException(
                 status_code=400,
                 detail=status if len(status) < 120 else "Login failed. Please check your credentials and try again."
@@ -80,59 +100,78 @@ async def login(username: str = Form(...), password: str = Form(...)):
     except HTTPException:
         raise
     except Exception as e:
+        log_auth(f"Login exception for {user_tag}: {e}")
         handle_exception(e)
 
 @app.post("/verify-otp")
 async def verify_otp(username: str = Form(...), otp: str = Form(...)):
+    user_tag = f"{username[:4]}****" if len(username) >= 4 else username
+    clean_otp = str(otp).strip()
+    log_auth(f"Verify OTP request for user {user_tag} (otp length={len(clean_otp)})")
+    
     session = get_session(username)
     if not session:
+        log_auth(f"Verify OTP: No active session found for {user_tag}")
         raise HTTPException(
             status_code=401,
             detail="Session expired. Please log in again to receive a fresh OTP."
         )
     try:
-        status = await session.submit_otp(otp)
+        status, detail = await session.submit_otp(clean_otp)
+        log_auth(f"Verify OTP outcome for {user_tag}: status='{status}', detail='{detail}'")
         if status == "success":
-            return {"status": "success", "detail": "OTP verified successfully"}
+            return {"status": "success", "detail": detail or "OTP verified successfully"}
         elif status == "invalid_otp":
             return {
                 "status": "invalid_otp",
-                "detail": "Invalid OTP code. Please check your latest email and try again."
+                "detail": detail or "Invalid OTP code. Please check your latest email and try again."
             }
         elif status == "otp_expired":
             return {
                 "status": "otp_expired",
-                "detail": "OTP has expired. Please tap 'Resend code' to get a fresh code."
+                "detail": detail or "OTP has expired. Please tap 'Resend code' to get a fresh code."
             }
         else:
             return {
                 "status": "failed",
-                "detail": "OTP verification failed. Please try again or request a new code."
+                "detail": detail or "OTP verification failed. Please try again or request a new code."
             }
     except Exception as e:
+        log_auth(f"Verify OTP exception for {user_tag}: {e}")
         handle_exception(e)
 
 @app.post("/resend-otp")
 async def resend_otp(username: str = Form(...)):
+    user_tag = f"{username[:4]}****" if len(username) >= 4 else username
+    log_auth(f"Resend OTP requested for user {user_tag}")
+    
     session = get_session(username)
     if not session:
+        log_auth(f"Resend OTP: No active session found for {user_tag}")
         raise HTTPException(
             status_code=401,
             detail="Session expired. Please log in again to receive a fresh OTP."
         )
     try:
-        status = await session.resend_otp()
+        status, detail = await session.resend_otp()
+        log_auth(f"Resend OTP outcome for {user_tag}: status='{status}', detail='{detail}'")
         if status == "success":
             return {
                 "status": "success",
-                "detail": "A fresh 6-digit OTP has been sent to your registered email."
+                "detail": detail or "A fresh 6-digit OTP has been sent to your registered email."
+            }
+        elif status == "otp_expired":
+            return {
+                "status": "otp_expired",
+                "detail": detail or "Session expired on VTOP. Please log in again."
             }
         else:
             return {
                 "status": "failed",
-                "detail": "Could not resend OTP. Please try logging in again."
+                "detail": detail or "Could not resend OTP. Please try logging in again."
             }
     except Exception as e:
+        log_auth(f"Resend OTP exception for {user_tag}: {e}")
         handle_exception(e)
 
 @app.post("/logout")
