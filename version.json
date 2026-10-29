@@ -1,9 +1,9 @@
 {
-  "version": "1.0.8",
-  "versionCode": 9,
-  "title": "Version 1.0.8",
-  "notes": "• Fix OTP Numeric Keyboard & Input: Segmented OTP boxes now reliably pop open the Android number pad soft keyboard on tap\n• Enhanced Deletion & Typing: Native backspace, character deletion, and seamless clipboard paste integration\n• Blinking Neon Cursor & Real-time Focus Glow with dynamic VTOP theme accent harmonization\n• Direct APK download & seamless in-app update experience",
-  "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.8/app-release.apk",
+  "version": "1.0.9",
+  "versionCode": 10,
+  "title": "Version 1.0.9",
+  "notes": "• Fix VTOP Login & OTP Verification: Resolved duplicate OTP invalidation on login so valid OTP codes succeed instantly\n• Enhanced 2FA Architecture: Added XMLHttpRequest headers, resilient CSRF variable extraction, and case-insensitive session tracking\n• Specific Alert Messages: Informative alerts for expired or invalid OTP codes with 1-tap resend\n• Seamless in-app update trigger and direct APK download",
+  "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.9/app-release.apk",
   "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/latest",
-  "publishedAt": "2026-10-01T02:30:00Z"
+  "publishedAt": "2026-10-30T02:00:00Z"
 }

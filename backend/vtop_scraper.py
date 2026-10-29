@@ -214,11 +214,21 @@ def _find_csrf(html: str) -> str:
     inp = soup.find("input", attrs={"name": "_csrf"})
     if inp and inp.get("value"):
         return inp["value"]
-    # Try regex fallback
+    # Try regex fallback for HTML meta/input tags
     m = re.search(r'name="_csrf"\s+content="([^"]+)"', html)
     if m:
         return m.group(1)
     m = re.search(r'name="_csrf"\s+value="([^"]+)"', html)
+    if m:
+        return m.group(1)
+    # Check JS variable assignments (used in VTOP OTP dialogs)
+    m = re.search(r'var\s+csrfValue\s*=\s*["\']([^"\']+)["\']', html)
+    if m:
+        return m.group(1)
+    m = re.search(r'csrfValue\s*=\s*/\*[^*]+\*/["\']?([^"\'\s;]+)["\']?', html)
+    if m:
+        return m.group(1)
+    m = re.search(r'["\']_csrf["\']\s*:\s*["\']([^"\']+)["\']', html)
     if m:
         return m.group(1)
     return ""
@@ -360,7 +370,7 @@ def _analyze_login_response(resp) -> tuple[str, str]:
     # 5. Genuine OTP check (Strict criteria: NEVER match generic 'otp' substring in page text)
     has_otp_js = bool(re.search(r'var\s+securityOtpPending\s*=\s*(true|\'true\'|\"true\")', html, re.IGNORECASE))
     has_otp_sent_at = bool(re.search(r'var\s+otpSentAt\s*=\s*\d+', html))
-    has_otp_input = bool(soup.find("input", {"name": "otpCode"}) or soup.find(id="otpCode"))
+    has_otp_input = bool(soup.find("input", {"name": "otpCode"}) or soup.find(id="otpCode") or soup.find(id="securityOtpCode") or soup.find(id="otpContent"))
     has_otp_url = "/vtop/otp" in final_url or "twofactor" in final_url
     has_otp_phrase = any(phrase in text_lower for phrase in [
         "otp has been sent to your registered",
@@ -368,7 +378,9 @@ def _analyze_login_response(resp) -> tuple[str, str]:
         "enter the otp sent to",
         "enter the 6-digit otp",
         "otp sent to your registered email",
-        "otp sent to your mail id"
+        "otp sent to your mail id",
+        "validatesecurityotp",
+        "resendsecurityotp",
     ])
     
     if has_otp_js or has_otp_sent_at or has_otp_input or has_otp_url or has_otp_phrase:
@@ -510,13 +522,12 @@ class VTOPSession:
                 
                 # 2. Genuine OTP required
                 elif category == "otp_required":
-                    print("OTP required detected.")
+                    print("OTP required detected from VTOP.")
                     self._otp_required = True
                     new_csrf = _find_csrf(resp.text)
                     if new_csrf:
                         self.csrf_token = new_csrf
-                    print("Triggering OTP email delivery...")
-                    await self.resend_otp()
+                    print("VTOP has dispatched initial OTP to student. Awaiting user input.")
                     return "otp_required"
                     
                 # 3. Invalid credentials (wrong password / user not found) — STOP IMMEDIATELY!
@@ -579,26 +590,49 @@ class VTOPSession:
     async def submit_otp(self, otp: str) -> str:
         """Submit OTP for two-factor auth using multipart/form-data (required by VTOP)."""
         try:
-            # VTOP requires multipart/form-data for OTP validation
-            # (confirmed by reference app's Rust implementation using Form::new().text().multipart())
+            clean_otp = str(otp).strip()
+            headers = {
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Referer": f"{VTOP_BASE}/vtop/login",
+                "Origin": VTOP_BASE,
+            }
+            
+            # Primary: VTOP expects multipart/form-data matching browser FormData()
             multipart_files = {
-                "otpCode": (None, otp),
+                "otpCode": (None, clean_otp),
                 "_csrf": (None, self.csrf_token),
             }
             
-            print(f"Submitting OTP to /vtop/validateSecurityOtp (multipart, csrf={self.csrf_token[:20]}...)")
-            resp = await self.client.post("/vtop/validateSecurityOtp", files=multipart_files)
+            print(f"Submitting OTP to /vtop/validateSecurityOtp (csrf={self.csrf_token[:15]}...)")
+            resp = await self.client.post("/vtop/validateSecurityOtp", files=multipart_files, headers=headers)
             
+            # Fallback to standard urlencoded form-data if multipart returned 400 or empty
+            if resp.status_code >= 400 or not resp.text.strip():
+                print(f"Multipart response was {resp.status_code}, trying urlencoded fallback...")
+                data_payload = {
+                    "otpCode": clean_otp,
+                    "_csrf": self.csrf_token,
+                }
+                resp = await self.client.post("/vtop/validateSecurityOtp", data=data_payload, headers=headers)
+
             print(f"OTP response status: {resp.status_code}, content-type: {resp.headers.get('content-type', 'unknown')}")
-            print(f"OTP response body: {resp.text[:200]}")
+            print(f"OTP response body: {resp.text[:250]}")
             
             # Check for JSON response
-            if resp.headers.get("content-type", "").startswith("application/json"):
-                data = resp.json()
-                status = data.get("status", "UNKNOWN")
-                print(f"OTP validation status: {status}")
+            body_text = resp.text.strip()
+            data = None
+            if resp.headers.get("content-type", "").startswith("application/json") or (body_text.startswith("{") and body_text.endswith("}")):
+                try:
+                    data = resp.json()
+                except Exception:
+                    pass
+            
+            if data and isinstance(data, dict):
+                raw_status = str(data.get("status", "")).upper()
+                print(f"OTP validation parsed status: {raw_status}")
                 
-                if status == "SUCCESS":
+                if raw_status == "SUCCESS":
                     redirect_url = data.get("redirectUrl", ROUTES["content"])
                     content_resp = await self.client.get(redirect_url)
                     content_html = content_resp.text
@@ -606,21 +640,25 @@ class VTOPSession:
                     
                     # Extract REAL registration number
                     import re
-                    reg_match = re.search(r'\b(2[0-9][A-Z]{3}[0-9]{4})\b', content_html, re.IGNORECASE)
+                    reg_match = re.search(r'\b(\d{2}[A-Z]{2,5}\d{3,5})\b', content_html, re.IGNORECASE)
                     if reg_match:
                         real_reg_no = reg_match.group(1).upper()
-                        print(f"Extracted actual Registration Number from redirect dashboard: {real_reg_no} (Login ID used: {self.registration_number})")
+                        print(f"Extracted actual Registration Number: {real_reg_no} (Login ID: {self.registration_number})")
                         self.registration_number = real_reg_no
                         
                     self.logged_in = True
                     return "success"
-                elif status == "INVALID":
+                elif raw_status == "INVALID":
                     return "invalid_otp"
-                elif status == "EXPIRED":
+                elif raw_status == "EXPIRED":
                     return "otp_expired"
                 else:
                     message = data.get("message", "Unknown error")
-                    print(f"OTP unexpected status: {status} - {message}")
+                    print(f"OTP unexpected status: {raw_status} - {message}")
+                    if "expire" in message.lower():
+                        return "otp_expired"
+                    if "invalid" in message.lower() or "wrong" in message.lower():
+                        return "invalid_otp"
                     return "failed"
             
             # Non-JSON response — check if redirected to content page
@@ -637,42 +675,47 @@ class VTOPSession:
             return "failed"
     
     async def resend_otp(self) -> str:
-        """Resend OTP using multiple methods to ensure delivery."""
+        """Resend OTP using VTOP's resendSecurityOtp endpoint."""
         try:
-            print(f"Resending OTP. CSRF: {self.csrf_token[:10]}...")
-            success = False
+            print(f"Resending OTP. CSRF: {self.csrf_token[:15]}...")
+            headers = {
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+                "Referer": f"{VTOP_BASE}/vtop/login",
+                "Origin": VTOP_BASE,
+            }
             
-            # Method 1: Regular form data (most common for VTOP)
+            # Method 1: Multipart form data (matches browser FormData)
             try:
-                resp1 = await self.client.post("/vtop/resendSecurityOtp", data={"_csrf": self.csrf_token})
-                print(f"Resend Method 1 (data) status: {resp1.status_code}, body: {resp1.text[:100]}")
-                if "success" in resp1.text.lower() or "sent" in resp1.text.lower() or "true" in resp1.text.lower():
-                    success = True
-            except Exception as e:
-                print(f"Method 1 failed: {e}")
-
-            # Method 2: Multipart form data (fallback)
-            if not success:
-                try:
-                    multipart_files = {"_csrf": (None, self.csrf_token)}
-                    resp2 = await self.client.post("/vtop/resendSecurityOtp", files=multipart_files)
-                    print(f"Resend Method 2 (multipart) status: {resp2.status_code}, body: {resp2.text[:100]}")
-                    if "success" in resp2.text.lower() or "sent" in resp2.text.lower() or "true" in resp2.text.lower():
-                        success = True
-                except Exception as e:
-                    print(f"Method 2 failed: {e}")
+                multipart_files = {"_csrf": (None, self.csrf_token)}
+                resp = await self.client.post("/vtop/resendSecurityOtp", files=multipart_files, headers=headers)
+                print(f"Resend Method 1 (multipart) status: {resp.status_code}, body: {resp.text[:120]}")
+                
+                # Update CSRF if returned
+                fresh_csrf = _find_csrf(resp.text)
+                if fresh_csrf:
+                    self.csrf_token = fresh_csrf
                     
-            # Method 3: GET request (fallback)
-            if not success:
-                try:
-                    resp3 = await self.client.get("/vtop/resendSecurityOtp")
-                    print(f"Resend Method 3 (GET) status: {resp3.status_code}")
-                    if resp3.status_code == 200 or "success" in resp3.text.lower() or "sent" in resp3.text.lower():
-                        success = True
-                except Exception as e:
-                    print(f"Method 3 failed: {e}")
+                body_lower = resp.text.lower()
+                if "success" in body_lower or "sent" in body_lower or "true" in body_lower:
+                    return "success"
+            except Exception as e:
+                print(f"Resend Method 1 error: {e}")
 
-            return "success" if success else "failed"
+            # Method 2: Regular form-data fallback
+            try:
+                resp2 = await self.client.post("/vtop/resendSecurityOtp", data={"_csrf": self.csrf_token}, headers=headers)
+                print(f"Resend Method 2 (data) status: {resp2.status_code}, body: {resp2.text[:120]}")
+                fresh_csrf = _find_csrf(resp2.text)
+                if fresh_csrf:
+                    self.csrf_token = fresh_csrf
+                body_lower = resp2.text.lower()
+                if "success" in body_lower or "sent" in body_lower or "true" in body_lower:
+                    return "success"
+            except Exception as e:
+                print(f"Resend Method 2 error: {e}")
+
+            return "failed"
         except Exception as e:
             print(f"Resend OTP error: {e}")
             return "failed"

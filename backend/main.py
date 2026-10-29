@@ -23,7 +23,15 @@ app.add_middleware(
 sessions = {}
 
 def get_session(username: str) -> Optional[VTOPSession]:
-    return sessions.get(username)
+    if not username:
+        return None
+    return (
+        sessions.get(username)
+        or sessions.get(username.upper())
+        or sessions.get(username.lower())
+        or sessions.get(username.strip())
+        or sessions.get(username.strip().upper())
+    )
 
 def handle_exception(e: Exception):
     err_str = str(e).lower()
@@ -46,9 +54,13 @@ async def login(username: str = Form(...), password: str = Form(...)):
         status = await scraper.login(username, password)
         if status == "success":
             sessions[username] = scraper
+            sessions[username.strip()] = scraper
+            sessions[username.strip().upper()] = scraper
             return {"status": "success", "detail": "Login successful"}
         elif status == "otp_required":
             sessions[username] = scraper
+            sessions[username.strip()] = scraper
+            sessions[username.strip().upper()] = scraper
             return {"status": "otp_required", "detail": "OTP Required"}
         elif status == "invalid_credentials":
             raise HTTPException(
@@ -74,10 +86,29 @@ async def login(username: str = Form(...), password: str = Form(...)):
 async def verify_otp(username: str = Form(...), otp: str = Form(...)):
     session = get_session(username)
     if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired. Please log in again to receive a fresh OTP."
+        )
     try:
         status = await session.submit_otp(otp)
-        return {"status": status}
+        if status == "success":
+            return {"status": "success", "detail": "OTP verified successfully"}
+        elif status == "invalid_otp":
+            return {
+                "status": "invalid_otp",
+                "detail": "Invalid OTP code. Please check your latest email and try again."
+            }
+        elif status == "otp_expired":
+            return {
+                "status": "otp_expired",
+                "detail": "OTP has expired. Please tap 'Resend code' to get a fresh code."
+            }
+        else:
+            return {
+                "status": "failed",
+                "detail": "OTP verification failed. Please try again or request a new code."
+            }
     except Exception as e:
         handle_exception(e)
 
@@ -85,16 +116,31 @@ async def verify_otp(username: str = Form(...), otp: str = Form(...)):
 async def resend_otp(username: str = Form(...)):
     session = get_session(username)
     if not session:
-        raise HTTPException(status_code=401, detail="Not logged in")
+        raise HTTPException(
+            status_code=401,
+            detail="Session expired. Please log in again to receive a fresh OTP."
+        )
     try:
         status = await session.resend_otp()
-        return {"status": status}
+        if status == "success":
+            return {
+                "status": "success",
+                "detail": "A fresh 6-digit OTP has been sent to your registered email."
+            }
+        else:
+            return {
+                "status": "failed",
+                "detail": "Could not resend OTP. Please try logging in again."
+            }
     except Exception as e:
         handle_exception(e)
 
 @app.post("/logout")
 async def logout(username: str = Form(...)):
     sessions.pop(username, None)
+    sessions.pop(username.strip(), None)
+    sessions.pop(username.strip().upper(), None)
+    sessions.pop(username.strip().lower(), None)
     return {"status": "success"}
 
 
@@ -487,13 +533,13 @@ async def app_version():
         except Exception:
             pass
     return {
-        "version": "1.0.8",
-        "versionCode": 9,
-        "title": "Version 1.0.8",
-        "notes": "• Premium Dark-Mode Cybersecurity OTP Verification Screen: Segmented 6-digit inputs with subtle neomorphic surfaces, soft neon focus glow, and blinking cursor\n• App Theme Harmonization: OTP verification dynamically integrates with the signature VTOP purple-blue gradient and adaptive dark/light theme tokens\n• Smart Clipboard OTP detection with 1-tap paste button\n• Live 30s resend timer and error shake animation feedback\n• Direct APK download & seamless in-app update experience",
-        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.8/app-release.apk",
+        "version": "1.0.9",
+        "versionCode": 10,
+        "title": "Version 1.0.9",
+        "notes": "• Fix VTOP Login & OTP Verification: Resolved duplicate OTP invalidation on login so valid OTP codes succeed instantly\n• Enhanced 2FA Architecture: Added XMLHttpRequest headers, resilient CSRF variable extraction, and case-insensitive session tracking\n• Specific Alert Messages: Informative alerts for expired or invalid OTP codes with 1-tap resend\n• Seamless in-app update trigger and direct APK download",
+        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.9/app-release.apk",
         "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/latest",
-        "publishedAt": "2026-10-01T00:30:00Z"
+        "publishedAt": "2026-10-30T02:00:00Z"
     }
 
 
