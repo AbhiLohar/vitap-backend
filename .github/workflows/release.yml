@@ -21,7 +21,7 @@ permissions:
 jobs:
   build-and-release:
     name: Build Flutter APK & Publish Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
@@ -41,6 +41,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.41.9'
           channel: 'stable'
           cache: false
 
@@ -59,7 +60,7 @@ jobs:
 
       - name: Build Release APK
         working-directory: vitap_super_app
-        run: flutter build apk --release --android-skip-build-dependency-validation
+        run: flutter build apk --release
 
       - name: Prepare Release Artifacts
         run: |
