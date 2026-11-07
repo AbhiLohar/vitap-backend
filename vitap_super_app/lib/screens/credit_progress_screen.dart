@@ -248,7 +248,7 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
                       height: 180,
                       width: 180,
                       child: CustomPaint(
-                        painter: _CirclePainter(progress: _progressAnim.value, color: _healthColor, bgColor: AppColors.cardBorder(context)),
+                        painter: _CirclePainter(progress: _progressAnim.value, color: healthColor, bgColor: AppColors.cardBorder(context)),
                       ),
                     ),
                     Column(
