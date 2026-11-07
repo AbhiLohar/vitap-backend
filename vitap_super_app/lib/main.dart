@@ -171,26 +171,40 @@ class _VitapAppState extends State<VitapApp> with WidgetsBindingObserver {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.lock_outline, size: 80, color: AppColors.primary),
+                          Icon(
+                            Icons.lock_outline_rounded,
+                            size: 64,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                           const SizedBox(height: 20),
                           Text(
                             "App Locked",
                             style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary(context),
+                              letterSpacing: -0.5,
                               decoration: TextDecoration.none,
                             ),
                           ),
-                          const SizedBox(height: 30),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Authenticate to continue",
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textSecondary(context),
+                              decoration: TextDecoration.none,
+                            ),
+                          ),
+                          const SizedBox(height: 28),
                           ElevatedButton.icon(
                             onPressed: _authenticate,
-                            icon: const Icon(Icons.fingerprint),
+                            icon: const Icon(Icons.fingerprint_rounded, size: 20),
                             label: const Text("Unlock"),
                             style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
                             ),
                           )
                         ],

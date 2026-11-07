@@ -216,29 +216,62 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text("Outing Status"),
+        title: Text(
+          "Outing Status",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: AppColors.textPrimary(context),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondary(context),
-          indicatorColor: AppColors.primary,
-          tabs: const [
-            Tab(text: "General"),
-            Tab(text: "Weekend"),
-          ],
+        iconTheme: IconThemeData(color: AppColors.textPrimary(context)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(44),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.cardBg(context),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.cardBorder(context)),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              labelColor: Colors.white,
+              unselectedLabelColor: AppColors.textSecondary(context),
+              labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicator: BoxDecoration(
+                color: primary,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              dividerColor: Colors.transparent,
+              tabs: const [
+                Tab(text: "General"),
+                Tab(text: "Weekend"),
+              ],
+            ),
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showApplyModal,
-        backgroundColor: AppColors.primary,
-        icon: const Icon(Icons.add),
-        label: const Text("Apply New"),
+        backgroundColor: primary,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        icon: const Icon(Icons.add, size: 20),
+        label: const Text(
+          "Apply New",
+          style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.2),
+        ),
       ),
       body: TabBarView(
         controller: _tabController,
@@ -251,32 +284,55 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
   }
 
   Widget _buildOutingList(List outings, bool isWeekend) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return RefreshIndicator(
       onRefresh: () => _loadData(forceRefresh: true),
-      color: AppColors.primary,
+      color: primary,
       child: _isLoading && outings.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : outings.isEmpty
               ? ListView(
                   children: [
-                    SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+                    SizedBox(height: MediaQuery.of(context).size.height * 0.28),
                     Center(
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.directions_walk_outlined, size: 64, color: AppColors.textMuted(context)),
-                          const SizedBox(height: 16),
-                            Text(
-                              "No outing history found\n(For Dayscholars, outing data is not applicable)",
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: AppColors.textSecondary(context), height: 1.5),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: primary.withOpacity(0.08),
+                              shape: BoxShape.circle,
                             ),
+                            child: Icon(Icons.directions_walk_rounded, size: 36, color: primary),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "No outing history found",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary(context),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            "(For Dayscholars, outing data is not applicable)",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary(context),
+                              height: 1.4,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ],
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
                   itemCount: outings.length,
                   itemBuilder: (context, index) {
                     final o = outings[index];
@@ -286,29 +342,34 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
                     final isRejected = status.contains("rejected");
                     final id = (o["bookingId"] ?? o["leaveId"] ?? o["id"] ?? "").toString();
                     
-                    Color statusColor = AppColors.red; // default fallback
-                    if (isApproved) statusColor = Colors.green;
-                    else if (isPending) statusColor = AppColors.orange;
-                    else if (isRejected) statusColor = AppColors.red;
+                    Color statusColor = AppColors.danger;
+                    if (isApproved) {
+                      statusColor = AppColors.good;
+                    } else if (isPending) {
+                      statusColor = AppColors.warning;
+                    } else if (isRejected) {
+                      statusColor = AppColors.danger;
+                    }
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: GlassCard(
-                        accentColor: statusColor.withOpacity(0.3),
+                        padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.all(8),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: statusColor.withOpacity(0.1),
-                                    shape: BoxShape.circle,
+                                    color: statusColor.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Icon(
-                                    isApproved ? Icons.check_circle_outline : Icons.pending_actions,
-                                    size: 18,
+                                    isApproved ? Icons.check_circle_outline_rounded : Icons.pending_actions_rounded,
+                                    size: 20,
                                     color: statusColor,
                                   ),
                                 ),
@@ -320,29 +381,39 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
                                       Text(
                                         o["type"] ?? (isWeekend ? "Weekend Outing" : "General Outing"),
                                         style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: -0.2,
                                           color: AppColors.textPrimary(context),
                                         ),
                                       ),
                                       if (o["purpose"] != null && o["purpose"].toString().isNotEmpty)
                                         Padding(
-                                          padding: const EdgeInsets.only(top: 2, bottom: 2),
+                                          padding: const EdgeInsets.only(top: 2, bottom: 4),
                                           child: Text(
                                             o["purpose"],
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w500,
-                                              color: AppColors.teal,
+                                              color: primary,
                                             ),
                                           ),
                                         ),
-                                      Text(
-                                        o["status"] ?? "Unknown",
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: statusColor,
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: statusColor.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: statusColor.withOpacity(0.25)),
+                                        ),
+                                        child: Text(
+                                          (o["status"] ?? "Unknown").toString().toUpperCase(),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 0.4,
+                                            color: statusColor,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -350,20 +421,22 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
                                 ),
                                 if (isPending && id.isNotEmpty)
                                   IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: AppColors.red),
+                                    icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 20),
                                     onPressed: () => _deleteOuting(id, isWeekend),
                                     tooltip: "Delete Request",
                                   ),
                               ],
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 14),
+                            Divider(height: 1, color: AppColors.cardBorder(context)),
+                            const SizedBox(height: 12),
                             Row(
                               children: [
-                                Expanded(child: _stat(context, Icons.logout, "Out Date", o["out_date"] ?? "-")),
-                                Expanded(child: _stat(context, Icons.login, "In Date", o["in_date"] ?? "-")),
+                                Expanded(child: _stat(context, Icons.logout_rounded, "Out Date", o["out_date"] ?? "-")),
+                                Expanded(child: _stat(context, Icons.login_rounded, "In Date", o["in_date"] ?? "-")),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                             _infoRow(context, Icons.location_on_outlined, "Place: ${o["place"] ?? "-"}"),
                           ],
                         ),
@@ -380,13 +453,16 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
       children: [
         Row(
           children: [
-            Icon(icon, size: 12, color: AppColors.textMuted(context)),
+            Icon(icon, size: 13, color: AppColors.textSecondary(context)),
             const SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMuted(context))),
+            Text(label, style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context))),
           ],
         ),
-        const SizedBox(height: 2),
-        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context)),
+        ),
       ],
     );
   }
@@ -399,7 +475,7 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
         Expanded(
           child: Text(
             text,
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
           ),
         ),
       ],
@@ -604,10 +680,12 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Container(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 20, right: 20, top: 20,
+        left: 20, right: 20, top: 16,
       ),
       decoration: BoxDecoration(
         color: AppColors.scaffoldBg(context),
@@ -623,40 +701,78 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
               children: [
                 Center(
                   child: Container(
-                    width: 40, height: 4,
-                    margin: const EdgeInsets.only(bottom: 20),
+                    width: 36, height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
-                      color: AppColors.textMuted(context).withOpacity(0.3),
+                      color: AppColors.cardBorder(context),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
-                Text("Apply Outing", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
-                const SizedBox(height: 20),
+                Text(
+                  "Apply Outing",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                    color: AppColors.textPrimary(context),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text("General"),
-                        value: false,
-                        groupValue: _isWeekend,
-                        onChanged: (v) => setState(() => _isWeekend = v!),
-                        activeColor: AppColors.primary,
-                        contentPadding: EdgeInsets.zero,
+                // Outing type segmented selector
+                Container(
+                  height: 40,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardBg(context),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.cardBorder(context)),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _isWeekend = false),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: !_isWeekend ? primary : Colors.transparent,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Text(
+                              "General Outing",
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: !_isWeekend ? Colors.white : AppColors.textSecondary(context),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text("Weekend"),
-                        value: true,
-                        groupValue: _isWeekend,
-                        onChanged: (v) => setState(() => _isWeekend = v!),
-                        activeColor: AppColors.primary,
-                        contentPadding: EdgeInsets.zero,
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _isWeekend = true),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: _isWeekend ? primary : Colors.transparent,
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: Text(
+                              "Weekend Outing",
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: _isWeekend ? Colors.white : AppColors.textSecondary(context),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
                 
@@ -671,18 +787,44 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                 ] else ...[
                   TextFormField(
                     controller: _placeController,
-                    decoration: const InputDecoration(labelText: "Place of Visit*", border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                      labelText: "Place of Visit*",
+                      filled: true,
+                      fillColor: AppColors.cardBg(context),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppColors.cardBorder(context)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primary, width: 1.5),
+                      ),
+                    ),
                     validator: (v) => v!.isEmpty ? "Required" : null,
                   ),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 
                 TextFormField(
                   controller: _purposeController,
-                  decoration: const InputDecoration(labelText: "Purpose of Visit*", border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                    labelText: "Purpose of Visit*",
+                    filled: true,
+                    fillColor: AppColors.cardBg(context),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: AppColors.cardBorder(context)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: primary, width: 1.5),
+                    ),
+                  ),
                   validator: (v) => v!.isEmpty ? "Required" : null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
                 
                 if (_isWeekend) ...[
                   // Weekend deadline info banner
@@ -690,13 +832,13 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.12),
+                      color: AppColors.warning.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                      border: Border.all(color: AppColors.warning.withOpacity(0.3)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.info_outline, color: Colors.amber, size: 18),
+                        Icon(Icons.info_outline_rounded, color: AppColors.warning, size: 18),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -721,17 +863,30 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   _SmoothDropdown(
                     label: "Choose Time*",
                     value: _selectedWeekendSlot,
                     items: outingTimeSlots,
                     onChanged: (v) => setState(() => _selectedWeekendSlot = v),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   TextFormField(
                     controller: _contactController,
-                    decoration: const InputDecoration(labelText: "Contact Number*", border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                      labelText: "Contact Number*",
+                      filled: true,
+                      fillColor: AppColors.cardBg(context),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppColors.cardBorder(context)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primary, width: 1.5),
+                      ),
+                    ),
                     keyboardType: TextInputType.phone,
                     validator: (v) => v!.isEmpty ? "Required" : null,
                   ),
@@ -747,7 +902,7 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                           onTimePicked: (t) => setState(() => _outTime = t),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: _DateTimePicker(
                           label: "In Date*",
@@ -768,21 +923,21 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.red.withOpacity(0.12),
+                      color: AppColors.danger.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.red.withOpacity(0.4)),
+                      border: Border.all(color: AppColors.danger.withOpacity(0.3)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.error_outline, color: AppColors.red, size: 20),
+                        const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 20),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             _errorMessage!,
                             style: const TextStyle(
                               fontSize: 13,
-                              color: AppColors.red,
+                              color: AppColors.danger,
                               fontWeight: FontWeight.w500,
                               height: 1.3,
                             ),
@@ -790,7 +945,7 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                         ),
                         GestureDetector(
                           onTap: () => setState(() => _errorMessage = null),
-                          child: const Icon(Icons.close, color: AppColors.red, size: 18),
+                          child: const Icon(Icons.close_rounded, color: AppColors.danger, size: 18),
                         ),
                       ],
                     ),
@@ -799,16 +954,18 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                 ],
                 
                 SizedBox(
-                  height: 50,
+                  height: 48,
                   child: ElevatedButton(
                     onPressed: _isSubmitting ? null : _submit,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     child: _isSubmitting
                         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text("Submit Application", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                        : const Text("Submit Application", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -842,8 +999,6 @@ class _DateTimePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final dStr = date == null ? "Select Date" : DateFormat('dd-MMM-yyyy').format(date!);
     
-    // We determine if we should show time based on whether the parent passed a time value or wants time picking.
-    // If we only need date, the parent passes time=null and doesn't expect time updates in UI (Weekend Outing).
     final bool showTime = label.contains("Out Date") || label.contains("In Date");
 
     final tStr = time == null ? "Select Time" : "${time!.hour.toString().padLeft(2,'0')}:${time!.minute.toString().padLeft(2,'0')}";
@@ -864,8 +1019,8 @@ class _DateTimePicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
-        const SizedBox(height: 8),
+        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary(context))),
+        const SizedBox(height: 6),
         InkWell(
           onTap: () async {
             final d = await showDatePicker(
@@ -877,10 +1032,21 @@ class _DateTimePicker extends StatelessWidget {
             );
             if (d != null) onDatePicked(d);
           },
+          borderRadius: BorderRadius.circular(12),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: BoxDecoration(border: Border.all(color: AppColors.cardBorder(context)), borderRadius: BorderRadius.circular(8)),
-            child: Row(children: [const Icon(Icons.calendar_today, size: 16), const SizedBox(width: 8), Expanded(child: Text(dStr, style: const TextStyle(fontSize: 13)))]),
+            decoration: BoxDecoration(
+              color: AppColors.cardBg(context),
+              border: Border.all(color: AppColors.cardBorder(context)),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(child: Text(dStr, style: TextStyle(fontSize: 13, color: AppColors.textPrimary(context)))),
+              ],
+            ),
           ),
         ),
         if (showTime) ...[
@@ -890,10 +1056,21 @@ class _DateTimePicker extends StatelessWidget {
               final t = await showTimePicker(context: context, initialTime: time ?? TimeOfDay.now());
               if (t != null) onTimePicked(t);
             },
+            borderRadius: BorderRadius.circular(12),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              decoration: BoxDecoration(border: Border.all(color: AppColors.cardBorder(context)), borderRadius: BorderRadius.circular(8)),
-              child: Row(children: [const Icon(Icons.access_time, size: 16), const SizedBox(width: 8), Expanded(child: Text(tStr, style: const TextStyle(fontSize: 13)))]),
+              decoration: BoxDecoration(
+                color: AppColors.cardBg(context),
+                border: Border.all(color: AppColors.cardBorder(context)),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.access_time_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(tStr, style: TextStyle(fontSize: 13, color: AppColors.textPrimary(context)))),
+                ],
+              ),
             ),
           ),
         ]
@@ -917,11 +1094,13 @@ class _SmoothDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
-        const SizedBox(height: 8),
+        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary(context))),
+        const SizedBox(height: 6),
         InkWell(
           onTap: () {
             showModalBottomSheet(
@@ -936,41 +1115,50 @@ class _SmoothDropdown extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       Container(
-                        width: 40, height: 4,
+                        width: 36, height: 4,
                         decoration: BoxDecoration(
-                          color: AppColors.textMuted(context).withOpacity(0.3),
+                          color: AppColors.cardBorder(context),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Text("Select ${label.replaceAll('*', '')}", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
-                      const SizedBox(height: 16),
+                      Text(
+                        "Select ${label.replaceAll('*', '')}",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary(context),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       ...items.map((item) => ListTile(
-                        title: Text(item, style: TextStyle(color: AppColors.textPrimary(context))),
-                        trailing: item == value ? Icon(Icons.check_circle, color: AppColors.primary) : null,
+                        title: Text(item, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14)),
+                        trailing: item == value ? Icon(Icons.check_circle_rounded, color: primary, size: 20) : null,
                         onTap: () {
                           onChanged(item);
                           Navigator.pop(ctx);
                         },
                       )),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
               ),
             );
           },
+          borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             decoration: BoxDecoration(
+              color: AppColors.cardBg(context),
               border: Border.all(color: AppColors.cardBorder(context)),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                Expanded(child: Text(value, style: const TextStyle(fontSize: 15))),
+                Expanded(child: Text(value, style: TextStyle(fontSize: 14, color: AppColors.textPrimary(context)))),
                 Icon(Icons.arrow_drop_down, color: AppColors.textSecondary(context)),
               ],
             ),

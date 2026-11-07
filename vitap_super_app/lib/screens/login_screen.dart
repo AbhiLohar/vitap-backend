@@ -609,21 +609,30 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0E1A),
+      backgroundColor: AppColors.scaffoldBg(context),
       body: Stack(
         children: [
-          // Background gradient
+          // Background ambient gradient
           Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF070A14),
-                  Color(0xFF0F1B3D),
-                  Color(0xFF080C1A),
-                ],
+                colors: isDark
+                    ? const [
+                        Color(0xFF0B0E17),
+                        Color(0xFF111726),
+                        Color(0xFF0A0D15),
+                      ]
+                    : const [
+                        Color(0xFFF7F8FA),
+                        Color(0xFFEEF2F6),
+                        Color(0xFFF4F6F9),
+                      ],
               ),
             ),
           ),
@@ -711,22 +720,24 @@ class _LoginScreenState extends State<LoginScreen>
                         child: Container(
                           padding: const EdgeInsets.fromLTRB(22, 26, 22, 24),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF131B2E).withValues(alpha: 0.92),
-                            borderRadius: BorderRadius.circular(26),
+                            color: isDark ? const Color(0xFF141926) : Colors.white,
+                            borderRadius: BorderRadius.circular(22),
                             border: Border.all(
-                              color: const Color(0xFF283556),
+                              color: isDark ? const Color(0xFF242E44) : const Color(0xFFE8EAF0),
                               width: 1.2,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.45),
-                                blurRadius: 28,
-                                offset: const Offset(0, 12),
+                                color: isDark
+                                    ? Colors.black.withValues(alpha: 0.45)
+                                    : Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 24,
+                                offset: const Offset(0, 8),
                               ),
                               BoxShadow(
-                                color: const Color(0xFF7C4DFF).withValues(alpha: 0.08),
-                                blurRadius: 40,
-                                spreadRadius: -5,
+                                color: primaryColor.withValues(alpha: isDark ? 0.05 : 0.02),
+                                blurRadius: 32,
+                                spreadRadius: -4,
                               ),
                             ],
                           ),
@@ -892,27 +903,30 @@ class _LoginScreenState extends State<LoginScreen>
     VoidCallback? onToggleObscure,
     bool isUppercase = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: Color(0xFFB0BEC5),
+            color: AppColors.textSecondary(context),
           ),
         ),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF0B1120),
+            color: isDark ? const Color(0xFF0D121D) : const Color(0xFFF7F8FA),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: focusNode.hasFocus
-                  ? const Color(0xFF7C4DFF)
-                  : const Color(0xFF1E293B),
-              width: focusNode.hasFocus ? 1.6 : 1.0,
+                  ? primary
+                  : (isDark ? const Color(0xFF1E283D) : const Color(0xFFE2E6EE)),
+              width: focusNode.hasFocus ? 1.5 : 1.0,
             ),
           ),
           child: TextField(
@@ -922,23 +936,23 @@ class _LoginScreenState extends State<LoginScreen>
             textCapitalization: isUppercase
                 ? TextCapitalization.characters
                 : TextCapitalization.none,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
               fontSize: 15,
               fontWeight: FontWeight.w500,
             ),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(
-                color: Color(0xFF475569),
+              hintStyle: TextStyle(
+                color: AppColors.textMuted(context),
                 fontSize: 14,
               ),
               prefixIcon: Icon(
                 icon,
                 size: 20,
                 color: focusNode.hasFocus
-                    ? const Color(0xFF7C4DFF)
-                    : const Color(0xFF64748B),
+                    ? primary
+                    : AppColors.textSecondary(context),
               ),
               suffixIcon: isPassword
                   ? IconButton(
@@ -946,7 +960,7 @@ class _LoginScreenState extends State<LoginScreen>
                         obscure
                             ? Icons.visibility_off_outlined
                             : Icons.visibility_outlined,
-                        color: const Color(0xFF64748B),
+                        color: AppColors.textSecondary(context),
                         size: 20,
                       ),
                       onPressed: onToggleObscure,

@@ -38,36 +38,51 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text("Payment History"),
+        title: Text(
+          "Payment History",
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: AppColors.textPrimary(context),
+        scrolledUnderElevation: 0,
       ),
       body: RefreshIndicator(
         onRefresh: () => _loadData(forceRefresh: true),
-        color: AppColors.primary,
+        color: primaryColor,
         child: _isLoading && _payments.isEmpty
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(child: CircularProgressIndicator(color: primaryColor))
             : _payments.isEmpty
                 ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                     children: [
                       SizedBox(height: MediaQuery.of(context).size.height * 0.3),
                       Center(
                         child: Column(
                           children: [
-                            Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.textMuted(context)),
-                            const SizedBox(height: 16),
-                            Text("No payment records found", style: TextStyle(color: AppColors.textSecondary(context))),
+                            Icon(Icons.receipt_long_outlined, size: 52, color: AppColors.textMuted(context)),
+                            const SizedBox(height: 14),
+                            Text("No payment records found", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
                           ],
                         ),
                       ),
                     ],
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     itemCount: _payments.length,
                     itemBuilder: (context, index) {
                       final p = _payments[index];
@@ -75,31 +90,33 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GlassCard(
-                          accentColor: AppColors.primary.withOpacity(0.3),
+                          accentColor: primaryColor.withOpacity(0.4),
                           padding: EdgeInsets.zero,
                           child: Theme(
                             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                             child: ExpansionTile(
+                              tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                               title: Text(
                                 p["description"] ?? "Fee Payment",
                                 style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w600,
                                   color: AppColors.textPrimary(context),
                                 ),
                               ),
                               trailing: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(0.1),
+                                  color: primaryColor.withOpacity(0.08),
                                   borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: primaryColor.withOpacity(0.15)),
                                 ),
                                 child: Text(
                                   "₹${p["amount"] ?? "0"}",
-                                  style: const TextStyle(
-                                    fontSize: 15,
+                                  style: TextStyle(
+                                    fontSize: 14,
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.primary,
+                                    color: primaryColor,
                                   ),
                                 ),
                               ),
@@ -108,12 +125,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                                   child: Column(
                                     children: [
-                                      const Divider(height: 16, color: Colors.white10),
+                                      Divider(height: 16, color: AppColors.cardBorder(context)),
                                       _row(context, Icons.confirmation_number_outlined, "Receipt No", p["receipt_no"] ?? "-"),
                                       const SizedBox(height: 8),
-                                      _row(context, Icons.calendar_today, "Date", p["date"] ?? "-"),
+                                      _row(context, Icons.calendar_today_outlined, "Date", p["date"] ?? "-"),
                                       const SizedBox(height: 8),
-                                      _row(context, Icons.payment, "Mode", p["payment_mode"] ?? "-"),
+                                      _row(context, Icons.payment_rounded, "Mode", p["payment_mode"] ?? "-"),
                                     ],
                                   ),
                                 ),

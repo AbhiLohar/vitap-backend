@@ -83,7 +83,7 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
                         labelText: "Title",
                         labelStyle: TextStyle(color: AppColors.textMuted(context)),
                         enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.cardBorder(context)), borderRadius: BorderRadius.circular(12)),
-                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.primary), borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Theme.of(context).colorScheme.primary), borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -95,7 +95,7 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
                         labelText: "Description (Optional)",
                         labelStyle: TextStyle(color: AppColors.textMuted(context)),
                         enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.cardBorder(context)), borderRadius: BorderRadius.circular(12)),
-                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: AppColors.primary), borderRadius: BorderRadius.circular(12)),
+                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Theme.of(context).colorScheme.primary), borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -107,7 +107,7 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
                                 ? "No Reminder Set" 
                                 : "Reminder: ${selectedTime!.format(context)}",
                             style: TextStyle(
-                              color: selectedTime == null ? AppColors.textMuted(context) : AppColors.primary,
+                              color: selectedTime == null ? AppColors.textMuted(context) : Theme.of(context).colorScheme.primary,
                               fontWeight: selectedTime == null ? FontWeight.normal : FontWeight.bold,
                             ),
                           ),
@@ -122,8 +122,11 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
                               setSheetState(() => selectedTime = t);
                             }
                           },
-                          icon: const Icon(Icons.alarm_add),
+                          icon: const Icon(Icons.alarm_add_rounded),
                           label: const Text("Set Time"),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Theme.of(context).colorScheme.primary,
+                          ),
                         ),
                       ],
                     ),
@@ -195,6 +198,7 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
   }
 
   Widget _buildNoteCard(Note note) {
+    final primary = Theme.of(context).colorScheme.primary;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: GlassCard(
@@ -205,10 +209,10 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: primary.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.note_alt_outlined, color: AppColors.primary, size: 20),
+              child: Icon(Icons.note_alt_outlined, color: primary, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -218,9 +222,10 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
                   Text(
                     note.title,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary(context),
+                      letterSpacing: -0.2,
                     ),
                   ),
                   if (note.description.isNotEmpty) ...[
@@ -228,26 +233,35 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
                     Text(
                       note.description,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 13,
                         color: AppColors.textSecondary(context),
+                        height: 1.35,
                       ),
                     ),
                   ],
                   if (note.reminderTime != null) ...[
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.alarm, size: 14, color: AppColors.primary),
-                        const SizedBox(width: 4),
-                        Text(
-                          note.reminderTime!.format(context),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.primary,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.alarm, size: 13, color: primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            note.reminderTime!.format(context),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: primary,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ],
@@ -257,11 +271,11 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: Icon(Icons.edit_outlined, color: AppColors.primary),
+                  icon: Icon(Icons.edit_outlined, color: primary, size: 20),
                   onPressed: () => _showAddNoteDialog(existingNote: note),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  icon: Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 20),
                   onPressed: () => _deleteNoteConfirm(note),
                 ),
               ],
@@ -274,12 +288,20 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text("Calendar & Notes", style: TextStyle(color: AppColors.textPrimary(context))),
+        title: Text(
+          "Calendar & Notes",
+          style: TextStyle(
+            color: AppColors.textPrimary(context),
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         iconTheme: IconThemeData(color: AppColors.textPrimary(context)),
         actions: [
           TextButton(
@@ -287,21 +309,28 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
               // Return the selected date to timetable
               Navigator.pop(context, _selectedDate);
             },
-            child: Text("Jump to Date", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+            child: Text(
+              "Jump to Date",
+              style: TextStyle(color: primary, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddNoteDialog(),
-        icon: const Icon(Icons.add),
-        label: const Text("Add Note"),
-        backgroundColor: AppColors.primary,
+        icon: const Icon(Icons.add, size: 20),
+        label: const Text(
+          "Add Note",
+          style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.2),
+        ),
+        backgroundColor: primary,
         foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       body: Column(
         children: [
           Container(
-            margin: const EdgeInsets.all(16),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: AppColors.cardBg(context),
               borderRadius: BorderRadius.circular(16),
@@ -310,7 +339,7 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
             child: Theme(
               data: Theme.of(context).copyWith(
                 colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: AppColors.primary,
+                  primary: primary,
                   onPrimary: Colors.white,
                   surface: AppColors.cardBg(context),
                   onSurface: AppColors.textPrimary(context),
@@ -326,15 +355,16 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
           ),
           
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
             child: Row(
               children: [
                 Text(
                   "Notes for ${_selectedDate.day}/${_selectedDate.month}",
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textSecondary(context),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                    color: AppColors.textPrimary(context),
                   ),
                 ),
               ],

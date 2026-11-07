@@ -7,6 +7,8 @@ class ProjectsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       body: SafeArea(
@@ -17,31 +19,51 @@ class ProjectsScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(22),
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppColors.purple.withOpacity(0.15), AppColors.primary.withOpacity(0.08)],
-                      begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [BoxShadow(color: AppColors.purple.withOpacity(0.1), blurRadius: 16, offset: const Offset(0, 4))],
+                    color: primary.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: primary.withOpacity(0.18)),
                   ),
-                  child: const Icon(Icons.rocket_launch_outlined, size: 48, color: AppColors.purple),
+                  child: Icon(Icons.rocket_launch_outlined, size: 40, color: primary),
                 ),
                 const SizedBox(height: 24),
-                Text("Projects", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context), letterSpacing: -0.3)),
+                Text(
+                  "Projects",
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary(context),
+                    letterSpacing: -0.3,
+                  ),
+                ),
                 const SizedBox(height: 8),
-                Text("Your projects and assignments will appear here.\nStay tuned for updates!", textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: AppColors.textSecondary(context), height: 1.5)),
+                Text(
+                  "Your course projects and capstone submissions will appear here.\nStay tuned for updates!",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary(context),
+                    height: 1.5,
+                  ),
+                ),
                 const SizedBox(height: 24),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [AppColors.purple.withOpacity(0.12), AppColors.primary.withOpacity(0.08)]),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.purple.withOpacity(0.3)),
+                    color: primary.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: primary.withOpacity(0.2)),
                   ),
-                  child: const Text("Coming Soon", style: TextStyle(color: AppColors.purple, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                  child: Text(
+                    "Coming Soon",
+                    style: TextStyle(
+                      color: primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
                 ),
               ],
             ),

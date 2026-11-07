@@ -189,13 +189,27 @@ class _GPAScreenState extends State<GPAScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text("GPA Analytics"),
+        title: Text(
+          "GPA Analytics",
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -203,20 +217,20 @@ class _GPAScreenState extends State<GPAScreen> {
               ? const Center(child: Text("No grade data available."))
               : SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildSummaryCard(),
+                      _buildSummaryCard(primaryColor),
                       const SizedBox(height: 24),
-                      Text("Performance Graph", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
-                      const SizedBox(height: 16),
-                      _buildGraph(),
+                      Text("Performance Graph", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: -0.2, color: AppColors.textPrimary(context))),
+                      const SizedBox(height: 12),
+                      _buildGraph(primaryColor),
                       const SizedBox(height: 24),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text("Semester Breakdown", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
+                          Text("Semester Breakdown", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: -0.2, color: AppColors.textPrimary(context))),
                           InkWell(
                             borderRadius: BorderRadius.circular(8),
                             onTap: () => setState(() => _sortNewestFirst = !_sortNewestFirst),
@@ -224,11 +238,11 @@ class _GPAScreenState extends State<GPAScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               child: Row(
                                 children: [
-                                  Icon(Icons.swap_vert_rounded, size: 18, color: AppColors.primary),
+                                  Icon(Icons.swap_vert_rounded, size: 16, color: primaryColor),
                                   const SizedBox(width: 4),
                                   Text(
                                     _sortNewestFirst ? "Newest First" : "Chronological",
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primaryColor),
                                   ),
                                 ],
                               ),
@@ -237,17 +251,17 @@ class _GPAScreenState extends State<GPAScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _buildSemesterList(),
-                      const SizedBox(height: 40),
+                      _buildSemesterList(primaryColor),
+                      const SizedBox(height: 32),
                     ],
                   ),
                 ),
     );
   }
 
-  Widget _buildSummaryCard() {
+  Widget _buildSummaryCard(Color primaryColor) {
     return GlassCard(
-      accentColor: AppColors.primary,
+      accentColor: primaryColor,
       child: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Row(
@@ -255,18 +269,18 @@ class _GPAScreenState extends State<GPAScreen> {
           children: [
             Column(
               children: [
-                Text("Overall CGPA", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
+                Text("Overall CGPA", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
                 const SizedBox(height: 4),
                 Text(
                   _overallCGPA,
-                  style: const TextStyle(color: AppColors.primary, fontSize: 32, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: primaryColor, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: -0.5),
                 ),
               ],
             ),
-            Container(width: 1, height: 50, color: AppColors.cardBorder(context)),
+            Container(width: 1, height: 44, color: AppColors.cardBorder(context)),
             Column(
               children: [
-                Text("Total Semesters", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
+                Text("Total Semesters", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
                 const SizedBox(height: 4),
                 Text(
                   "${_semesters.length}",
@@ -280,7 +294,7 @@ class _GPAScreenState extends State<GPAScreen> {
     );
   }
 
-  Widget _buildGraph() {
+  Widget _buildGraph(Color primaryColor) {
     if (_semesters.isEmpty) return const SizedBox.shrink();
 
     double minGpa = 10.0;
@@ -291,12 +305,19 @@ class _GPAScreenState extends State<GPAScreen> {
     minGpa = (minGpa - 0.5).clamp(0.0, 10.0);
 
     return Container(
-      height: 300,
-      padding: const EdgeInsets.only(right: 16, left: 0, top: 24, bottom: 10),
+      height: 280,
+      padding: const EdgeInsets.only(right: 16, left: 0, top: 20, bottom: 8),
       decoration: BoxDecoration(
         color: AppColors.cardBg(context),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.cardBorder(context)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(AppColors.isDark(context) ? 0.2 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: LineChart(
         LineChartData(
@@ -308,31 +329,31 @@ class _GPAScreenState extends State<GPAScreen> {
             horizontalInterval: 0.5,
             getDrawingHorizontalLine: (value) => FlLine(
               color: AppColors.cardBorder(context),
-              strokeWidth: 1,
-              dashArray: [5, 5],
+              strokeWidth: 0.8,
+              dashArray: [4, 4],
             ),
           ),
           titlesData: FlTitlesData(
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 40,
+                reservedSize: 36,
                 getTitlesWidget: (value, meta) => Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: Text(value.toStringAsFixed(1), style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12)),
+                  padding: const EdgeInsets.only(right: 6.0),
+                  child: Text(value.toStringAsFixed(1), style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11)),
                 ),
               ),
             ),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 30,
+                reservedSize: 26,
                 interval: 1,
                 getTitlesWidget: (value, meta) {
                   int idx = value.toInt();
                   if (idx >= 0 && idx < _semesters.length) {
                     return Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
+                      padding: const EdgeInsets.only(top: 6.0),
                       child: Text("Sem ${idx + 1}", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 10)),
                     );
                   }
@@ -346,7 +367,7 @@ class _GPAScreenState extends State<GPAScreen> {
           borderData: FlBorderData(show: false),
           lineTouchData: LineTouchData(
             touchTooltipData: LineTouchTooltipData(
-              getTooltipColor: (touchedSpot) => AppColors.primary,
+              getTooltipColor: (touchedSpot) => primaryColor,
               getTooltipItems: (touchedSpots) {
                 return touchedSpots.map((spot) {
                   final semIndex = spot.x.toInt();
@@ -374,39 +395,39 @@ class _GPAScreenState extends State<GPAScreen> {
             LineChartBarData(
               spots: _semesters.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.gpa)).toList(),
               isCurved: true,
-              color: AppColors.accent,
-              barWidth: 3,
+              color: AppColors.secondary,
+              barWidth: 2.5,
               isStrokeCapRound: true,
               dotData: FlDotData(
                 show: true,
                 getDotPainter: (spot, percent, barData, index) {
                   return FlDotCirclePainter(
-                    radius: _touchedIndex == index ? 6 : 4,
-                    color: AppColors.accent,
-                    strokeWidth: 2,
+                    radius: _touchedIndex == index ? 5 : 3.5,
+                    color: AppColors.secondary,
+                    strokeWidth: 1.5,
                     strokeColor: Colors.white,
                   );
                 },
               ),
               belowBarData: BarAreaData(
                 show: true,
-                color: AppColors.accent.withOpacity(0.1),
+                color: AppColors.secondary.withOpacity(0.08),
               ),
             ),
             // CGPA Line
             LineChartBarData(
               spots: _semesters.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.cgpa)).toList(),
               isCurved: true,
-              color: AppColors.primary,
-              barWidth: 3,
+              color: primaryColor,
+              barWidth: 2.5,
               isStrokeCapRound: true,
               dotData: FlDotData(
                 show: true,
                 getDotPainter: (spot, percent, barData, index) {
                   return FlDotCirclePainter(
-                    radius: _touchedIndex == index ? 6 : 4,
-                    color: AppColors.primary,
-                    strokeWidth: 2,
+                    radius: _touchedIndex == index ? 5 : 3.5,
+                    color: primaryColor,
+                    strokeWidth: 1.5,
                     strokeColor: Colors.white,
                   );
                 },
@@ -418,7 +439,7 @@ class _GPAScreenState extends State<GPAScreen> {
     );
   }
 
-  Widget _buildSemesterList() {
+  Widget _buildSemesterList(Color primaryColor) {
     final displayList = _sortNewestFirst ? _semesters.reversed.toList() : _semesters;
     return ListView.builder(
       shrinkWrap: true,
@@ -427,11 +448,18 @@ class _GPAScreenState extends State<GPAScreen> {
       itemBuilder: (context, index) {
         final sem = displayList[index];
         return Container(
-          margin: const EdgeInsets.only(bottom: 16),
+          margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
             color: AppColors.cardBg(context),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.cardBorder(context)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(AppColors.isDark(context) ? 0.2 : 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -441,15 +469,15 @@ class _GPAScreenState extends State<GPAScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.12),
+                      color: primaryColor.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       "Sem ${sem.semNumber}",
-                      style: const TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                      style: TextStyle(
+                        color: primaryColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
                       ),
                     ),
                   ),
@@ -460,7 +488,7 @@ class _GPAScreenState extends State<GPAScreen> {
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary(context),
-                        fontSize: 15.5,
+                        fontSize: 14.5,
                       ),
                     ),
                   ),
@@ -470,18 +498,18 @@ class _GPAScreenState extends State<GPAScreen> {
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
                   "${sem.courses.length} Courses • ${sem.creditsEarned.toStringAsFixed(1)} Credits • CGPA: ${sem.cgpa.toStringAsFixed(2)}",
-                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12.5),
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
                 ),
               ),
               trailing: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  color: primaryColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   sem.gpa.toStringAsFixed(2),
-                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 16),
+                  style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 15),
                 ),
               ),
               children: [
@@ -493,7 +521,7 @@ class _GPAScreenState extends State<GPAScreen> {
                       final gradeColor = _getGradeColor(grade.toString());
                       
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
+                        padding: const EdgeInsets.only(bottom: 10.0),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -503,27 +531,27 @@ class _GPAScreenState extends State<GPAScreen> {
                                 children: [
                                   Text(
                                     course["subject"] ?? "Unknown",
-                                    style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w500),
+                                    style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w500, fontSize: 13),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
                                     "${course["course_code"]} • ${course["credits"]} Cr",
-                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 12),
+                                    style: TextStyle(color: AppColors.textSecondary(context), fontSize: 11),
                                   ),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
                                 color: gradeColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: gradeColor.withOpacity(0.3)),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: gradeColor.withOpacity(0.2)),
                               ),
                               child: Text(
                                 grade,
-                                style: TextStyle(color: gradeColor, fontWeight: FontWeight.bold),
+                                style: TextStyle(color: gradeColor, fontWeight: FontWeight.bold, fontSize: 12),
                               ),
                             ),
                           ],
@@ -542,15 +570,21 @@ class _GPAScreenState extends State<GPAScreen> {
 
   Color _getGradeColor(String grade) {
     switch (grade.toUpperCase()) {
-      case 'S': return Colors.green;
-      case 'A': return Colors.lightGreen;
-      case 'B': return Colors.blue;
-      case 'C': return Colors.orange;
-      case 'D': return Colors.deepOrange;
-      case 'E': return Colors.redAccent;
-      case 'F': return Colors.red;
-      case 'N': return Colors.red;
-      default: return Colors.grey;
+      case 'S':
+      case 'A':
+        return AppColors.good;
+      case 'B':
+        return const Color(0xFF2E7D32);
+      case 'C':
+        return AppColors.warning;
+      case 'D':
+        return const Color(0xFFE65100);
+      case 'E':
+      case 'F':
+      case 'N':
+        return AppColors.danger;
+      default:
+        return const Color(0xFF9CA3AF);
     }
   }
 }

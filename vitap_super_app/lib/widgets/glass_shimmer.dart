@@ -11,7 +11,7 @@ class GlassShimmer extends StatefulWidget {
     super.key,
     this.width = double.infinity,
     this.height = 100,
-    this.borderRadius = 16,
+    this.borderRadius = 14,
     this.margin = const EdgeInsets.only(bottom: 16),
   });
 
@@ -38,12 +38,17 @@ class _GlassShimmerState extends State<GlassShimmer> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final isDark = AppColors.isDark(context);
+    final shimmerColor = isDark
+        ? Colors.white.withOpacity(0.06)
+        : const Color(0xFF172554).withOpacity(0.04);
+
     return Container(
       width: widget.width,
       height: widget.height,
       margin: widget.margin,
       decoration: BoxDecoration(
-        color: AppColors.cardBg(context).withOpacity(0.4),
+        color: AppColors.cardBg(context),
         borderRadius: BorderRadius.circular(widget.borderRadius),
         border: Border.all(color: AppColors.cardBorder(context)),
       ),
@@ -59,9 +64,9 @@ class _GlassShimmerState extends State<GlassShimmer> with SingleTickerProviderSt
                   end: Alignment.bottomRight,
                   stops: const [0.0, 0.5, 1.0],
                   colors: [
-                    Colors.white.withOpacity(0.0),
-                    Colors.white.withOpacity(0.05),
-                    Colors.white.withOpacity(0.0),
+                    shimmerColor.withOpacity(0.0),
+                    shimmerColor,
+                    shimmerColor.withOpacity(0.0),
                   ],
                   transform: _SlidingGradientTransform(_animation.value),
                 ),

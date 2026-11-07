@@ -572,13 +572,13 @@ async def app_version():
         except Exception:
             pass
     return {
-        "version": "1.0.9",
-        "versionCode": 10,
-        "title": "Version 1.0.9",
-        "notes": "• Fix VTOP Login & OTP Verification: Resolved duplicate OTP invalidation on login so valid OTP codes succeed instantly\n• Enhanced 2FA Architecture: Added XMLHttpRequest headers, resilient CSRF variable extraction, and case-insensitive session tracking\n• Specific Alert Messages: Informative alerts for expired or invalid OTP codes with 1-tap resend\n• Seamless in-app update trigger and direct APK download",
-        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.0.9/app-release.apk",
-        "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/latest",
-        "publishedAt": "2026-10-30T02:00:00Z"
+        "version": "1.1.0",
+        "versionCode": 11,
+        "title": "Version 1.1.0 - Premium UI/UX Redesign",
+        "notes": "• Complete UI/UX Modernization: Redesigned all 20+ screens with a premium commercial aesthetic following Apple Human Interface Guidelines and Linear minimal style\n• New Design System: 8-point spacing grid, clean 14px card radii, refined color palette (#172554 Navy & #526DAB secondary), and dynamic light/dark/nightfall/sakura themes\n• Modern Bento Grid Dashboard: Personalized greeting, attendance overview, timetable preview, and quick access navigation\n• Redesigned Core Screens: Timetable, Attendance, Mess Menu, Outings, Marks, Exams, Profile, GPA, and Settings completely modernized\n• Zero Disruption to Data: All backend APIs, credentials, session management, and features preserved 100%",
+        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.1.0/app-release.apk",
+        "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/tag/v1.1.0",
+        "publishedAt": "2026-11-07T14:45:00Z"
     }
 
 

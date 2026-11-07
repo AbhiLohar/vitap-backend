@@ -9,7 +9,6 @@ import '../services/cache_service.dart';
 import '../services/theme_manager.dart';
 import '../services/logs_service.dart';
 import '../services/error_formatter.dart';
-import '../widgets/glass_card.dart';
 import '../services/avatar_service.dart';
 import 'login_screen.dart';
 import 'logs_screen.dart';
@@ -73,12 +72,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.cardBg(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text("Sign Out", style: TextStyle(color: AppColors.textPrimary(context))),
-        content: Text("Are you sure you want to sign out?", style: TextStyle(color: AppColors.textSecondary(context))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text("Sign Out", style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w700, fontSize: 18)),
+        content: Text("Are you sure you want to sign out? Your cached offline data will be cleared.", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text("Cancel", style: TextStyle(color: AppColors.textMuted(context)))),
           TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("Cancel", style: TextStyle(color: AppColors.textSecondary(context), fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               try { ApiService.logout(widget.username); } catch (_) {}
@@ -88,10 +97,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const storage = FlutterSecureStorage();
               await prefs.remove('username'); 
               await storage.delete(key: 'password');
-              await prefs.remove('semesterId'); await prefs.remove('semesterName');
-              if (mounted) { Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false); }
+              await prefs.remove('semesterId'); 
+              await prefs.remove('semesterName');
+              if (mounted) { 
+                Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false); 
+              }
             },
-            child: const Text("Sign Out", style: TextStyle(color: AppColors.red)),
+            child: const Text("Sign Out"),
           ),
         ],
       ),
@@ -104,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: AppColors.cardBg(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
@@ -113,14 +125,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Text(
                 "Share VTOP Super App",
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary(context),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
-                "Scan with your phone camera or QR scanner to download the APK directly.",
+                "Scan with your mobile camera to download the APK directly.",
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
               ),
@@ -130,22 +142,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.cardBorder(context)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
                 child: QrImageView(
                   data: downloadUrl,
                   version: QrVersions.auto,
-                  size: 200.0,
+                  size: 180.0,
                   backgroundColor: Colors.white,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
@@ -153,24 +166,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: const Icon(Icons.copy_rounded, size: 16),
                       label: const Text("Copy Link"),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: BorderSide(color: AppColors.primary.withOpacity(0.4)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        foregroundColor: AppColors.textPrimary(context),
+                        side: BorderSide(color: AppColors.cardBorder(context)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       onPressed: () {
                         Clipboard.setData(const ClipboardData(text: downloadUrl));
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            backgroundColor: const Color(0xFF1E293B),
+                            backgroundColor: AppColors.cardBg(context),
                             behavior: SnackBarBehavior.floating,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            content: const Row(
+                            content: Row(
                               children: [
-                                Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 20),
-                                SizedBox(width: 10),
-                                Expanded(child: Text("Direct download link copied to clipboard!")),
+                                const Icon(Icons.check_circle_rounded, color: AppColors.good, size: 20),
+                                const SizedBox(width: 10),
+                                Text(
+                                  "Download link copied to clipboard",
+                                  style: TextStyle(color: AppColors.textPrimary(context), fontWeight: FontWeight.w500),
+                                ),
                               ],
                             ),
                             duration: const Duration(seconds: 2),
@@ -179,16 +195,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.share_rounded, size: 16),
                       label: const Text("Share"),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       onPressed: () {
                         Share.share(
@@ -199,10 +215,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: Text("Close", style: TextStyle(color: AppColors.textSecondary(context))),
+                child: Text("Dismiss", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
               ),
             ],
           ),
@@ -223,57 +239,118 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() => isChangingSemester = false);
       showModalBottomSheet(
-        context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
         builder: (ctx) {
           return Container(
-            decoration: BoxDecoration(color: AppColors.cardBg(context), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+            decoration: BoxDecoration(
+              color: AppColors.cardBg(context),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              border: Border(top: BorderSide(color: AppColors.cardBorder(context), width: 1)),
+            ),
             padding: const EdgeInsets.all(24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text("Select Semester", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
-              const SizedBox(height: 8),
-              Text("Choose your active semester", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
-              const SizedBox(height: 24),
-              SizedBox(height: 300, child: ListView.separated(
-                physics: const BouncingScrollPhysics(), itemCount: semesters.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final sem = semesters[index];
-                  final isSelected = currentSemester == sem['name'];
-                  return InkWell(
-                    onTap: () async {
-                      final prefs = await SharedPreferences.getInstance();
-                      await prefs.setString('semesterId', sem['id']);
-                      await prefs.setString('semesterName', sem['name']);
-                      setState(() => currentSemester = sem['name']);
-                      CacheService.clear();
-                      LogsService.add("Semester changed to: ${sem['name']}");
-                      
-                      // Trigger parallel preloading for the new semester
-                      ApiService.preloadAllData(widget.username, semesterId: sem['id']);
-                      
-                      if (widget.onSemesterChanged != null) {
-                        widget.onSemesterChanged!(sem['id']);
-                      }
-                      
-                      if (mounted) { 
-                        Navigator.pop(ctx); 
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Changed to ${sem['name']}"))); 
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(14),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.scaffoldBg(context),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: isSelected ? AppColors.primary : AppColors.cardBorder(context)),
-                      ),
-                      child: Text(sem['name'], style: TextStyle(color: isSelected ? AppColors.primary : AppColors.textPrimary(context), fontSize: 16, fontWeight: isSelected ? FontWeight.bold : FontWeight.w500)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.textMuted(context).withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                  );
-                },
-              )),
-            ]),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  "Select Semester",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary(context),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Choose active academic term to view data for",
+                  style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  height: 320,
+                  child: ListView.separated(
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: semesters.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final sem = semesters[index];
+                      final isSelected = currentSemester == sem['name'];
+                      return InkWell(
+                        onTap: () async {
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setString('semesterId', sem['id']);
+                          await prefs.setString('semesterName', sem['name']);
+                          setState(() => currentSemester = sem['name']);
+                          CacheService.clear();
+                          LogsService.add("Semester changed to: ${sem['name']}");
+                          
+                          ApiService.preloadAllData(widget.username, semesterId: sem['id']);
+                          
+                          if (widget.onSemesterChanged != null) {
+                            widget.onSemesterChanged!(sem['id']);
+                          }
+                          
+                          if (mounted) { 
+                            Navigator.pop(ctx); 
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text("Active semester set to ${sem['name']}"),
+                              behavior: SnackBarBehavior.floating,
+                            )); 
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primary.withOpacity(0.08)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : AppColors.cardBorder(context),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  sem['name'],
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Theme.of(context).colorScheme.primary
+                                        : AppColors.textPrimary(context),
+                                    fontSize: 14.5,
+                                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              if (isSelected)
+                                Icon(Icons.check_circle_rounded,
+                                    color: Theme.of(context).colorScheme.primary, size: 20),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           );
         },
       );
@@ -285,22 +362,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _selectTheme() {
     showModalBottomSheet(
-      context: context, backgroundColor: Colors.transparent, isScrollControlled: true,
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (ctx) => Container(
-        decoration: BoxDecoration(color: AppColors.cardBg(context), borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: AppColors.cardBorder(context), width: 1)),
+        ),
         padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text("Select Theme", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
-          const SizedBox(height: 20),
-          _themeOption(context, "Dark (Default)", Icons.dark_mode, 'dark', const Color(0xFF0F0F0F), AppColors.primary),
-          const SizedBox(height: 12),
-          _themeOption(context, "Light", Icons.light_mode, 'light', const Color(0xFFF2F4F8), AppColors.primary),
-          const SizedBox(height: 12),
-          _themeOption(context, "Nightfall", Icons.nights_stay, 'nightfall', const Color(0xFF090A0F), const Color(0xFF6366F1)),
-          const SizedBox(height: 12),
-          _themeOption(context, "Sakura", Icons.spa, 'sakura', const Color(0xFFFFF7F9), const Color(0xFFF472B6)),
-          const SizedBox(height: 20),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.textMuted(context).withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              "Appearance",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary(context),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              "Customize the visual theme of the app",
+              style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            _themeOption(context, "Light (Clean)", Icons.light_mode_outlined, 'light', const Color(0xFFF7F8FA), const Color(0xFF172554)),
+            const SizedBox(height: 10),
+            _themeOption(context, "Dark", Icons.dark_mode_outlined, 'dark', const Color(0xFF0F1117), const Color(0xFF7B93C9)),
+            const SizedBox(height: 10),
+            _themeOption(context, "Nightfall (OLED)", Icons.nights_stay_outlined, 'nightfall', const Color(0xFF080A10), const Color(0xFF8BA3D9)),
+            const SizedBox(height: 10),
+            _themeOption(context, "Sakura", Icons.spa_outlined, 'sakura', const Color(0xFFFFF7F9), const Color(0xFFE8457C)),
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }
@@ -308,30 +418,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _themeOption(BuildContext context, String title, IconData icon, String themeId, Color bgColor, Color primaryColor) {
     final isSelected = ThemeManager.instance.currentTheme.value == themeId;
     return InkWell(
-      onTap: () { ThemeManager.instance.setTheme(themeId); LogsService.add("Theme changed to: $themeId"); Navigator.pop(context); },
+      onTap: () {
+        ThemeManager.instance.setTheme(themeId);
+        LogsService.add("Theme changed to: $themeId");
+        Navigator.pop(context);
+      },
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: isSelected ? primaryColor.withOpacity(0.1) : AppColors.scaffoldBg(context),
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary.withOpacity(0.08)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: isSelected ? primaryColor : AppColors.cardBorder(context)),
-        ),
-        child: Row(children: [
-          Container(
-            width: 40, height: 40,
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.cardBorder(context)),
-            ),
-            child: Center(child: Icon(icon, color: primaryColor, size: 20)),
+          border: Border.all(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : AppColors.cardBorder(context),
           ),
-          const SizedBox(width: 16),
-          Text(title, style: TextStyle(color: isSelected ? primaryColor : AppColors.textPrimary(context), fontWeight: isSelected ? FontWeight.bold : FontWeight.w500, fontSize: 16)),
-          const Spacer(),
-          if (isSelected) Icon(Icons.check_circle, color: primaryColor, size: 22),
-        ]),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.cardBorder(context)),
+              ),
+              child: Center(child: Icon(icon, color: primaryColor, size: 18)),
+            ),
+            const SizedBox(width: 14),
+            Text(
+              title,
+              style: TextStyle(
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : AppColors.textPrimary(context),
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 14.5,
+              ),
+            ),
+            const Spacer(),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
+          ],
+        ),
       ),
     );
   }
@@ -340,20 +473,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
+      appBar: AppBar(
+        title: const Text("Settings"),
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: AppColors.scaffoldBg(context),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Profile header
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Profile Banner ───────────────────────────────────
               Container(
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [AppColors.primary.withOpacity(0.04), Colors.transparent]),
+                  color: AppColors.cardBg(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.cardBorder(context), width: 1),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Center(child: Column(children: [
+                child: Row(
+                  children: [
                     GestureDetector(
                       onTap: () => AvatarPickerSheet.show(
                         context,
@@ -366,302 +509,444 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           return AvatarService.buildAvatar(
                             choice: choice,
                             name: profile?["name"] ?? widget.username,
-                            size: 56,
+                            size: 52,
+                            showBorder: true,
                           );
                         },
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    Text(profile?["name"] ?? widget.username, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context))),
-                    const SizedBox(height: 2),
-                    Text(currentSemester, style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context))),
-                  ])),
-                ),
-              ),
-
-
-
-              const SizedBox(height: 20),
-              // Account card
-              Container(
-                width: double.infinity, padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.cardBg(context), borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: AppColors.cardBorder(context)),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2))],
-                ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.primary.withOpacity(0.15), AppColors.accent.withOpacity(0.08)]), borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.account_box_outlined, color: AppColors.primary, size: 22)),
-                    const SizedBox(width: 12),
-                    Text("VTOP Account", style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context))),
-                  ]),
-                  const SizedBox(height: 20),
-                  _accountRow(context, Icons.person_outline, "Username", widget.username),
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Icon(Icons.key, size: 18, color: AppColors.textSecondary(context)),
-                    const SizedBox(width: 10),
-                    Text("Password  ", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
-                    Expanded(child: Text(obscurePassword ? "••••••••••" : "hidden", style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14))),
-                    GestureDetector(
-                      onTap: () => setState(() => obscurePassword = !obscurePassword),
-                      child: Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.scaffoldBg(context), borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.cardBorder(context))),
-                        child: Icon(obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 18, color: AppColors.textSecondary(context))),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            profile?["name"] ?? widget.username,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary(context),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            currentSemester,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary(context),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
-                  ]),
-                  const SizedBox(height: 20),
-                  Center(child: OutlinedButton(
-                    onPressed: isChangingSemester ? null : _changeSemester,
-                    style: OutlinedButton.styleFrom(foregroundColor: AppColors.primary, side: BorderSide(color: AppColors.primary.withOpacity(0.5)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10)),
-                    child: isChangingSemester ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text("Change Semester"),
-                  )),
-                ]),
-              ),
-
-              const SizedBox(height: 20),
-              _sectionLabel("App Settings"),
-              const SizedBox(height: 8),
-              GlassCard(accentColor: AppColors.primary.withOpacity(0.4), margin: EdgeInsets.zero, padding: EdgeInsets.zero,
-                child: Column(children: [
-                  InkWell(onTap: _selectTheme, child: _dropdownItem(icon: Icons.dark_mode_outlined, title: "Theme", subtitle: "Choose light, dark, or follow system.")),
-                  _settingDivider(context),
-                  _chevronItem(icon: Icons.notifications_outlined, title: "Notification Management", onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen()))),
-                  _settingDivider(context),
-                  _chevronItem(icon: Icons.list_alt, title: "Logs", onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LogsScreen()))),
-                  _settingDivider(context),
-                  _chevronItem(icon: Icons.share_outlined, title: "Share App", onTap: _showAppQrCode),
-                  _settingDivider(context),
-                  _toggleItem(icon: Icons.fingerprint, title: "Biometric Login", subtitle: "Use fingerprint/face ID to unlock", value: biometricEnabled, onChanged: (v) { setState(() => biometricEnabled = v); _saveBool("biometricEnabled", v); }),
-                  _settingDivider(context),
-                  InkWell(
-                    onTap: isSyncing ? null : () async {
-                      setState(() => isSyncing = true);
-                      LogsService.add("Manual sync started");
-                      try {
-                        final prefs = await SharedPreferences.getInstance();
-                        final semId = prefs.getString('semesterId');
-                        CacheService.clear();
-                        
-                        // Clear all persistent cache keys from SharedPreferences
-                        final keys = prefs.getKeys();
-                        final cachePrefixes = ['timetable_', 'marks_', 'grades_', 'profile_', 'curriculum_', 'outing_', 'payments_', 'examtypes_', 'examsched_'];
-                        for (var key in keys) {
-                          if (cachePrefixes.any((prefix) => key.startsWith(prefix))) {
-                            await prefs.remove(key);
-                          }
-                        }
-                        await ApiService.preloadAllData(widget.username, semesterId: semId);
-                        
-                        // Check for notifications
-                        try {
-                          final attendanceData = await ApiService.getAttendance(widget.username, semesterId: semId, forceSync: false);
-                          await NotificationService.instance.checkAttendanceAlerts(attendanceData);
-                          await NotificationService.instance.checkMarksAlerts();
-                        } catch (_) {}
-
-                        LogsService.add("Manual sync completed successfully");
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("All data synced successfully!")));
-                      } catch (e) {
-                        LogsService.add("Manual sync failed: $e");
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Sync failed: ${ErrorFormatter.format(e)}")));
-                      }
-                      if (mounted) setState(() => isSyncing = false);
-                    },
-                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      child: Row(children: [
-                        Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                          child: isSyncing
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.cloud_sync_outlined, size: 18, color: AppColors.primary)),
-                        const SizedBox(width: 14),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text("Sync Now", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.textPrimary(context))),
-                          Text(isSyncing ? "Syncing..." : "Force refresh all data from VTOP", style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
-                        ])),
-                      ]),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.cardBorder(context)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      onPressed: isChangingSemester ? null : _changeSemester,
+                      child: isChangingSemester
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Text("Change Sem", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context))),
                     ),
-                  ),
-                  _settingDivider(context),
-                  InkWell(onTap: _signOut, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    child: Row(children: [
-                      Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                        child: Icon(Icons.logout, size: 18, color: AppColors.red)),
-                      const SizedBox(width: 14),
-                      Text("Sign Out", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.red)),
-                    ]),
-                  )),
-                ]),
+                  ],
+                ),
               ),
 
               const SizedBox(height: 24),
-              // Check for Updates Button
+
+              // ── Account Details ──────────────────────────────────
+              _sectionHeader("VTOP Credentials"),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardBg(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.cardBorder(context), width: 1),
+                ),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: Row(
+                        children: [
+                          Icon(Icons.badge_outlined, size: 20, color: AppColors.textSecondary(context)),
+                          const SizedBox(width: 14),
+                          Text(
+                            "Application No",
+                            style: TextStyle(fontSize: 14, color: AppColors.textSecondary(context)),
+                          ),
+                          const Spacer(),
+                          Text(
+                            widget.username.toUpperCase(),
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, indent: 48, color: AppColors.cardBorder(context)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.lock_outline_rounded, size: 20, color: AppColors.textSecondary(context)),
+                          const SizedBox(width: 14),
+                          Text(
+                            "Password",
+                            style: TextStyle(fontSize: 14, color: AppColors.textSecondary(context)),
+                          ),
+                          const Spacer(),
+                          Text(
+                            obscurePassword ? "••••••••••••" : "Stored securely",
+                            style: TextStyle(fontSize: 14, color: AppColors.textPrimary(context), letterSpacing: obscurePassword ? 1.5 : 0),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: Icon(
+                              obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              size: 18,
+                              color: AppColors.textMuted(context),
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => setState(() => obscurePassword = !obscurePassword),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ── General Preferences ──────────────────────────────
+              _sectionHeader("Preferences"),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardBg(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.cardBorder(context), width: 1),
+                ),
+                child: Column(
+                  children: [
+                    _chevronItem(
+                      icon: Icons.palette_outlined,
+                      title: "Appearance & Theme",
+                      onTap: _selectTheme,
+                    ),
+                    _settingDivider(context),
+                    _toggleItem(
+                      icon: Icons.fingerprint_rounded,
+                      title: "Biometric Unlock",
+                      subtitle: "Secure app launch with fingerprint / Face ID",
+                      value: biometricEnabled,
+                      onChanged: (v) {
+                        setState(() => biometricEnabled = v);
+                        _saveBool("biometricEnabled", v);
+                      },
+                    ),
+                    _settingDivider(context),
+                    _chevronItem(
+                      icon: Icons.notifications_none_rounded,
+                      title: "Notification Settings",
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ── System & Diagnostics ─────────────────────────────
+              _sectionHeader("System & Data"),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardBg(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.cardBorder(context), width: 1),
+                ),
+                child: Column(
+                  children: [
+                    InkWell(
+                      onTap: isSyncing
+                          ? null
+                          : () async {
+                              setState(() => isSyncing = true);
+                              LogsService.add("Manual sync started");
+                              try {
+                                final prefs = await SharedPreferences.getInstance();
+                                final semId = prefs.getString('semesterId');
+                                CacheService.clear();
+
+                                final keys = prefs.getKeys();
+                                final cachePrefixes = ['timetable_', 'marks_', 'grades_', 'profile_', 'curriculum_', 'outing_', 'payments_', 'examtypes_', 'examsched_'];
+                                for (var key in keys) {
+                                  if (cachePrefixes.any((prefix) => key.startsWith(prefix))) {
+                                    await prefs.remove(key);
+                                  }
+                                }
+                                await ApiService.preloadAllData(widget.username, semesterId: semId);
+
+                                try {
+                                  final attendanceData = await ApiService.getAttendance(widget.username, semesterId: semId, forceSync: false);
+                                  await NotificationService.instance.checkAttendanceAlerts(attendanceData);
+                                  await NotificationService.instance.checkMarksAlerts();
+                                } catch (_) {}
+
+                                LogsService.add("Manual sync completed successfully");
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text("All academic data refreshed from VTOP"),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                LogsService.add("Manual sync failed: $e");
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text("Sync failed: ${ErrorFormatter.format(e)}")),
+                                  );
+                                }
+                              }
+                              if (mounted) setState(() => isSyncing = false);
+                            },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        child: Row(
+                          children: [
+                            Icon(Icons.sync_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Force Data Sync",
+                                    style: TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary(context),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isSyncing ? "Refreshing data from portal..." : "Clear local cache & pull fresh data",
+                                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isSyncing)
+                              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            else
+                              Icon(Icons.chevron_right_rounded, color: AppColors.textMuted(context), size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+                    _settingDivider(context),
+                    _chevronItem(
+                      icon: Icons.terminal_rounded,
+                      title: "Diagnostic Logs",
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LogsScreen())),
+                    ),
+                    _settingDivider(context),
+                    _chevronItem(
+                      icon: Icons.qr_code_2_rounded,
+                      title: "Share App with Classmates",
+                      onTap: _showAppQrCode,
+                    ),
+                    _settingDivider(context),
+                    InkWell(
+                      onTap: _signOut,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.logout_rounded, size: 20, color: AppColors.red),
+                            const SizedBox(width: 14),
+                            const Text(
+                              "Sign Out",
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ── Check for Updates ─────────────────────────────────
               Center(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () async {
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.system_update_rounded, size: 16),
+                  label: const Text("Check for Updates"),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: AppColors.cardBorder(context)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    foregroundColor: AppColors.textPrimary(context),
+                  ),
+                  onPressed: () async {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Row(
                           children: [
-                            SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+                            SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
                             SizedBox(width: 12),
-                            Text("Checking for updates..."),
+                            Text("Checking GitHub Releases..."),
                           ],
                         ),
                         duration: Duration(seconds: 1),
+                        behavior: SnackBarBehavior.floating,
                       ),
                     );
                     await UpdateService.checkAndShow(context, isManual: true);
                   },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.system_update_alt_rounded, size: 16, color: AppColors.primary),
-                        SizedBox(width: 8),
-                        Text(
-                          "Check for Updates",
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               ),
+
               const SizedBox(height: 20),
 
-              // App version & links
-              Center(child: Column(children: [
-                Row(mainAxisSize: MainAxisSize.min, children: [
-                  InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () => _openUrl("https://github.com/AbhiLohar/vitap-backend"),
-                    child: _socialIcon(context, Icons.code),
-                  ),
-                  const SizedBox(width: 20),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: _showAppQrCode,
-                    child: _socialIcon(context, Icons.qr_code),
-                  ),
-                  const SizedBox(width: 20),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Camera feature coming soon")));
-                    },
-                    child: _socialIcon(context, Icons.camera_alt_outlined),
-                  ),
-                ]),
-                const SizedBox(height: 16),
-                FutureBuilder<String>(
-                  future: UpdateService.getCurrentVersion(),
-                  builder: (context, snap) {
-                    final ver = snap.data ?? UpdateService.fallbackVersion;
-                    return Text("VTOP Super App v$ver", style: TextStyle(fontSize: 12, color: AppColors.textMuted(context)));
-                  },
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+              // ── Footer ───────────────────────────────────────────
+              Center(
+                child: Column(
                   children: [
-                    Text("Created by ", style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
-                    InkWell(
-                      onTap: () => _openUrl("https://github.com/AbhiLohar"),
-                      child: Text("AbhishekLohar", style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.bold)),
+                    FutureBuilder<String>(
+                      future: UpdateService.getCurrentVersion(),
+                      builder: (context, snap) {
+                        final ver = snap.data ?? UpdateService.fallbackVersion;
+                        return Text(
+                          "VTOP Super App v$ver",
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textMuted(context)),
+                        );
+                      },
                     ),
-                    Text(" with ❤️ for VIT-AP students", style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text("Designed with care for VIT-AP", style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
+                      ],
+                    ),
                   ],
                 ),
-              ])),
-              const SizedBox(height: 30),
-            ]),
+              ),
+              const SizedBox(height: 32),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _sectionLabel(String text) => Text(text, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context)));
-
-  Widget _toggleItem({required IconData icon, required String title, String? subtitle, required bool value, required ValueChanged<bool> onChanged, bool hasInfo = false}) {
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(children: [
-        Icon(icon, size: 20, color: AppColors.textSecondary(context)),
-        const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.textPrimary(context))),
-            if (hasInfo) ...[const SizedBox(width: 4), Icon(Icons.info_outline, size: 14, color: AppColors.textMuted(context))],
-          ]),
-          if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
-        ])),
-        Switch(value: value, onChanged: onChanged),
-      ]),
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textSecondary(context),
+          letterSpacing: 0.8,
+        ),
+      ),
     );
   }
 
-  Widget _dropdownItem({required IconData icon, required String title, String? subtitle}) {
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(children: [
-        Icon(icon, size: 20, color: AppColors.textSecondary(context)),
-        const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.textPrimary(context))),
-          if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
-        ])),
-        Icon(Icons.unfold_more, size: 20, color: AppColors.textMuted(context)),
-      ]),
+  Widget _toggleItem({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: AppColors.textSecondary(context)),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary(context),
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: Theme.of(context).colorScheme.primary,
+          ),
+        ],
+      ),
     );
   }
 
   Widget _chevronItem({required IconData icon, required String title, required VoidCallback onTap}) {
-    return InkWell(onTap: onTap, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(children: [
-        Icon(icon, size: 20, color: AppColors.textSecondary(context)),
-        const SizedBox(width: 14),
-        Expanded(child: Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.textPrimary(context)))),
-        Icon(Icons.chevron_right, size: 20, color: AppColors.textMuted(context)),
-      ]),
-    ));
-  }
-
-  Widget _accountRow(BuildContext context, IconData icon, String label, String value) {
-    return Row(children: [
-      Icon(icon, size: 18, color: AppColors.textSecondary(context)),
-      const SizedBox(width: 10),
-      Text("$label  ", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
-      Text(value, style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14)),
-    ]);
-  }
-
-  Widget _socialIcon(BuildContext context, IconData icon) {
-    return Container(padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [AppColors.cardBg(context), AppColors.primary.withOpacity(0.05)]),
-        borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.cardBorder(context))),
-      child: Icon(icon, size: 22, color: AppColors.textSecondary(context)),
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppColors.textSecondary(context)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary(context),
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textMuted(context)),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _settingDivider(BuildContext context) => Divider(height: 1, indent: 50, color: AppColors.cardBorder(context));
-
-  void _openUrl(String url) async {
-    final uri = Uri.parse(url);
-    try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {}
-  }
+  Widget _settingDivider(BuildContext context) => Divider(
+        height: 1,
+        indent: 48,
+        endIndent: 0,
+        color: AppColors.cardBorder(context),
+      );
 }

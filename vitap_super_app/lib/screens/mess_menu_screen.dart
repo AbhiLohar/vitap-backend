@@ -271,17 +271,20 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
     final controller = TextEditingController(text: currentItems.join('\n'));
     final dayName = MessMenuService.dayOrder[_selectedDate.weekday - 1];
     final dateKey = 'Date_${_selectedDate.day}';
+    final primary = Theme.of(context).colorScheme.primary;
 
     await showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
           backgroundColor: AppColors.cardBg(context),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
             'Edit $mealType',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
               color: AppColors.textPrimary(context),
               fontWeight: FontWeight.w600,
+              fontSize: 17,
             ),
           ),
           content: TextField(
@@ -289,22 +292,27 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
             maxLines: 8,
             style: GoogleFonts.inter(
               color: AppColors.textPrimary(context),
+              fontSize: 14,
             ),
             decoration: InputDecoration(
               hintText: 'Enter items, one per line',
-              hintStyle: TextStyle(color: AppColors.textMuted(context)),
+              hintStyle: TextStyle(color: AppColors.textMuted(context), fontSize: 13),
+              filled: true,
+              fillColor: AppColors.scaffoldBg(context),
               enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.textMuted(context).withOpacity(0.3)),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppColors.cardBorder(context)),
               ),
-              focusedBorder: const OutlineInputBorder(
-                borderSide: BorderSide(color: AppColors.primary),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: primary, width: 1.5),
               ),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary(context))),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -323,10 +331,12 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: primary,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
               ),
-              child: const Text('Save'),
+              child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
           ],
         );
@@ -335,6 +345,8 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
   }
 
   Future<void> _showUploadSheet() async {
+    final primary = Theme.of(context).colorScheme.primary;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.cardBg(context),
@@ -343,55 +355,88 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
       ),
       builder: (context) {
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 40,
+                width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.textMuted(context).withOpacity(0.3),
+                  color: AppColors.cardBorder(context),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(height: 16),
               Text(
                 'Upload Mess Menu File',
-                style: GoogleFonts.poppins(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary(context),
+                  letterSpacing: -0.2,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                'Select your monthly mess menu file (.xlsx or .csv) from your phone',
+                'Select your monthly mess menu file (.xlsx or .csv) from your device',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
+                style: TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary(context),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: AppColors.primary.withOpacity(0.3))),
-                leading: const Icon(Icons.table_chart_outlined, color: AppColors.primary, size: 28),
-                title: Text('Upload Excel (.xlsx)', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary(context))),
-                subtitle: Text('Parses sheets with Day, Breakfast, Lunch, Snacks, Dinner', style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: AppColors.cardBorder(context)),
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.table_chart_outlined, color: primary, size: 22),
+                ),
+                title: Text(
+                  'Upload Excel (.xlsx)',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary(context)),
+                ),
+                subtitle: Text(
+                  'Parses sheets with Day, Breakfast, Lunch, Snacks, Dinner',
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _pickAndParseFile(['xlsx', 'xls']);
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: AppColors.teal.withOpacity(0.3))),
-                leading: const Icon(Icons.text_snippet_outlined, color: AppColors.teal, size: 28),
-                title: Text('Upload CSV (.csv)', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary(context))),
-                subtitle: Text('Parses comma separated values menu file', style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: AppColors.cardBorder(context)),
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.good.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.text_snippet_outlined, color: AppColors.good, size: 22),
+                ),
+                title: Text(
+                  'Upload CSV (.csv)',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary(context)),
+                ),
+                subtitle: Text(
+                  'Parses comma separated values menu file',
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _pickAndParseFile(['csv']);
@@ -407,6 +452,8 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
@@ -414,27 +461,29 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
         elevation: 0,
         title: Text(
           'Mess Menu',
-          style: GoogleFonts.poppins(
+          style: TextStyle(
             color: AppColors.textPrimary(context),
             fontWeight: FontWeight.w600,
+            fontSize: 18,
           ),
         ),
         iconTheme: IconThemeData(color: AppColors.textPrimary(context)),
         actions: [
           TextButton.icon(
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.primary,
+              foregroundColor: primary,
               padding: const EdgeInsets.symmetric(horizontal: 10),
             ),
             onPressed: _showUploadSheet,
-            icon: const Icon(Icons.cloud_upload_outlined, size: 20),
-            label: const Text('Change Menu', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+            label: const Text('Change Menu', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
           ),
           IconButton(
             tooltip: _isEditing ? 'Done Editing' : 'Edit Items',
             icon: Icon(
-              _isEditing ? Icons.check_circle : Icons.edit_outlined,
-              color: _isEditing ? AppColors.primary : AppColors.textPrimary(context),
+              _isEditing ? Icons.check_circle_rounded : Icons.edit_outlined,
+              color: _isEditing ? primary : AppColors.textPrimary(context),
+              size: 20,
             ),
             onPressed: () {
               setState(() {
@@ -447,19 +496,19 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
       body: Stack(
         children: [
           _isLoading
-              ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+              ? Center(child: CircularProgressIndicator(color: primary))
               : Column(
                   children: [
                     _buildMessTypeToggle(),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     
                     if (_pendingAllSheets != null || _pendingParsedMenu != null) _buildPendingPreviewBanner(),
 
                     if (_hasMenu && _pendingAllSheets == null && _pendingParsedMenu == null) _buildTopChangeHeader(),
 
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     _buildDaySelector(),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
 
                     Expanded(
                       child: _hasMenu ? _buildMenuCards() : _buildEmptyState(),
@@ -469,35 +518,33 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
 
           if (_isUploading)
             Container(
-              color: Colors.black54,
+              color: Colors.black45,
               child: Center(
                 child: GlassCard(
                   margin: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(color: AppColors.primary),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Reading & Parsing Menu...',
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary(context),
-                          ),
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: primary),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Reading & Parsing Menu...',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary(context),
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Extracting dates and meal items',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: AppColors.textSecondary(context),
-                          ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Extracting dates and meal items',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary(context),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -508,6 +555,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
   }
 
   Widget _buildPendingPreviewBanner() {
+    final primary = Theme.of(context).colorScheme.primary;
     final daysCount = _pendingAllSheets != null 
         ? _pendingAllSheets!.values.first.keys.length
         : (_pendingParsedMenu?.keys.length ?? 0);
@@ -520,23 +568,16 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: primary.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: primary.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.file_present_outlined, color: AppColors.primary, size: 24),
+              Icon(Icons.file_present_outlined, color: primary, size: 22),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -544,47 +585,49 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                   children: [
                     Text(
                       _pendingFileName ?? 'Uploaded Menu File',
-                      style: GoogleFonts.poppins(
+                      style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         color: AppColors.textPrimary(context),
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
+                    const SizedBox(height: 2),
                     Text(
                       '$sheetInfo ($daysCount Dates Parsed)',
-                      style: TextStyle(fontSize: 11, color: AppColors.teal, fontWeight: FontWeight.w600),
+                      style: TextStyle(fontSize: 11, color: AppColors.good, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.teal,
-                  borderRadius: BorderRadius.circular(10),
+                  color: AppColors.good.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.good.withOpacity(0.3)),
                 ),
-                child: const Text(
+                child: Text(
                   'Ready',
-                  style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 11, color: AppColors.good, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: _applyPendingMenu,
-                  icon: const Icon(Icons.check_circle_outline, size: 20),
-                  label: const Text('Apply Changes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                  label: const Text('Apply Changes', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
+                    backgroundColor: primary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 2,
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 0,
                   ),
                 ),
               ),
@@ -598,12 +641,12 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                   });
                 },
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.redAccent,
-                  side: const BorderSide(color: Colors.redAccent),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  foregroundColor: AppColors.danger,
+                  side: BorderSide(color: AppColors.danger.withOpacity(0.4)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                child: const Text('Discard'),
+                child: const Text('Discard', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
               ),
             ],
           ),
@@ -613,6 +656,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
   }
 
   Widget _buildTopChangeHeader() {
+    final primary = Theme.of(context).colorScheme.primary;
     final title = _messType == 'special' ? 'Special Mess' : 'Veg & Non-Veg';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -621,11 +665,11 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.check_circle, size: 14, color: AppColors.teal),
+              Icon(Icons.check_circle_rounded, size: 14, color: AppColors.good),
               const SizedBox(width: 6),
               Text(
                 '$title Menu Active',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary(context)),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary(context)),
               ),
             ],
           ),
@@ -636,11 +680,11 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               child: Row(
                 children: [
-                  const Icon(Icons.refresh, size: 14, color: AppColors.primary),
+                  Icon(Icons.refresh_rounded, size: 14, color: primary),
                   const SizedBox(width: 4),
                   Text(
                     'Change Menu File',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: primary),
                   ),
                 ],
               ),
@@ -652,47 +696,68 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
   }
 
   Widget _buildMessTypeToggle() {
+    final primary = Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: SegmentedButton<String>(
-        segments: const [
-          ButtonSegment(
-            value: 'veg_nonveg',
-            label: Text('Veg & Non-Veg'),
-          ),
-          ButtonSegment(
-            value: 'special',
-            label: Text('Special Mess'),
-          ),
-        ],
-        selected: {_messType},
-        onSelectionChanged: (Set<String> newSelection) {
-          _onMessTypeChanged(newSelection.first);
-        },
-        style: ButtonStyle(
-          backgroundColor: WidgetStateProperty.resolveWith<Color>(
-            (Set<WidgetState> states) {
-              if (states.contains(WidgetState.selected)) {
-                return AppColors.primary.withOpacity(0.2);
-              }
-              return Colors.transparent;
-            },
-          ),
-          foregroundColor: WidgetStateProperty.resolveWith<Color>(
-            (Set<WidgetState> states) {
-              if (states.contains(WidgetState.selected)) {
-                return AppColors.primary;
-              }
-              return AppColors.textSecondary(context);
-            },
-          ),
-          side: WidgetStateProperty.all(BorderSide(color: AppColors.primary.withOpacity(0.5))),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg(context),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.cardBorder(context)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _onMessTypeChanged('veg_nonveg'),
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _messType == 'veg_nonveg' ? primary : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    'Veg & Non-Veg',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _messType == 'veg_nonveg' ? Colors.white : AppColors.textSecondary(context),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _onMessTypeChanged('special'),
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _messType == 'special' ? primary : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    'Special Mess',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _messType == 'special' ? Colors.white : AppColors.textSecondary(context),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildDaySelector() {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -711,16 +776,16 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
             child: GestureDetector(
               onTap: () => _onDateChanged(date),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.primary : AppColors.cardBg(context),
-                  borderRadius: BorderRadius.circular(20),
+                  color: isSelected ? primary : AppColors.cardBg(context),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected
-                        ? AppColors.primary
-                        : (isToday ? AppColors.teal : AppColors.textMuted(context).withOpacity(0.2)),
-                    width: isToday ? 1.5 : 1.0,
+                        ? primary
+                        : (isToday ? AppColors.good : AppColors.cardBorder(context)),
+                    width: isToday && !isSelected ? 1.5 : 1.0,
                   ),
                 ),
                 child: Column(
@@ -728,19 +793,19 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                   children: [
                     Text(
                       dayName,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
+                      style: TextStyle(
+                        fontSize: 11,
                         color: isSelected ? Colors.white : AppColors.textSecondary(context),
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${date.day}',
-                      style: GoogleFonts.inter(
+                      style: TextStyle(
                         fontSize: 14,
                         color: isSelected ? Colors.white : AppColors.textPrimary(context),
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -754,12 +819,13 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
   }
 
   Widget _buildMenuCards() {
+    final primary = Theme.of(context).colorScheme.primary;
     final meals = ['Breakfast', 'Lunch', 'Snacks', 'Dinner'];
     final mealColors = {
-      'Breakfast': AppColors.orange,
-      'Lunch': AppColors.teal,
+      'Breakfast': AppColors.warning,
+      'Lunch': AppColors.good,
       'Snacks': AppColors.purple,
-      'Dinner': AppColors.accent,
+      'Dinner': primary,
     };
 
     final currentMeal = MessMenuService.getUpcomingMealName();
@@ -769,7 +835,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
 
     return RefreshIndicator(
       onRefresh: _loadMenu,
-      color: AppColors.primary,
+      color: primary,
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         itemCount: meals.length,
@@ -781,7 +847,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
           return _buildMealCard(
             meal: meal,
             items: items,
-            accentColor: mealColors[meal] ?? AppColors.primary,
+            accentColor: mealColors[meal] ?? primary,
             isCurrent: isCurrent,
           );
         },
@@ -795,24 +861,14 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
     required Color accentColor,
     required bool isCurrent,
   }) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: isCurrent
-          ? BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.3),
-                  blurRadius: 15,
-                  spreadRadius: 2,
-                ),
-              ],
-            )
-          : null,
+      margin: const EdgeInsets.only(bottom: 12),
       child: GlassCard(
         margin: EdgeInsets.zero,
         padding: const EdgeInsets.all(16),
-        accentColor: accentColor,
+        accentColor: isCurrent ? primary : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -821,9 +877,18 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
               children: [
                 Row(
                   children: [
-                    Text(
-                      MessMenuService.mealEmoji[meal] ?? '🍽️',
-                      style: const TextStyle(fontSize: 24),
+                    Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: accentColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        MessMenuService.mealEmoji[meal] ?? '🍽️',
+                        style: const TextStyle(fontSize: 20),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Column(
@@ -831,17 +896,18 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                       children: [
                         Text(
                           meal,
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
+                          style: TextStyle(
+                            fontSize: 16,
                             fontWeight: FontWeight.w600,
+                            letterSpacing: -0.2,
                             color: AppColors.textPrimary(context),
                           ),
                         ),
                         Text(
                           MessMenuService.mealTimeDisplay[meal] ?? '',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: AppColors.textMuted(context),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary(context),
                           ),
                         ),
                       ],
@@ -850,30 +916,33 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                 ),
                 if (_isEditing)
                   IconButton(
-                    icon: Icon(Icons.edit, color: accentColor),
+                    icon: Icon(Icons.edit_outlined, color: primary, size: 18),
                     onPressed: () => _showEditDialog(meal, items),
                   )
                 else if (isCurrent)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.primary.withOpacity(0.5)),
+                      color: primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: primary.withOpacity(0.3)),
                     ),
                     child: Text(
-                      'Now',
-                      style: GoogleFonts.inter(
+                      'NOW',
+                      style: TextStyle(
                         fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: primary,
                       ),
                     ),
                   ),
               ],
             ),
             if (items.isNotEmpty) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
+              Divider(height: 1, color: AppColors.cardBorder(context)),
+              const SizedBox(height: 12),
               ...items.map((item) => Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
@@ -881,28 +950,39 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
-                          child: Icon(
-                            Icons.circle,
-                            size: 6,
-                            color: _isNonVeg(item) ? Colors.red : AppColors.textMuted(context),
+                          child: Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _isNonVeg(item) ? AppColors.danger : AppColors.good,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Row(
                             children: [
                               Flexible(
                                 child: Text(
                                   item,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 15,
-                                    color: AppColors.textSecondary(context),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    height: 1.35,
+                                    color: AppColors.textPrimary(context),
                                   ),
                                 ),
                               ),
                               if (_isSpecial(item)) ...[
                                 const SizedBox(width: 6),
-                                const Text('⭐', style: TextStyle(fontSize: 12)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.warning.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text('Special', style: TextStyle(fontSize: 10, color: AppColors.warning, fontWeight: FontWeight.w600)),
+                                ),
                               ],
                             ],
                           ),
@@ -911,11 +991,12 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                     ),
                   )),
             ] else ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Text(
                 'No items available for this meal.',
-                style: GoogleFonts.inter(
+                style: TextStyle(
                   color: AppColors.textMuted(context),
+                  fontSize: 13,
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -927,6 +1008,8 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
   }
 
   Widget _buildEmptyState() {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -934,49 +1017,52 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: primary.withOpacity(0.08),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.cloud_upload_outlined,
-                size: 56,
-                color: AppColors.primary,
+              child: Icon(
+                Icons.restaurant_menu_rounded,
+                size: 44,
+                color: primary,
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Text(
               'No Mess Menu Uploaded',
               textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 20,
+              style: TextStyle(
+                fontSize: 18,
                 fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
                 color: AppColors.textPrimary(context),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              'Upload your monthly mess menu file (.xlsx or .csv) from your phone to view day-wise meals for Veg, Non-Veg, and Special mess.',
+              'Upload your monthly mess menu file (.xlsx or .csv) from your device to view day-wise meals for Veg, Non-Veg, and Special mess.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 14,
+              style: TextStyle(
+                fontSize: 13,
                 color: AppColors.textSecondary(context),
+                height: 1.4,
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _showUploadSheet,
-                icon: const Icon(Icons.upload_file, size: 22),
-                label: const Text('Upload Mess Menu (Excel / CSV)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                icon: const Icon(Icons.upload_file, size: 20),
+                label: const Text('Upload Mess Menu (Excel / CSV)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
+                  backgroundColor: primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),

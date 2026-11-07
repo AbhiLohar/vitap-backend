@@ -185,9 +185,9 @@ class _RunningLoginButtonState extends State<RunningLoginButton>
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [
-            Color(0xFF7C4DFF),
-            Color(0xFF651FFF),
-            Color(0xFF00E5FF),
+            Color(0xFF172554),
+            Color(0xFF1E3A6E),
+            Color(0xFF526DAB),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -195,7 +195,7 @@ class _RunningLoginButtonState extends State<RunningLoginButton>
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7C4DFF).withValues(alpha: 0.4),
+            color: const Color(0xFF172554).withValues(alpha: 0.35),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -242,19 +242,19 @@ class _RunningLoginButtonState extends State<RunningLoginButton>
       width: double.infinity,
       height: 56,
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1322),
+        color: const Color(0xFF131B2E),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: widget.controller.status == LoginButtonStatus.failed
-              ? const Color(0xFFFF5252).withValues(alpha: 0.8)
-              : const Color(0xFF7C4DFF).withValues(alpha: 0.6),
+              ? const Color(0xFFD9534F).withValues(alpha: 0.8)
+              : const Color(0xFF526DAB).withValues(alpha: 0.6),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: widget.controller.status == LoginButtonStatus.failed
-                ? const Color(0xFFFF5252).withValues(alpha: 0.25)
-                : const Color(0xFF00E5FF).withValues(alpha: 0.2),
+                ? const Color(0xFFD9534F).withValues(alpha: 0.25)
+                : const Color(0xFF526DAB).withValues(alpha: 0.2),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -301,11 +301,11 @@ class _RunningLoginButtonState extends State<RunningLoginButton>
                       width: 6,
                       height: 6,
                       decoration: const BoxDecoration(
-                        color: Color(0xFF00E5FF),
+                        color: Color(0xFF526DAB),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Color(0xFF00E5FF),
+                            color: Color(0xFF526DAB),
                             blurRadius: 6,
                             spreadRadius: 1,
                           ),

@@ -157,11 +157,15 @@ class _UpdateDialogState extends State<UpdateDialog> {
   @override
   Widget build(BuildContext context) {
     final info = widget.info;
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Dialog(
       backgroundColor: AppColors.cardBg(context),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      elevation: 16,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: AppColors.cardBorder(context)),
+      ),
+      elevation: 4,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 420),
@@ -177,15 +181,15 @@ class _UpdateDialogState extends State<UpdateDialog> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.12),
+                  color: primaryColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   _isDownloading || _isInstalling
                       ? Icons.downloading_rounded
                       : Icons.system_update_alt_rounded,
-                  size: 40,
-                  color: AppColors.primary,
+                  size: 36,
+                  color: primaryColor,
                 ),
               ),
             ),
@@ -198,8 +202,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
                       : "Update Available!",
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 22,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
+                letterSpacing: -0.5,
                 color: AppColors.textPrimary(context),
               ),
             ),
@@ -224,16 +229,16 @@ class _UpdateDialogState extends State<UpdateDialog> {
                         color: AppColors.textMuted(context),
                       ),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Icon(Icons.arrow_forward_rounded, size: 14, color: AppColors.primary),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Icon(Icons.arrow_forward_rounded, size: 14, color: primaryColor),
                     ),
                     Text(
                       "v${info.latestVersion}",
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                        color: primaryColor,
                       ),
                     ),
                   ],
@@ -249,9 +254,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 borderRadius: BorderRadius.circular(8),
                 child: LinearProgressIndicator(
                   value: _progress > 0 ? _progress : null,
-                  minHeight: 10,
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  minHeight: 8,
+                  backgroundColor: primaryColor.withValues(alpha: 0.12),
+                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
                 ),
               ),
               const SizedBox(height: 12),
@@ -483,7 +488,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
                         style: TextStyle(fontSize: 12),
                       ),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.primary,
+                        foregroundColor: primaryColor,
                       ),
                     ),
                   ),

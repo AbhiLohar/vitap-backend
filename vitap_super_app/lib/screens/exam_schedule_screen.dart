@@ -130,45 +130,89 @@ class _ExamScheduleScreenState extends State<ExamScheduleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
-      appBar: AppBar(title: const Text("Exam Schedule"), backgroundColor: Colors.transparent, elevation: 0, centerTitle: true),
+      appBar: AppBar(
+        title: Text(
+          "Exam Schedule",
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+      ),
       body: Column(children: [
         if (isTypesLoading)
-          LinearProgressIndicator(color: AppColors.primary, backgroundColor: Colors.transparent)
+          LinearProgressIndicator(color: primaryColor, backgroundColor: Colors.transparent)
         else if (examTypes.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(color: AppColors.cardBg(context), borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.cardBorder(context))),
-              child: SingleChildScrollView(scrollDirection: Axis.horizontal, physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: AppColors.cardBg(context),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.cardBorder(context)),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                 child: ValueListenableBuilder<String?>(
                   valueListenable: selectedTypeNotifier,
                   builder: (context, selectedType, _) {
-                    return Row(children: examTypes.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final type = entry.value;
-                      final isSelected = selectedType == type['id'];
-                      return Padding(padding: const EdgeInsets.only(right: 4),
-                        child: GestureDetector(
-                          onTap: () { 
-                            selectedTypeNotifier.value = type['id']; 
-                            _pageController.jumpToPage(index);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                            decoration: BoxDecoration(
-                              gradient: isSelected ? AppColors.primaryGradient : null,
-                              color: isSelected ? null : Colors.transparent,
-                              borderRadius: BorderRadius.circular(11),
-                              boxShadow: isSelected ? [BoxShadow(color: AppColors.primary.withOpacity(0.2), blurRadius: 6, offset: const Offset(0, 2))] : null,
+                    return Row(
+                      children: examTypes.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final type = entry.value;
+                        final isSelected = selectedType == type['id'];
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: GestureDetector(
+                            onTap: () { 
+                              selectedTypeNotifier.value = type['id']; 
+                              _pageController.jumpToPage(index);
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected ? primaryColor : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: primaryColor.withOpacity(0.2),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Text(
+                                type['name'],
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : AppColors.textSecondary(context),
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  fontSize: 13,
+                                ),
+                              ),
                             ),
-                            child: Text(type['name'], style: TextStyle(color: isSelected ? Colors.white : AppColors.textPrimary(context), fontWeight: isSelected ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
                           ),
-                        ),
-                      );
-                    }).toList());
+                        );
+                      }).toList(),
+                    );
                   },
                 ),
               ),
@@ -190,17 +234,17 @@ class _ExamScheduleScreenState extends State<ExamScheduleScreen> {
 
               return RefreshIndicator(
                 onRefresh: () => _fetchAllSchedule(forceSync: true),
-                color: AppColors.primary,
+                color: primaryColor,
                 child: isLoading
-                    ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                    ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: primaryColor))
                     : fSchedule.isEmpty
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                             children: [
                               SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-                              Icon(Icons.event_busy, size: 48, color: AppColors.textMuted(context)),
+                              Icon(Icons.event_busy_rounded, size: 48, color: AppColors.textMuted(context)),
                               const SizedBox(height: 12),
-                              Center(child: Text("No schedule available for ${typeFilter ?? 'this type'}", style: TextStyle(color: AppColors.textSecondary(context)))),
+                              Center(child: Text("No schedule available for ${typeFilter ?? 'this type'}", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14))),
                             ])
                         : ListView.builder(
                             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
@@ -240,7 +284,7 @@ class _ExamScheduleScreenState extends State<ExamScheduleScreen> {
           badgeColor = AppColors.orange;
         } else {
           daysText = "In $diff days";
-          badgeColor = AppColors.primary;
+          badgeColor = Theme.of(context).colorScheme.primary;
         }
       } catch (e) {
         daysText = "Scheduled";
@@ -258,93 +302,104 @@ class _ExamScheduleScreenState extends State<ExamScheduleScreen> {
           child: Opacity(
             opacity: value,
             child: Container(
-              margin: const EdgeInsets.only(bottom: 16),
+              margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.cardBg(context),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.cardBorder(context)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(AppColors.isDark(context) ? 0.2 : 0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.scaffoldBg(context),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  "${item["date"] ?? "-"} • ${item["session"] ?? "-"}",
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context), fontWeight: FontWeight.w600),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.scaffoldBg(context),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.cardBorder(context)),
+                        ),
+                        child: Text(
+                          "${item["date"] ?? "-"} • ${item["session"] ?? "-"}",
+                          style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context), fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.scaffoldBg(context),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.cardBorder(context)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 6, height: 6, decoration: BoxDecoration(color: badgeColor, shape: BoxShape.circle)),
+                            const SizedBox(width: 5),
+                            Text(daysText, style: TextStyle(fontSize: 11, color: badgeColor, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    item["subject"] ?? "Unknown Subject",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    item["course_code"] ?? "",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary(context)),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildGridItem(Icons.access_time_rounded, "Time", item["exam_time"] ?? "-")),
+                      Expanded(child: _buildGridItem(Icons.location_on_outlined, "Venue", item["venue"] ?? "-")),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildGridItem(Icons.chair_outlined, "Seat Location", seatLoc)),
+                      Expanded(child: _buildGridItem(Icons.numbers_rounded, "Seat Number", seatNum)),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.scaffoldBg(context),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.cardBorder(context)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.access_time_rounded, size: 14, color: AppColors.textMuted(context)),
+                        const SizedBox(width: 8),
+                        Text(
+                          "Reporting: ${item["reporting_time"] ?? "-"}",
+                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context), fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.scaffoldBg(context),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(width: 6, height: 6, decoration: BoxDecoration(color: badgeColor, shape: BoxShape.circle)),
-                    const SizedBox(width: 6),
-                    Text(daysText, style: TextStyle(fontSize: 11, color: badgeColor, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            item["subject"] ?? "Unknown Subject",
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context)),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            item["course_code"] ?? "",
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary(context)),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _buildGridItem(Icons.access_time_outlined, "Time", item["exam_time"] ?? "-")),
-              Expanded(child: _buildGridItem(Icons.location_on_outlined, "Venue", item["venue"] ?? "-")),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _buildGridItem(Icons.chair_outlined, "Seat Location", seatLoc)),
-              Expanded(child: _buildGridItem(Icons.numbers_outlined, "Seat Number", seatNum)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.scaffoldBg(context),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.access_time, size: 14, color: AppColors.textMuted(context)),
-                const SizedBox(width: 8),
-                Text(
-                  "Reporting: ${item["reporting_time"] ?? "-"}",
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context), fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
             ),
           ),
         );
@@ -358,17 +413,17 @@ class _ExamScheduleScreenState extends State<ExamScheduleScreen> {
       children: [
         Row(
           children: [
-            Icon(icon, size: 14, color: AppColors.textMuted(context)),
-            const SizedBox(width: 6),
-            Text(title, style: TextStyle(fontSize: 12, color: AppColors.textMuted(context))),
+            Icon(icon, size: 13, color: AppColors.textMuted(context)),
+            const SizedBox(width: 5),
+            Text(title, style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         Padding(
-          padding: const EdgeInsets.only(left: 20),
+          padding: const EdgeInsets.only(left: 18),
           child: Text(
             value,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary(context)),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context)),
           ),
         ),
       ],

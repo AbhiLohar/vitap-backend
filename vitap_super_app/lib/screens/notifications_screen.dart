@@ -70,33 +70,38 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text("Notifications"),
-        backgroundColor: AppColors.scaffoldBg(context),
+        title: Text(
+          "Notifications",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: IconThemeData(color: AppColors.textPrimary(context)),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              "Academic Alerts",
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary(context),
-              ),
-            ),
+            _buildSectionHeader("ACADEMIC ALERTS"),
             const SizedBox(height: 8),
             GlassCard(
-              accentColor: AppColors.primary.withOpacity(0.4),
               margin: EdgeInsets.zero,
               padding: EdgeInsets.zero,
               child: Column(
                 children: [
                   _toggleItem(
+                    icon: Icons.schedule_rounded,
+                    iconColor: primary,
                     title: "Class Reminders",
                     subtitle: "Notify before class starts",
                     value: classReminderAlert,
@@ -106,28 +111,45 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       _rescheduleTimetableNotifications();
                     },
                     trailing: classReminderAlert
-                        ? DropdownButton<int>(
-                            value: classReminderDelay,
-                            underline: const SizedBox(),
-                            icon: const Icon(Icons.arrow_drop_down, size: 20),
-                            items: [5, 10, 15, 20, 30].map((int value) {
-                              return DropdownMenuItem<int>(
-                                value: value,
-                                child: Text("$value min", style: TextStyle(fontSize: 13, color: AppColors.textPrimary(context))),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() => classReminderDelay = val);
-                                _saveInt("classReminderDelay", val);
-                                _rescheduleTimetableNotifications();
-                              }
-                            },
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: primary.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: DropdownButton<int>(
+                              value: classReminderDelay,
+                              underline: const SizedBox(),
+                              isDense: true,
+                              icon: Icon(Icons.arrow_drop_down, size: 18, color: primary),
+                              items: [5, 10, 15, 20, 30].map((int value) {
+                                return DropdownMenuItem<int>(
+                                  value: value,
+                                  child: Text(
+                                    "$value min",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: primary,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => classReminderDelay = val);
+                                  _saveInt("classReminderDelay", val);
+                                  _rescheduleTimetableNotifications();
+                                }
+                              },
+                            ),
                           )
                         : null,
                   ),
                   _divider(),
                   _toggleItem(
+                    icon: Icons.fact_check_outlined,
+                    iconColor: AppColors.warning,
                     title: "Attendance Reminders",
                     subtitle: "Notify when attendance is below 75%",
                     value: attendanceAlert,
@@ -138,6 +160,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   _divider(),
                   _toggleItem(
+                    icon: Icons.event_note_rounded,
+                    iconColor: primary,
                     title: "Exam Updates",
                     subtitle: "Notify for new exam schedules",
                     value: examAlert,
@@ -148,6 +172,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   _divider(),
                   _toggleItem(
+                    icon: Icons.grade_outlined,
+                    iconColor: AppColors.good,
                     title: "Marks Released",
                     subtitle: "Notify when new marks are uploaded",
                     value: markAlert,
@@ -160,20 +186,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            Text(
-              "Campus Life",
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary(context),
-              ),
-            ),
+            _buildSectionHeader("CAMPUS LIFE"),
             const SizedBox(height: 8),
             GlassCard(
-              accentColor: AppColors.primary.withOpacity(0.4),
               margin: EdgeInsets.zero,
               padding: EdgeInsets.zero,
               child: _toggleItem(
+                icon: Icons.campaign_outlined,
+                iconColor: primary,
                 title: "University News",
                 subtitle: "General announcements & news",
                 value: newsAlert,
@@ -189,7 +209,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondary(context),
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+
   Widget _toggleItem({
+    required IconData icon,
+    required Color iconColor,
     required String title,
     required String subtitle,
     required bool value,
@@ -197,21 +234,39 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     Widget? trailing,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       child: Row(
         children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 18),
+          ),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary(context))),
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary(context))),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary(context),
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary(context),
+                  ),
+                ),
               ],
             ),
           ),
@@ -219,14 +274,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             trailing,
             const SizedBox(width: 8),
           ],
-          Switch(
+          Switch.adaptive(
             value: value,
             onChanged: onChanged,
+            activeColor: Theme.of(context).colorScheme.primary,
           ),
         ],
       ),
     );
   }
 
-  Widget _divider() => Divider(height: 1, indent: 16, color: AppColors.cardBorder(context));
+  Widget _divider() => Divider(
+    height: 1,
+    indent: 52,
+    color: AppColors.cardBorder(context),
+  );
 }

@@ -114,44 +114,58 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
     return "Needs Attention";
   }
   
-  Color get _healthColor {
+  Color _getHealthColor(BuildContext context) {
     if (_progressPercent >= 0.8) return AppColors.teal;
-    if (_progressPercent >= 0.5) return AppColors.primary;
+    if (_progressPercent >= 0.5) return Theme.of(context).colorScheme.primary;
     if (_progressPercent >= 0.25) return AppColors.orange;
     return AppColors.red;
   }
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text("Credit Progress", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          "Credit Progress",
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true,
+        scrolledUnderElevation: 0,
       ),
       body: isLoading
-          ? Center(child: CircularProgressIndicator(strokeWidth: 3, color: AppColors.primary))
+          ? Center(child: CircularProgressIndicator(strokeWidth: 2.5, color: primaryColor))
           : errorMessage != null
               ? _errorView()
               : RefreshIndicator(
                   onRefresh: () => _fetchCredits(forceSync: true),
-                  color: AppColors.primary,
+                  color: primaryColor,
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildHeroSection(),
-                        const SizedBox(height: 20),
+                        _buildHeroSection(primaryColor),
+                        const SizedBox(height: 16),
                         _buildDeficitAlert(),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
                         _sectionTitle("Detailed Breakdown"),
                         const SizedBox(height: 12),
                         if (_validDistribution.isNotEmpty)
-                          _buildDistributionTable()
+                          _buildDistributionTable(primaryColor)
                         else
                           _emptyDistribution(),
                         const SizedBox(height: 30),
@@ -162,19 +176,21 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
     );
   }
 
-  Widget _buildHeroSection() {
+  Widget _buildHeroSection(Color primaryColor) {
+    final healthColor = _getHealthColor(context);
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.cardBg(context),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.cardBorder(context)),
         boxShadow: [
           BoxShadow(
-            color: _healthColor.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: Colors.black.withOpacity(AppColors.isDark(context) ? 0.2 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -186,31 +202,32 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Credit Health", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
+                  Text("Credit Health", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
                       Container(
-                        width: 10, height: 10,
-                        decoration: BoxDecoration(color: _healthColor, shape: BoxShape.circle),
+                        width: 8, height: 8,
+                        decoration: BoxDecoration(color: healthColor, shape: BoxShape.circle),
                       ),
-                      const SizedBox(width: 8),
-                      Text(_healthScore, style: TextStyle(color: _healthColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(width: 6),
+                      Text(_healthScore, style: TextStyle(color: healthColor, fontWeight: FontWeight.bold, fontSize: 15)),
                     ],
                   ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
+                  color: primaryColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: primaryColor.withOpacity(0.15)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.verified, size: 16, color: AppColors.primary),
+                    Icon(Icons.verified_rounded, size: 14, color: primaryColor),
                     const SizedBox(width: 4),
-                    Text("${(_progressPercent * 100).toStringAsFixed(1)}%", style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                    Text("${(_progressPercent * 100).toStringAsFixed(1)}%", style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 13)),
                   ],
                 ),
               ),
@@ -359,7 +376,7 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
     }).toList();
   }
 
-  Widget _buildDistributionTable() {
+  Widget _buildDistributionTable(Color primaryColor) {
     final distList = _validDistribution;
     if (distList.isEmpty) return _emptyDistribution();
 
@@ -367,13 +384,13 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
       width: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.cardBg(context),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.cardBorder(context)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(AppColors.isDark(context) ? 0.2 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -383,16 +400,16 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
           // VTOP Credits Distribution banner
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            color: const Color(0xFFE53935).withOpacity(0.08),
-            child: const Center(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            color: primaryColor.withOpacity(0.06),
+            child: Center(
               child: Text(
                 "CREDITS DISTRIBUTION",
                 style: TextStyle(
-                  color: Color(0xFFE53935),
+                  color: primaryColor,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                  fontSize: 12.5,
+                  letterSpacing: 0.8,
+                  fontSize: 12,
                 ),
               ),
             ),
@@ -400,7 +417,10 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
           // Column Headers
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            color: AppColors.primary.withOpacity(0.12),
+            decoration: BoxDecoration(
+              color: AppColors.scaffoldBg(context),
+              border: Border(bottom: BorderSide(color: AppColors.cardBorder(context))),
+            ),
             child: Row(
               children: [
                 SizedBox(
@@ -515,13 +535,13 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
                             width: 28,
                             height: 28,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1E88E5), // Official VTOP blue plus button
+                              color: primaryColor,
                               borderRadius: BorderRadius.circular(6),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF1E88E5).withOpacity(0.35),
+                                  color: primaryColor.withOpacity(0.25),
                                   blurRadius: 4,
-                                  offset: const Offset(0, 2),
+                                  offset: const Offset(0, 1),
                                 ),
                               ],
                             ),
@@ -539,7 +559,7 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
+              color: primaryColor.withOpacity(0.06),
               border: Border(
                 top: BorderSide(color: AppColors.cardBorder(context), width: 1.2),
               ),

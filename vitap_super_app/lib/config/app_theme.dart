@@ -2,39 +2,48 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
-  static bool isDark(BuildContext context) => Theme.of(context).brightness == Brightness.dark;
+  static bool isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
 
   // Background
-  static Color scaffoldBg(BuildContext context) => Theme.of(context).scaffoldBackgroundColor;
-  static Color cardBg(BuildContext context) => Theme.of(context).cardTheme.color ?? Theme.of(context).cardColor;
-  static Color cardBorder(BuildContext context) => Theme.of(context).dividerColor;
+  static Color scaffoldBg(BuildContext context) =>
+      Theme.of(context).scaffoldBackgroundColor;
+  static Color cardBg(BuildContext context) =>
+      Theme.of(context).cardTheme.color ?? Theme.of(context).cardColor;
+  static Color cardBorder(BuildContext context) =>
+      Theme.of(context).dividerColor;
 
-  // Accents — default colors, but could use colorScheme if needed
-  static const Color primary = Color(0xFF7C4DFF);
-  static const Color accent = Color(0xFF00E5FF);
-  static const Color teal = Color(0xFF1DE9B6);
-  static const Color purple = Color(0xFFB388FF);
-  static const Color orange = Color(0xFFFFAB40);
-  static const Color pink = Color(0xFFFF4081);
+  // Brand
+  static const Color primary = Color(0xFF172554);
+  static const Color secondary = Color(0xFF526DAB);
+  static const Color accent = Color(0xFF526DAB);
+  static const Color teal = Color(0xFF0F9D7A);
+  static const Color purple = Color(0xFF7C5CFC);
+  static const Color orange = Color(0xFFE68A2E);
+  static const Color pink = Color(0xFFE8457C);
   static const Color cream = Color(0xFFD4E4BC);
-  static const Color red = Color(0xFFFF5252);
-  static const Color amber = Color(0xFFFFD740);
+  static const Color red = Color(0xFFD9534F);
+  static const Color amber = Color(0xFFD99A32);
 
   // Text
-  static Color textPrimary(BuildContext context) => Theme.of(context).textTheme.bodyLarge?.color ?? Colors.white;
-  static Color textSecondary(BuildContext context) => Theme.of(context).textTheme.bodyMedium?.color ?? Colors.grey;
-  static Color textMuted(BuildContext context) => Theme.of(context).textTheme.bodySmall?.color ?? Colors.grey.withOpacity(0.5);
+  static Color textPrimary(BuildContext context) =>
+      Theme.of(context).textTheme.bodyLarge?.color ??
+      (isDark(context) ? const Color(0xFFE8EAF0) : const Color(0xFF171A23));
+  static Color textSecondary(BuildContext context) =>
+      Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF777F8C);
+  static Color textMuted(BuildContext context) =>
+      Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF9CA3AF);
 
   // Status
-  static const Color good = Color(0xFF1DE9B6);
-  static const Color warning = Color(0xFFFFAB40);
-  static const Color danger = Color(0xFFFF5252);
+  static const Color good = Color(0xFF16865A);
+  static const Color warning = Color(0xFFD99A32);
+  static const Color danger = Color(0xFFD9534F);
 
   // Badge
   static Color badgeBg(double percent) {
-    if (percent >= 85) return good.withOpacity(0.15);
-    if (percent >= 75) return warning.withOpacity(0.15);
-    return danger.withOpacity(0.15);
+    if (percent >= 85) return good.withOpacity(0.08);
+    if (percent >= 75) return warning.withOpacity(0.08);
+    return danger.withOpacity(0.08);
   }
 
   static Color badgeText(double percent) {
@@ -43,18 +52,18 @@ class AppColors {
     return danger;
   }
 
-  // Gradient helpers
+  // Gradients
   static LinearGradient get primaryGradient => const LinearGradient(
-    colors: [Color(0xFF7C4DFF), Color(0xFF448AFF)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+        colors: [Color(0xFF172554), Color(0xFF1E3A6E)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
 
   static LinearGradient get accentGradient => const LinearGradient(
-    colors: [Color(0xFF00E5FF), Color(0xFF1DE9B6)],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+        colors: [Color(0xFF526DAB), Color(0xFF7B93C9)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
 }
 
 class AppTheme {
@@ -63,211 +72,432 @@ class AppTheme {
   static final ThemeData nightfallTheme = _buildNightfallTheme();
   static final ThemeData sakuraTheme = _buildSakuraTheme();
 
-  static ThemeData _buildDarkTheme() {
-    final ThemeData base = ThemeData.dark();
-    const Color scaffoldBg = Color(0xFF0B0E1A);
-    const Color cardBg = Color(0xFF121829);
-    const Color cardBorder = Color(0xFF1E2640);
+  // ── Light Theme ──────────────────────────────────────────────────────
+  static ThemeData _buildLightTheme() {
+    final ThemeData base = ThemeData.light();
+    const Color scaffoldBg = Color(0xFFF7F8FA);
+    const Color cardBg = Color(0xFFFFFFFF);
+    const Color border = Color(0xFFE8EAF0);
+    const Color textPri = Color(0xFF171A23);
+    const Color textSec = Color(0xFF777F8C);
+    const Color textMut = Color(0xFF9CA3AF);
+    const Color pri = Color(0xFF172554);
+    const Color sec = Color(0xFF526DAB);
 
     return base.copyWith(
       scaffoldBackgroundColor: scaffoldBg,
-      primaryColor: AppColors.primary,
+      primaryColor: pri,
       textTheme: GoogleFonts.interTextTheme(base.textTheme).copyWith(
-        displayLarge: GoogleFonts.inter(color: const Color(0xFFF0F0F5)),
-        bodyLarge: GoogleFonts.inter(color: const Color(0xFFF0F0F5)),
-        bodyMedium: GoogleFonts.inter(color: const Color(0xFF8E92A4)),
+        displayLarge: GoogleFonts.inter(color: textPri, fontWeight: FontWeight.w700),
+        bodyLarge: GoogleFonts.inter(color: textPri),
+        bodyMedium: GoogleFonts.inter(color: textSec),
+        bodySmall: GoogleFonts.inter(color: textMut),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: scaffoldBg,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: true,
+        iconTheme: const IconThemeData(color: textPri),
         titleTextStyle: GoogleFonts.inter(
-          fontSize: 18,
+          fontSize: 17,
           fontWeight: FontWeight.w600,
-          color: const Color(0xFFF0F0F5),
+          color: textPri,
         ),
-        iconTheme: const IconThemeData(color: Color(0xFFF0F0F5)),
       ),
       cardTheme: CardThemeData(
         color: cardBg,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: cardBorder, width: 1),
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: border, width: 1),
         ),
         elevation: 0,
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return Colors.white;
-          return Colors.grey;
+          return const Color(0xFFB0B5BF);
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return AppColors.primary.withOpacity(0.5);
-          }
-          return Colors.grey.withOpacity(0.3);
+          if (states.contains(WidgetState.selected)) return pri;
+          return const Color(0xFFE0E3EA);
         }),
       ),
-      dividerColor: cardBorder,
-      colorScheme: const ColorScheme.dark(
-        primary: AppColors.primary,
-        secondary: AppColors.accent,
-        surface: cardBg,
-      ),
-    );
-  }
-
-  static ThemeData _buildLightTheme() {
-    final ThemeData base = ThemeData.light();
-    return base.copyWith(
-      primaryColor: AppColors.primary,
-      scaffoldBackgroundColor: const Color(0xFFF2F4F8),
-      textTheme: GoogleFonts.interTextTheme(base.textTheme).copyWith(
-        bodyLarge: GoogleFonts.inter(color: const Color(0xFF1A1A2E)),
-        bodyMedium: GoogleFonts.inter(color: const Color(0xFF6B6F80)),
-        bodySmall: GoogleFonts.inter(color: const Color(0xFFA0A4B8)),
-      ),
-      appBarTheme: AppBarTheme(
-        backgroundColor: const Color(0xFFF2F4F8),
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: const IconThemeData(color: Color(0xFF1A1A2E)),
-        titleTextStyle: GoogleFonts.inter(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: const Color(0xFF1A1A2E),
-        ),
-      ),
-      cardTheme: CardThemeData(
-        color: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: Color(0xFFE0E4EC), width: 1),
-        ),
-        elevation: 2,
-      ),
-      dividerColor: const Color(0xFFE0E4EC),
+      dividerColor: border,
       colorScheme: const ColorScheme.light(
-        primary: AppColors.primary,
-        secondary: AppColors.accent,
-        surface: Colors.white,
+        primary: pri,
+        secondary: sec,
+        surface: cardBg,
+        error: Color(0xFFD9534F),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: cardBg,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: pri, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFD9534F)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: GoogleFonts.inter(color: textMut, fontSize: 14),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: pri,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: pri),
+      tabBarTheme: TabBarThemeData(
+        indicatorColor: pri,
+        labelColor: pri,
+        unselectedLabelColor: textSec,
+        indicatorSize: TabBarIndicatorSize.label,
+        labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
+        unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w400, fontSize: 14),
       ),
     );
   }
 
-  static ThemeData _buildNightfallTheme() {
+  // ── Dark Theme ───────────────────────────────────────────────────────
+  static ThemeData _buildDarkTheme() {
     final ThemeData base = ThemeData.dark();
-    const Color scaffoldBg = Color(0xFF090A0F);
-    const Color cardBg = Color(0xFF11131A);
-    const Color cardBorder = Color(0xFF1E212E);
+    const Color scaffoldBg = Color(0xFF0F1117);
+    const Color cardBg = Color(0xFF1A1D27);
+    const Color border = Color(0xFF2A2D37);
+    const Color textPri = Color(0xFFE8EAF0);
+    const Color textSec = Color(0xFF8A8F9C);
+    const Color textMut = Color(0xFF5A5F6B);
+    const Color pri = Color(0xFF7B93C9);
+    const Color sec = Color(0xFF8BA3D9);
 
     return base.copyWith(
       scaffoldBackgroundColor: scaffoldBg,
-      primaryColor: const Color(0xFF6366F1), // Indigo
+      primaryColor: AppColors.primary,
       textTheme: GoogleFonts.interTextTheme(base.textTheme).copyWith(
-        displayLarge: GoogleFonts.inter(color: const Color(0xFFE2E8F0)),
-        bodyLarge: GoogleFonts.inter(color: const Color(0xFFE2E8F0)),
-        bodyMedium: GoogleFonts.inter(color: const Color(0xFF94A3B8)),
-        bodySmall: GoogleFonts.inter(color: const Color(0xFF64748B)),
+        displayLarge: GoogleFonts.inter(color: textPri, fontWeight: FontWeight.w700),
+        bodyLarge: GoogleFonts.inter(color: textPri),
+        bodyMedium: GoogleFonts.inter(color: textSec),
+        bodySmall: GoogleFonts.inter(color: textMut),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: scaffoldBg,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: true,
         titleTextStyle: GoogleFonts.inter(
-          fontSize: 18,
+          fontSize: 17,
           fontWeight: FontWeight.w600,
-          color: const Color(0xFFE2E8F0),
+          color: textPri,
         ),
-        iconTheme: const IconThemeData(color: Color(0xFFE2E8F0)),
+        iconTheme: const IconThemeData(color: textPri),
       ),
       cardTheme: CardThemeData(
         color: cardBg,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: cardBorder, width: 1),
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: border, width: 1),
         ),
         elevation: 0,
       ),
-      dividerColor: cardBorder,
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          return const Color(0xFF5A5F6B);
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return pri;
+          return const Color(0xFF2A2D37);
+        }),
+      ),
+      dividerColor: border,
       colorScheme: const ColorScheme.dark(
-        primary: Color(0xFF6366F1),
-        secondary: Color(0xFF818CF8),
+        primary: pri,
+        secondary: sec,
         surface: cardBg,
+        error: Color(0xFFD9534F),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: cardBg,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: pri, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFD9534F)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: GoogleFonts.inter(color: textMut, fontSize: 14),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: pri,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: pri),
+      tabBarTheme: TabBarThemeData(
+        indicatorColor: pri,
+        labelColor: pri,
+        unselectedLabelColor: textSec,
+        indicatorSize: TabBarIndicatorSize.label,
+        labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
+        unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w400, fontSize: 14),
       ),
     );
   }
 
+  // ── Nightfall Theme (deep OLED dark) ─────────────────────────────────
+  static ThemeData _buildNightfallTheme() {
+    final ThemeData base = ThemeData.dark();
+    const Color scaffoldBg = Color(0xFF080A10);
+    const Color cardBg = Color(0xFF12141C);
+    const Color border = Color(0xFF1E2130);
+    const Color textPri = Color(0xFFE2E4EB);
+    const Color textSec = Color(0xFF7E8494);
+    const Color textMut = Color(0xFF525766);
+    const Color pri = Color(0xFF8BA3D9);
+    const Color sec = Color(0xFF98ADE0);
+
+    return base.copyWith(
+      scaffoldBackgroundColor: scaffoldBg,
+      primaryColor: const Color(0xFF5B72A8),
+      textTheme: GoogleFonts.interTextTheme(base.textTheme).copyWith(
+        displayLarge: GoogleFonts.inter(color: textPri, fontWeight: FontWeight.w700),
+        bodyLarge: GoogleFonts.inter(color: textPri),
+        bodyMedium: GoogleFonts.inter(color: textSec),
+        bodySmall: GoogleFonts.inter(color: textMut),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: scaffoldBg,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: true,
+        titleTextStyle: GoogleFonts.inter(
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          color: textPri,
+        ),
+        iconTheme: const IconThemeData(color: textPri),
+      ),
+      cardTheme: CardThemeData(
+        color: cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: border, width: 1),
+        ),
+        elevation: 0,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          return const Color(0xFF525766);
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return pri;
+          return const Color(0xFF1E2130);
+        }),
+      ),
+      dividerColor: border,
+      colorScheme: const ColorScheme.dark(
+        primary: pri,
+        secondary: sec,
+        surface: cardBg,
+        error: Color(0xFFD9534F),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: cardBg,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: pri, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFD9534F)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: GoogleFonts.inter(color: textMut, fontSize: 14),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: pri,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: pri),
+      tabBarTheme: TabBarThemeData(
+        indicatorColor: pri,
+        labelColor: pri,
+        unselectedLabelColor: textSec,
+        indicatorSize: TabBarIndicatorSize.label,
+        labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
+        unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w400, fontSize: 14),
+      ),
+    );
+  }
+
+  // ── Sakura Theme (warm light) ────────────────────────────────────────
   static ThemeData _buildSakuraTheme() {
     final ThemeData base = ThemeData.light();
     const Color scaffoldBg = Color(0xFFFFF7F9);
     const Color cardBg = Colors.white;
-    const Color cardBorder = Color(0xFFFFE4E8);
+    const Color border = Color(0xFFFFE4E8);
+    const Color textPri = Color(0xFF4C1D55);
+    const Color textSec = Color(0xFF8B5670);
+    const Color textMut = Color(0xFFBE7A92);
+    const Color pri = Color(0xFFE8457C);
+    const Color sec = Color(0xFFF5A0BA);
 
     return base.copyWith(
-      primaryColor: const Color(0xFFF472B6), // Pink
+      primaryColor: pri,
       scaffoldBackgroundColor: scaffoldBg,
       textTheme: GoogleFonts.interTextTheme(base.textTheme).copyWith(
-        bodyLarge: GoogleFonts.inter(color: const Color(0xFF4C1D95)),
-        bodyMedium: GoogleFonts.inter(color: const Color(0xFF831843)),
-        bodySmall: GoogleFonts.inter(color: const Color(0xFFBE185D).withOpacity(0.6)),
+        displayLarge: GoogleFonts.inter(color: textPri, fontWeight: FontWeight.w700),
+        bodyLarge: GoogleFonts.inter(color: textPri),
+        bodyMedium: GoogleFonts.inter(color: textSec),
+        bodySmall: GoogleFonts.inter(color: textMut),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: scaffoldBg,
         elevation: 0,
+        scrolledUnderElevation: 0,
         centerTitle: true,
-        iconTheme: const IconThemeData(color: Color(0xFF4C1D95)),
+        iconTheme: const IconThemeData(color: textPri),
         titleTextStyle: GoogleFonts.inter(
-          fontSize: 18,
+          fontSize: 17,
           fontWeight: FontWeight.w600,
-          color: const Color(0xFF4C1D95),
+          color: textPri,
         ),
       ),
       cardTheme: CardThemeData(
         color: cardBg,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: cardBorder, width: 1),
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: border, width: 1),
         ),
-        elevation: 2,
+        elevation: 0,
       ),
-      dividerColor: cardBorder,
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          return const Color(0xFFBE7A92);
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return pri;
+          return const Color(0xFFFFE4E8);
+        }),
+      ),
+      dividerColor: border,
       colorScheme: const ColorScheme.light(
-        primary: Color(0xFFF472B6),
-        secondary: Color(0xFFFDA4AF),
+        primary: pri,
+        secondary: sec,
         surface: cardBg,
+        error: Color(0xFFD9534F),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: cardBg,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: pri, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFD9534F)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        hintStyle: GoogleFonts.inter(color: textMut, fontSize: 14),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: pri,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: pri),
+      tabBarTheme: TabBarThemeData(
+        indicatorColor: pri,
+        labelColor: pri,
+        unselectedLabelColor: textSec,
+        indicatorSize: TabBarIndicatorSize.label,
+        labelStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14),
+        unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w400, fontSize: 14),
       ),
     );
   }
 }
 
-/// Decoration for glass-style cards matching reference UI
+/// Clean card decoration for the design system
 BoxDecoration glassCardDecoration(
   BuildContext context, {
   Color? borderLeftColor,
-  double borderRadius = 18,
+  double borderRadius = 14,
 }) {
   return BoxDecoration(
-    gradient: AppColors.isDark(context)
-        ? LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppColors.cardBg(context),
-              AppColors.cardBg(context).withOpacity(0.85),
-            ],
-          )
-        : null,
-    color: AppColors.isDark(context) ? null : AppColors.cardBg(context),
+    color: AppColors.cardBg(context),
     borderRadius: BorderRadius.circular(borderRadius),
     border: Border.all(color: AppColors.cardBorder(context), width: 1),
     boxShadow: [
       BoxShadow(
         color: AppColors.isDark(context)
-            ? Colors.black.withOpacity(0.25)
-            : Colors.black.withOpacity(0.06),
-        blurRadius: 12,
-        offset: const Offset(0, 4),
+            ? Colors.black.withOpacity(0.12)
+            : Colors.black.withOpacity(0.04),
+        blurRadius: 8,
+        offset: const Offset(0, 2),
       ),
     ],
   );

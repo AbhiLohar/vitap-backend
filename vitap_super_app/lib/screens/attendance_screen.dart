@@ -461,47 +461,42 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final primary = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       body: SafeArea(
         child: Column(
           children: [
-            // Header with gradient
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.primary.withOpacity(0.04),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Column(
-                  children: [
-                    Text(
-                      "Attendance",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary(context),
-                        letterSpacing: -0.3,
+            // Clean minimal header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Attendance",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary(context),
+                          letterSpacing: -0.3,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      currentSemester,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary(context),
+                      const SizedBox(height: 2),
+                      Text(
+                        currentSemester,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary(context),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ),
             ),
 
@@ -509,10 +504,11 @@ class _AttendanceScreenState extends State<AttendanceScreen>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Container(
+                height: 38,
                 padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
                   color: AppColors.cardBg(context),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.cardBorder(context)),
                 ),
                 child: ValueListenableBuilder<int>(
@@ -520,9 +516,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                   builder: (context, selectedIndex, _) {
                     return Row(
                       children: [
-                        _filterTab("All", Icons.filter_list, 0, selectedIndex),
+                        _filterTab("All", Icons.filter_list_rounded, 0, selectedIndex),
                         const SizedBox(width: 4),
-                        _filterTab("Theory", Icons.menu_book, 1, selectedIndex),
+                        _filterTab("Theory", Icons.menu_book_rounded, 1, selectedIndex),
                         const SizedBox(width: 4),
                         _filterTab("Lab", Icons.science_outlined, 2, selectedIndex),
                       ],
@@ -617,6 +613,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
   Widget _filterTab(String label, IconData icon, int index, int selectedIndex) {
     final isSelected = selectedIndex == index;
+    final primary = Theme.of(context).colorScheme.primary;
 
     return Expanded(
       child: GestureDetector(
@@ -625,35 +622,27 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           _pageController.jumpToPage(index);
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            gradient: isSelected ? AppColors.primaryGradient : null,
-            color: isSelected ? null : Colors.transparent,
-            borderRadius: BorderRadius.circular(11),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: AppColors.primary.withOpacity(0.2),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
+            color: isSelected ? primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (index != 0) ...[
-                Icon(icon,
-                    size: 15,
-                    color: isSelected ? Colors.white : AppColors.textMuted(context)),
+                Icon(
+                  icon,
+                  size: 14,
+                  color: isSelected ? Colors.white : AppColors.textSecondary(context),
+                ),
                 const SizedBox(width: 4),
               ],
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                   color: isSelected ? Colors.white : AppColors.textSecondary(context),
                 ),
               ),
@@ -1230,6 +1219,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     int needToAttend = _classesToAttend(presentInt, totalInt);
     bool isDanger = percent < 75;
 
+    final primary = Theme.of(context).colorScheme.primary;
+    final badgeColor = isLab ? AppColors.good : primary;
+
     return GestureDetector(
       onTap: () {
         if (totalClasses != "-") {
@@ -1237,7 +1229,8 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         }
       },
       child: GlassCard(
-        accentColor: (isLab ? AppColors.teal : AppColors.primary).withOpacity(0.4),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1247,18 +1240,14 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        (isLab ? AppColors.teal : AppColors.primary).withOpacity(0.15),
-                        (isLab ? AppColors.teal : AppColors.primary).withOpacity(0.05),
-                      ],
-                    ),
+                    color: badgeColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                      isLab ? Icons.science_outlined : Icons.menu_book,
-                      size: 18,
-                      color: isLab ? AppColors.teal : AppColors.primary),
+                    isLab ? Icons.science_outlined : Icons.menu_book_outlined,
+                    size: 18,
+                    color: badgeColor,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1270,6 +1259,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                           courseCode,
                           style: TextStyle(
                             fontSize: 12,
+                            fontWeight: FontWeight.w500,
                             color: AppColors.textSecondary(context),
                           ),
                         ),
@@ -1278,33 +1268,28 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
+                          letterSpacing: -0.2,
                           color: AppColors.textPrimary(context),
                         ),
                       ),
                     ],
                   ),
                 ),
-                // Attendance badge with gradient
+                // Attendance badge
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.badgeBg(percent),
-                        AppColors.badgeBg(percent).withOpacity(0.5),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
+                    color: AppColors.badgeBg(percent).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: AppColors.badgeText(percent).withOpacity(0.3),
+                      color: AppColors.badgeBg(percent).withOpacity(0.3),
                     ),
                   ),
                   child: Text(
                     "${percent.toStringAsFixed(0)}%",
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.badgeText(percent),
                     ),
                   ),
@@ -1319,8 +1304,8 @@ class _AttendanceScreenState extends State<AttendanceScreen>
               children: [
                 Expanded(
                   child: StatBox(
-                    icon: Icons.check_circle_outline,
-                    iconColor: AppColors.teal,
+                    icon: Icons.check_circle_outline_rounded,
+                    iconColor: AppColors.good,
                     value: present != "-" && totalClasses != "-"
                         ? "$present/$totalClasses"
                         : "-",
@@ -1330,8 +1315,8 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: StatBox(
-                    icon: isDanger ? Icons.warning_amber_rounded : Icons.skip_next_outlined,
-                    iconColor: isDanger ? AppColors.red : AppColors.orange,
+                    icon: isDanger ? Icons.warning_amber_rounded : Icons.skip_next_rounded,
+                    iconColor: isDanger ? AppColors.danger : AppColors.warning,
                     value: totalInt > 0 ? (isDanger ? "$needToAttend" : "$canMiss") : "-",
                     label: isDanger ? "Need" : "Can Miss",
                   ),
@@ -1339,8 +1324,8 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: StatBox(
-                    icon: Icons.percent,
-                    iconColor: AppColors.primary,
+                    icon: Icons.pie_chart_outline_rounded,
+                    iconColor: primary,
                     value: "${percent.toStringAsFixed(0)}%",
                     label: "Overall",
                   ),
@@ -1357,34 +1342,32 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: 5,
-      itemBuilder: (context, index) => Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        height: 120,
-        decoration: BoxDecoration(
-          color: AppColors.cardBg(context).withOpacity(0.5),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.cardBorder(context)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+      itemBuilder: (context, index) => const Padding(
+        padding: EdgeInsets.only(bottom: 12),
+        child: GlassCard(
+          padding: EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Container(width: 40, height: 40, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.1), borderRadius: BorderRadius.circular(8))),
-                  const SizedBox(width: 12),
-                  Expanded(child: Container(height: 16, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.1), borderRadius: BorderRadius.circular(4)))),
-                  const SizedBox(width: 12),
-                  Container(width: 50, height: 24, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.1), borderRadius: BorderRadius.circular(8))),
+                  SizedBox(width: 36, height: 36),
+                  SizedBox(width: 12),
+                  Expanded(child: SizedBox(height: 16)),
+                  SizedBox(width: 12),
+                  SizedBox(width: 44, height: 24),
                 ],
               ),
-              const Spacer(),
+              SizedBox(height: 14),
               Row(
-                children: List.generate(3, (i) => Expanded(
-                  child: Container(margin: EdgeInsets.only(right: i < 2 ? 8 : 0), height: 40, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05), borderRadius: BorderRadius.circular(8))),
-                )),
-              )
+                children: [
+                  Expanded(child: SizedBox(height: 40)),
+                  SizedBox(width: 8),
+                  Expanded(child: SizedBox(height: 40)),
+                  SizedBox(width: 8),
+                  Expanded(child: SizedBox(height: 40)),
+                ],
+              ),
             ],
           ),
         ),
@@ -1497,13 +1480,14 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     final percent = parsePercent(widget.subject["attendance"] ?? "0");
     final courseCode = widget.subject["course_code"] ?? "";
     
     return Container(
       height: MediaQuery.of(context).size.height * 0.75,
       decoration: BoxDecoration(
-        color: AppColors.cardBg(context),
+        color: AppColors.scaffoldBg(context),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
@@ -1511,31 +1495,26 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
           // Handle bar
           Container(
             margin: const EdgeInsets.only(top: 12),
-            width: 40,
+            width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.textMuted(context),
+              color: AppColors.cardBorder(context),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           
           // Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary.withOpacity(0.15),
-                        AppColors.primary.withOpacity(0.05),
-                      ],
-                    ),
+                    color: primary.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.analytics_outlined, color: AppColors.primary, size: 22),
+                  child: Icon(Icons.analytics_outlined, color: primary, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1545,8 +1524,9 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
                       Text(
                         widget.subjectName,
                         style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.2,
                           color: AppColors.textPrimary(context),
                         ),
                         maxLines: 1,
@@ -1561,21 +1541,17 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.badgeBg(percent),
-                        AppColors.badgeBg(percent).withOpacity(0.5),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
+                    color: AppColors.badgeBg(percent).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.badgeBg(percent).withOpacity(0.3)),
                   ),
                   child: Text(
                     "${percent.toStringAsFixed(0)}%",
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.badgeText(percent),
                     ),
                   ),
@@ -1586,21 +1562,24 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
 
           // Tab bar
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            height: 38,
+            margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              color: AppColors.scaffoldBg(context),
+              color: AppColors.cardBg(context),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.cardBorder(context)),
             ),
             child: TabBar(
               controller: _tabController,
               indicator: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(12),
+                color: primary,
+                borderRadius: BorderRadius.circular(9),
               ),
               labelColor: Colors.white,
               unselectedLabelColor: AppColors.textSecondary(context),
-              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 14),
+              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
               indicatorSize: TabBarIndicatorSize.tab,
               dividerColor: Colors.transparent,
               tabs: const [
@@ -1630,9 +1609,6 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
   Widget _buildCalculatorTab() {
     return StatefulBuilder(
       builder: (context, setCalcState) {
-        int simPresent = widget.presentInt;
-        int simTotal = widget.totalInt;
-        
         return _CalculatorContent(
           initialPresent: widget.presentInt,
           initialTotal: widget.totalInt,
@@ -1643,14 +1619,15 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
   }
 
   Widget _buildDaywiseTab() {
+    final primary = Theme.of(context).colorScheme.primary;
     if (_isLoadingDetail) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: AppColors.primary),
-            SizedBox(height: 16),
-            Text("Fetching attendance details...", style: TextStyle(color: Colors.grey)),
+            CircularProgressIndicator(color: primary),
+            const SizedBox(height: 16),
+            Text("Fetching attendance details...", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
           ],
         ),
       );

@@ -72,89 +72,105 @@ class _DigitalAssignmentsScreenState extends State<DigitalAssignmentsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text("Digital Assignments"),
+        title: Text(
+          "Digital Assignments",
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: AppColors.textPrimary(context),
+        scrolledUnderElevation: 0,
       ),
       body: RefreshIndicator(
         onRefresh: () => _loadData(forceRefresh: true),
-        color: AppColors.primary,
+        color: primaryColor,
         child: _isLoading && _assignments.isEmpty
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(child: CircularProgressIndicator(color: primaryColor))
             : _assignments.isEmpty
                 ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                     children: [
                       SizedBox(height: MediaQuery.of(context).size.height * 0.3),
                       Center(
                         child: Column(
                           children: [
-                            Icon(Icons.assignment_turned_in_outlined, size: 64, color: AppColors.textMuted(context)),
-                            const SizedBox(height: 16),
-                            Text("No assignments found", style: TextStyle(color: AppColors.textSecondary(context))),
+                            Icon(Icons.assignment_turned_in_outlined, size: 52, color: AppColors.textMuted(context)),
+                            const SizedBox(height: 14),
+                            Text("No assignments found", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
                           ],
                         ),
                       ),
                     ],
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     itemCount: _assignments.length,
                     itemBuilder: (context, index) {
                       final a = _assignments[index];
-                      final isPending = (a["status"] ?? "").toString().toLowerCase().contains("pending");
                       
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GlassCard(
-                          accentColor: AppColors.primary.withOpacity(0.3),
+                          accentColor: primaryColor.withOpacity(0.5),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      a["type"] ?? "Unknown Subject", // "type" actually holds Course Title
+                                      a["type"] ?? "Unknown Subject",
                                       style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
                                         color: AppColors.textPrimary(context),
                                       ),
                                     ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                                      color: primaryColor.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: primaryColor.withOpacity(0.15)),
                                     ),
                                     child: Text(
-                                      a["subject"] ?? "", // "subject" actually holds Course Code
-                                      style: const TextStyle(
+                                      a["subject"] ?? "",
+                                      style: TextStyle(
                                         fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w600,
+                                        color: primaryColor,
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               Text(
-                                "Type: ${a["title"] ?? "-"}", // "title" holds ETH/ELA etc
-                                style: TextStyle(fontSize: 14, color: AppColors.textSecondary(context)),
+                                "Type: ${a["title"] ?? "-"}",
+                                style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 14),
                               Row(
                                 children: [
-                                  _stat(context, Icons.person, "Faculty", a["faculty"] ?? "-"),
+                                  _stat(context, Icons.person_outline_rounded, "Faculty", a["faculty"] ?? "-"),
                                   const Spacer(),
-                                  _stat(context, Icons.schedule, "Slot", a["slot"] ?? "-"),
+                                  _stat(context, Icons.schedule_rounded, "Slot", a["slot"] ?? "-"),
                                 ],
                               ),
                             ],
@@ -173,13 +189,13 @@ class _DigitalAssignmentsScreenState extends State<DigitalAssignmentsScreen> {
       children: [
         Row(
           children: [
-            Icon(icon, size: 14, color: AppColors.textMuted(context)),
+            Icon(icon, size: 13, color: AppColors.textMuted(context)),
             const SizedBox(width: 4),
             Text(label, style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
           ],
         ),
         const SizedBox(height: 2),
-        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context))),
+        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context))),
       ],
     );
   }

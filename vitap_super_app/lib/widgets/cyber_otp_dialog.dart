@@ -285,9 +285,9 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
     final primary = theme.primaryColor;
     final isDefaultPrimary = primary == AppColors.primary;
     final gradientColors = isDefaultPrimary
-        ? const [Color(0xFF7C4DFF), Color(0xFF448AFF)]
+        ? const [Color(0xFF172554), Color(0xFF526DAB)]
         : [primary, primary.withValues(alpha: 0.85)];
-    final focusGlowColor = isDefaultPrimary ? const Color(0xFF7C4DFF) : primary;
+    final focusGlowColor = isDefaultPrimary ? const Color(0xFF526DAB) : primary;
 
     final cardBg = isDark ? const Color(0xFF0F1218) : Colors.white;
     final cardBorder = isDark
@@ -821,7 +821,7 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
                       spreadRadius: 1,
                     ),
                     BoxShadow(
-                      color: (isDefaultTheme ? const Color(0xFF448AFF) : accentColor)
+                      color: (isDefaultTheme ? const Color(0xFF526DAB) : accentColor)
                           .withValues(alpha: 0.2),
                       blurRadius: 22,
                       spreadRadius: 2,

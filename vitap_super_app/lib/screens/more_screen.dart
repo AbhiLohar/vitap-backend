@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/app_theme.dart';
-import '../widgets/glass_card.dart';
 import 'exam_schedule_screen.dart';
 import 'credit_progress_screen.dart';
-
 import 'marks_screen.dart';
 import 'grade_history_screen.dart';
 import 'gpa_screen.dart';
@@ -17,6 +16,7 @@ import 'outing_screen.dart';
 import 'course_page_screen.dart';
 import 'profile_screen.dart';
 import 'mess_menu_screen.dart';
+
 class MoreScreen extends StatefulWidget {
   final String username;
   final ValueNotifier<String>? semesterNotifier;
@@ -60,303 +60,309 @@ class _MoreScreenState extends State<MoreScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
+      appBar: AppBar(
+        title: const Text("Services & Tools"),
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: AppColors.scaffoldBg(context),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header with gradient
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        AppColors.primary.withOpacity(0.04),
-                        Colors.transparent,
-                      ],
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Academic Tools Section ──────────────────────────────
+              _sectionHeader(context, "Academic Records & Tools"),
+              const SizedBox(height: 8),
+
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardBg(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.cardBorder(context), width: 1),
+                ),
+                child: Column(
+                  children: [
+                    _menuItem(
+                      context,
+                      icon: Icons.donut_large_rounded,
+                      iconColor: AppColors.good,
+                      title: "Credit Progress",
+                      subtitle: "Completed, left & basket credits",
+                      isFirst: true,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CreditProgressScreen(username: widget.username))),
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Text("More",
-                              style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary(context),
-                                  letterSpacing: -0.3)),
-                          const SizedBox(height: 2),
-                          Text("Academic tools & VTOP links",
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary(context))),
-                        ],
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.analytics_outlined,
+                      iconColor: AppColors.orange,
+                      title: "Marks",
+                      subtitle: "Internal, lab & external marks",
+                      onTap: () => _navigateToMarks(context),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.person_outline_rounded,
+                      iconColor: AppColors.accent,
+                      title: "Student Profile",
+                      subtitle: "Personal information & proctor details",
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen(username: widget.username))),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.history_edu_rounded,
+                      iconColor: AppColors.purple,
+                      title: "Grade History",
+                      subtitle: "Course-wise grades & credits",
+                      onTap: () => _navigateToGradeHistory(context),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.show_chart_rounded,
+                      iconColor: Theme.of(context).colorScheme.primary,
+                      title: "GPA Analytics",
+                      subtitle: "Track GPA and CGPA performance",
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GPAScreen(username: widget.username))),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.event_note_rounded,
+                      iconColor: AppColors.pink,
+                      title: "Exam Schedule",
+                      subtitle: "Upcoming exams, slots & venues",
+                      onTap: () => _navigateToExamSchedule(context),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.assignment_turned_in_outlined,
+                      iconColor: AppColors.orange,
+                      title: "Digital Assignments",
+                      subtitle: "Status & submission deadlines",
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DigitalAssignmentsScreen(username: widget.username))),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.person_search_rounded,
+                      iconColor: AppColors.accent,
+                      title: "Faculty Directory",
+                      subtitle: "Search faculty emails & cabin numbers",
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FacultySearchScreen(username: widget.username))),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.receipt_long_rounded,
+                      iconColor: AppColors.teal,
+                      title: "Payments & Fees",
+                      subtitle: "Fee receipts & payment transaction records",
+                      isLast: true,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentsScreen(username: widget.username))),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ── Campus & VTOP Section ──────────────────────────────
+              _sectionHeader(context, "Campus & Services"),
+              const SizedBox(height: 8),
+
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardBg(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.cardBorder(context), width: 1),
+                ),
+                child: Column(
+                  children: [
+                    _menuItem(
+                      context,
+                      icon: Icons.menu_book_rounded,
+                      iconColor: AppColors.accent,
+                      title: "Course Page",
+                      subtitle: "Syllabus and reference material",
+                      isFirst: true,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CoursePageScreen(username: widget.username))),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.restaurant_rounded,
+                      iconColor: AppColors.orange,
+                      title: "Mess Menu",
+                      subtitle: "Weekly mess menus & dietary updates",
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MessMenuScreen())),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.directions_walk_rounded,
+                      iconColor: AppColors.good,
+                      title: "Outing Management",
+                      subtitle: "General & weekend outing leave requests",
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OutingScreen(username: widget.username))),
+                    ),
+                    _divider(context),
+                    _menuItem(
+                      context,
+                      icon: Icons.open_in_browser_rounded,
+                      iconColor: Theme.of(context).colorScheme.primary,
+                      title: "VTOP Portal WebView",
+                      subtitle: "Open official portal with authenticated session",
+                      isLast: true,
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          "Official",
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
                       ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => VtopWebViewScreen(username: widget.username),
+                          ),
+                        );
+                      },
                     ),
-                  ),
+                  ],
                 ),
+              ),
 
-                const SizedBox(height: 8),
-
-                // Academic Tools
-                _sectionTitle(context, "Academic Tools", Icons.school_outlined),
-                const SizedBox(height: 8),
-
-                GlassCard(
-                  accentColor: AppColors.primary.withOpacity(0.4),
-                  margin: EdgeInsets.zero,
-                  padding: EdgeInsets.zero,
-                  child: Column(children: [
-                    _menuItem(context,
-                        icon: Icons.trending_up_outlined,
-                        iconColor: AppColors.teal,
-                        title: "Credit Progress",
-                        subtitle: "View completed, left & total credits",
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CreditProgressScreen(username: widget.username)))),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.assignment_outlined,
-                        iconColor: AppColors.orange,
-                        title: "Marks",
-                        subtitle: "View your internal & external marks",
-                        onTap: () => _navigateToMarks(context)),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.person_outline,
-                        iconColor: AppColors.teal,
-                        title: "Student Profile",
-                        subtitle: "View your profile and mentor details",
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileScreen(username: widget.username)))),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.history,
-                        iconColor: AppColors.purple,
-                        title: "Grade History",
-                        subtitle: "View complete grade history",
-                        onTap: () => _navigateToGradeHistory(context)),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.show_chart,
-                        iconColor: AppColors.accent,
-                        title: "GPA Analytics",
-                        subtitle: "Track your GPA performance",
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GPAScreen(username: widget.username)))),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.event_note_outlined,
-                        iconColor: AppColors.pink,
-                        title: "Exam Schedule",
-                        subtitle: "View your upcoming exams",
-                        onTap: () => _navigateToExamSchedule(context)),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.assignment_turned_in_outlined,
-                        iconColor: AppColors.orange,
-                        title: "Digital Assignments",
-                        subtitle: "View & check DA status",
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DigitalAssignmentsScreen(username: widget.username)))),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.person_search_outlined,
-                        iconColor: AppColors.accent,
-                        title: "Faculty Search",
-                        subtitle: "Find faculty details & rooms",
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FacultySearchScreen(username: widget.username)))),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.receipt_long_outlined,
-                        iconColor: AppColors.primary,
-                        title: "Payments",
-                        subtitle: "View fee receipts & history",
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentsScreen(username: widget.username)))),
-                  ]),
-                ),
-
-                const SizedBox(height: 24),
-
-                // VTOP section
-                _sectionTitle(context, "VTOP & Campus", Icons.language_outlined),
-                const SizedBox(height: 8),
-
-                GlassCard(
-                  accentColor: AppColors.accent.withOpacity(0.4),
-                  margin: EdgeInsets.zero,
-                  padding: EdgeInsets.zero,
-                  child: Column(children: [
-                    _menuItem(context,
-                        icon: Icons.description_outlined,
-                        iconColor: AppColors.accent,
-                        title: "Course Page",
-                        subtitle: "View course details for current sem",
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CoursePageScreen(username: widget.username)))),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.restaurant_menu_outlined,
-                        iconColor: AppColors.orange,
-                        title: "Mess Menu",
-                        subtitle: "View daily mess menu & upload schedules",
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MessMenuScreen()))),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.directions_walk_outlined,
-                        iconColor: AppColors.teal,
-                        title: "Outing Status",
-                        subtitle: "Check your outing/leave history",
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OutingScreen(username: widget.username)))),
-                    _divider(context),
-                    _menuItem(context,
-                        icon: Icons.open_in_browser,
-                        iconColor: AppColors.primary,
-                        title: "VTOP WebView",
-                        subtitle: "Open VTOP portal with auto-login",
-                          trailing: _externalBadge(context),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => VtopWebViewScreen(username: widget.username),
-                              ),
-                            );
-                          }),
-                  ]),
-                ),
-
-                const SizedBox(height: 30),
-              ],
-            ),
+              const SizedBox(height: 32),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _sectionTitle(BuildContext context, String title, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: AppColors.primary),
-        const SizedBox(width: 8),
-        Text(title,
-            style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary(context))),
-      ],
-    );
-  }
-
-  Widget _externalBadge(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.accent.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.accent.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.open_in_new, size: 10, color: AppColors.accent),
-          const SizedBox(width: 3),
-          Text("External",
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: AppColors.accent,
-              )),
-        ],
+  Widget _sectionHeader(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textSecondary(context),
+          letterSpacing: 0.8,
+        ),
       ),
     );
   }
 
+  Widget _menuItem(
+    BuildContext context, {
+    required IconData icon,
+    Color? iconColor,
+    required String title,
+    required String subtitle,
+    Widget? trailing,
+    bool isFirst = false,
+    bool isLast = false,
+    required VoidCallback onTap,
+  }) {
+    final effectiveColor = iconColor ?? Theme.of(context).colorScheme.primary;
 
-  Widget _menuItem(BuildContext context,
-      {required IconData icon,
-      Color? iconColor,
-      required String title,
-      required String subtitle,
-      Widget? trailing,
-      required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: (iconColor ?? AppColors.textSecondary(context)).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 20, color: iconColor ?? AppColors.textSecondary(context)),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-              child: Column(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        borderRadius: BorderRadius.vertical(
+          top: isFirst ? const Radius.circular(16) : Radius.zero,
+          bottom: isLast ? const Radius.circular(16) : Radius.zero,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: effectiveColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 20, color: effectiveColor),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text(title,
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary(context))),
-                const SizedBox(height: 2),
-                Text(subtitle,
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary(context))),
-              ])),
-          if (trailing != null) ...[
-            trailing,
-            const SizedBox(width: 6),
-          ],
-          Icon(Icons.chevron_right,
-              color: AppColors.textMuted(context), size: 20),
-        ]),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary(context),
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (trailing != null) ...[
+                trailing,
+                const SizedBox(width: 6),
+              ],
+              Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textMuted(context),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _divider(BuildContext context) =>
-      Divider(height: 1, indent: 60, color: AppColors.cardBorder(context));
-
-  void _openUrl(String title, String url) async {
-    final uri = Uri.parse(url);
-    try {
-      // Try inAppBrowserView first, fall back to external browser
-      final launched = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-      if (!launched) {
-        // Fallback to external browser
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      // Last fallback: try external application
-      try {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } catch (e2) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Could not open $title: $e2")));
-      }
-    }
-  }
+  Widget _divider(BuildContext context) => Divider(
+        height: 1,
+        indent: 64,
+        endIndent: 0,
+        color: AppColors.cardBorder(context),
+      );
 
   void _navigateToMarks(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => MarksScreen(username: widget.username),
-      ),
-    );
-  }
-
-  void _navigateToGrades(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => GradeHistoryScreen(username: widget.username),
       ),
     );
   }
@@ -372,104 +378,9 @@ class _MoreScreenState extends State<MoreScreen> {
 
   void _navigateToExamSchedule(BuildContext context) {
     Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => ExamScheduleScreen(username: widget.username)));
-  }
-}
-
-
-
-// Generic data list screen
-class _DataListScreen extends StatefulWidget {
-  final String title;
-  final Future<List> Function(bool forceSync) fetchFunction;
-  final Widget Function(Map<String, dynamic> item) cardBuilder;
-
-  const _DataListScreen({
-    required this.title,
-    required this.fetchFunction,
-    required this.cardBuilder,
-  });
-
-  @override
-  State<_DataListScreen> createState() => _DataListScreenState();
-}
-
-class _DataListScreenState extends State<_DataListScreen> {
-  late Future<List> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = widget.fetchFunction(false);
-  }
-
-  Future<void> _refresh() async {
-    setState(() {
-      _future = widget.fetchFunction(true);
-    });
-    await _future;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.scaffoldBg(context),
-      appBar: AppBar(title: Text(widget.title), backgroundColor: AppColors.scaffoldBg(context)),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        color: AppColors.primary,
-        child: FutureBuilder<List>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.primary));
-            }
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-                  Icon(Icons.inbox_outlined,
-                      size: 48, color: AppColors.textMuted(context)),
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Text("No ${widget.title} data available",
-                        style: TextStyle(color: AppColors.textSecondary(context))),
-                  ),
-                ],
-              );
-            }
-            return ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics()
-              ),
-              padding: const EdgeInsets.all(16),
-              itemCount: snapshot.data!.length,
-              itemBuilder: (context, index) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardBg(context),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.cardBorder(context)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: widget.cardBuilder(Map<String, dynamic>.from(snapshot.data![index])),
-                );
-              },
-            );
-          },
-        ),
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExamScheduleScreen(username: widget.username),
       ),
     );
   }

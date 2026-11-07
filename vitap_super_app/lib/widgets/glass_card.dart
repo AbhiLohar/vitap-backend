@@ -19,26 +19,17 @@ class GlassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: margin ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: glassCardDecoration(context, borderLeftColor: accentColor),
+      decoration: glassCardDecoration(context),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (accentColor != null)
                 Container(
-                  width: 3.5,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        accentColor!,
-                        accentColor!.withOpacity(0.4),
-                      ],
-                    ),
-                  ),
+                  width: 3,
+                  color: accentColor,
                 ),
               Expanded(
                 child: Padding(

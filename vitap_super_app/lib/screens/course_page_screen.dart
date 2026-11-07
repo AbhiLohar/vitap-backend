@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/glass_shimmer.dart';
 
 class CoursePageScreen extends StatefulWidget {
   final String username;
@@ -36,71 +37,120 @@ class _CoursePageScreenState extends State<CoursePageScreen> {
         forceSync: forceRefresh,
       );
       
-      setState(() {
-        _courses = data;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _courses = data;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text("Courses"),
+        title: Text(
+          "Courses",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: AppColors.textPrimary(context),
+        iconTheme: IconThemeData(color: AppColors.textPrimary(context)),
       ),
       body: RefreshIndicator(
         onRefresh: () => _loadData(forceRefresh: true),
-        color: AppColors.primary,
+        color: primary,
         child: _isLoading && _courses.isEmpty
-            ? const Center(child: CircularProgressIndicator())
+            ? ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: 6,
+                itemBuilder: (_, __) => const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: GlassShimmer(height: 90, borderRadius: 14),
+                ),
+              )
             : _courses.isEmpty
                 ? ListView(
                     children: [
-                      SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+                      SizedBox(height: MediaQuery.of(context).size.height * 0.28),
                       Center(
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.library_books_outlined, size: 64, color: AppColors.textMuted(context)),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: primary.withOpacity(0.08),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.library_books_outlined,
+                                size: 36,
+                                color: primary,
+                              ),
+                            ),
                             const SizedBox(height: 16),
-                            Text("No courses found for this semester", style: TextStyle(color: AppColors.textSecondary(context))),
+                            Text(
+                              "No courses found",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary(context),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              "No courses registered for this semester",
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary(context),
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ],
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     itemCount: _courses.length,
                     itemBuilder: (context, index) {
                       final c = _courses[index];
                       final isLab = (c["type"] ?? "").toString().toLowerCase().contains("lab");
+                      final badgeColor = isLab ? AppColors.good : primary;
                       
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GlassCard(
-                          accentColor: (isLab ? AppColors.teal : AppColors.primary).withOpacity(0.3),
+                          padding: const EdgeInsets.all(16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.all(8),
+                                    padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: (isLab ? AppColors.teal : AppColors.primary).withOpacity(0.1),
+                                      color: badgeColor.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Icon(
                                       isLab ? Icons.science_outlined : Icons.menu_book_outlined,
                                       size: 20,
-                                      color: isLab ? AppColors.teal : AppColors.primary,
+                                      color: badgeColor,
                                     ),
                                   ),
                                   const SizedBox(width: 14),
@@ -112,11 +162,12 @@ class _CoursePageScreenState extends State<CoursePageScreen> {
                                           c["subject"] ?? "Unknown Subject",
                                           style: TextStyle(
                                             fontSize: 15,
-                                            fontWeight: FontWeight.bold,
+                                            fontWeight: FontWeight.w600,
                                             color: AppColors.textPrimary(context),
+                                            letterSpacing: -0.2,
                                           ),
                                         ),
-                                        const SizedBox(height: 2),
+                                        const SizedBox(height: 4),
                                         Text(
                                           c["course_code"] ?? "-",
                                           style: TextStyle(
@@ -133,9 +184,7 @@ class _CoursePageScreenState extends State<CoursePageScreen> {
                               const SizedBox(height: 12),
                               Row(
                                 children: [
-                                  _badge(context, c["type"] ?? "Theory", isLab ? AppColors.teal : AppColors.accent),
-                                  const SizedBox(width: 8),
-                                  // Can add more info like credits if available
+                                  _badge(context, c["type"] ?? "Theory", badgeColor),
                                 ],
                               ),
                             ],
@@ -152,15 +201,15 @@ class _CoursePageScreenState extends State<CoursePageScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withOpacity(0.25)),
       ),
       child: Text(
         text,
         style: TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w600,
           color: color,
         ),
       ),

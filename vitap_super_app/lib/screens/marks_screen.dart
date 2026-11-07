@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
+import '../widgets/glass_shimmer.dart';
 
 class MarksScreen extends StatefulWidget {
   final String username;
@@ -80,23 +81,28 @@ class _MarksScreenState extends State<MarksScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               "Marks",
               style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+                color: AppColors.textPrimary(context),
               ),
             ),
             Text(
@@ -110,7 +116,7 @@ class _MarksScreenState extends State<MarksScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, size: 28),
+            icon: const Icon(Icons.refresh_rounded, size: 22),
             onPressed: () => _fetchMarks(forceSync: true),
           ),
           const SizedBox(width: 8),
@@ -118,7 +124,7 @@ class _MarksScreenState extends State<MarksScreen> {
       ),
       body: Column(
         children: [
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           // Tab Selector
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -126,7 +132,7 @@ class _MarksScreenState extends State<MarksScreen> {
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: AppColors.cardBg(context),
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: AppColors.cardBorder(context)),
               ),
               child: ValueListenableBuilder<String>(
@@ -143,19 +149,29 @@ class _MarksScreenState extends State<MarksScreen> {
                             selectedTypeNotifier.value = type;
                             _pageController.jumpToPage(index);
                           },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(
-                              gradient: isSelected ? AppColors.primaryGradient : null,
-                              borderRadius: BorderRadius.circular(26),
+                              color: isSelected ? primaryColor : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: primaryColor.withOpacity(0.2),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ]
+                                  : null,
                             ),
                             alignment: Alignment.center,
                             child: Text(
                               type,
                               style: TextStyle(
                                 color: isSelected ? Colors.white : AppColors.textSecondary(context),
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                fontSize: 14,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                fontSize: 13,
                               ),
                             ),
                           ),
@@ -167,7 +183,7 @@ class _MarksScreenState extends State<MarksScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           
           Expanded(
             child: isLoading
@@ -182,7 +198,7 @@ class _MarksScreenState extends State<MarksScreen> {
 
                       return RefreshIndicator(
                         onRefresh: () => _fetchMarks(forceSync: true),
-                        color: AppColors.primary,
+                        color: primaryColor,
                         child: fMarks.isEmpty
                             ? _buildEmptyState(typeFilter)
                             : ListView.builder(
@@ -207,14 +223,15 @@ class _MarksScreenState extends State<MarksScreen> {
       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
       children: [
         SizedBox(height: MediaQuery.of(context).size.height * 0.2),
-        Icon(Icons.inbox_outlined, size: 64, color: AppColors.textMuted(context)),
-        const SizedBox(height: 16),
+        Icon(Icons.inbox_outlined, size: 48, color: AppColors.textMuted(context)),
+        const SizedBox(height: 14),
         Center(
           child: Text(
             "No $typeFilter marks available",
             style: TextStyle(
               color: AppColors.textSecondary(context),
-              fontSize: 16,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
@@ -227,14 +244,10 @@ class _MarksScreenState extends State<MarksScreen> {
       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
       padding: const EdgeInsets.all(16),
       itemCount: 4,
-      itemBuilder: (context, index) => Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        height: 140,
-        decoration: BoxDecoration(
-          color: AppColors.cardBg(context).withOpacity(0.5),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.cardBorder(context)),
-        ),
+      itemBuilder: (context, index) => const GlassShimmer(
+        height: 130,
+        borderRadius: 14,
+        margin: EdgeInsets.only(bottom: 12),
       ),
     );
   }
@@ -296,16 +309,16 @@ class _MarksCardState extends State<_MarksCard> {
           child: Opacity(
             opacity: value,
             child: Container(
-              margin: const EdgeInsets.only(bottom: 16),
+              margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
                 color: AppColors.cardBg(context),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: AppColors.cardBorder(context)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withOpacity(AppColors.isDark(context) ? 0.2 : 0.04),
                     blurRadius: 8,
-                    offset: const Offset(0, 4),
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -315,9 +328,9 @@ class _MarksCardState extends State<_MarksCard> {
                   children: [
                     InkWell(
                       onTap: () => setState(() => isExpanded = !isExpanded),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(14),
                       child: Padding(
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -331,43 +344,42 @@ class _MarksCardState extends State<_MarksCard> {
                                       Text(
                                         widget.item["subject"] ?? "Unknown",
                                         style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
                                           color: AppColors.textPrimary(context),
-                                          height: 1.2,
+                                          height: 1.25,
                                         ),
                                       ),
-                                      const SizedBox(height: 6),
+                                      const SizedBox(height: 4),
                                       Text(
                                         widget.item["faculty"] ?? "Unknown",
                                         style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
                                           color: AppColors.textSecondary(context),
-                                          letterSpacing: 0.5,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
+                                const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primary.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
+                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
                                     widget.item["course_code"] ?? "",
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.primary,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.primary,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 16),
                             Row(
                               children: [
                                 Row(
@@ -377,7 +389,7 @@ class _MarksCardState extends State<_MarksCard> {
                                     Text(
                                       displayTotal.toStringAsFixed(1).replaceAll(".0", ""),
                                       style: TextStyle(
-                                        fontSize: 32,
+                                        fontSize: 28,
                                         fontWeight: FontWeight.bold,
                                         color: AppColors.textPrimary(context),
                                       ),
@@ -385,16 +397,16 @@ class _MarksCardState extends State<_MarksCard> {
                                     Text(
                                       "/${displayMax.toStringAsFixed(0)}",
                                       style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textSecondary(context).withOpacity(0.4),
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textSecondary(context).withOpacity(0.5),
                                       ),
                                     ),
                                   ],
                                 ),
                                 const Spacer(),
                                 Icon(
-                                  isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                  isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
                                   color: AppColors.textMuted(context),
                                 ),
                               ],
@@ -408,7 +420,7 @@ class _MarksCardState extends State<_MarksCard> {
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                         child: Column(
                           children: [
-                            const Divider(color: Color(0xFF2A2A2A)),
+                            Divider(color: AppColors.cardBorder(context)),
                             const SizedBox(height: 12),
                             ...components.map((c) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),

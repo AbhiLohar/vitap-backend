@@ -44,20 +44,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text("Student Profile", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          "Student Profile",
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: AppColors.textPrimary(context),
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : profileData == null || profileData!.isEmpty
               ? Center(child: Text("Profile data not available", style: TextStyle(color: AppColors.textSecondary(context))))
               : ListView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   physics: const BouncingScrollPhysics(),
                   children: [
                     // Avatar and Name
@@ -78,7 +92,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     return AvatarService.buildAvatar(
                                       choice: choice,
                                       name: profileData?["name"] ?? widget.username,
-                                      size: 100,
+                                      size: 96,
                                     );
                                   },
                                 ),
@@ -86,63 +100,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   bottom: 0,
                                   right: 0,
                                   child: Container(
-                                    padding: const EdgeInsets.all(6),
+                                    padding: const EdgeInsets.all(7),
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary,
+                                      color: primaryColor,
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: AppColors.scaffoldBg(context), width: 2),
+                                      border: Border.all(color: AppColors.scaffoldBg(context), width: 2.5),
                                     ),
-                                    child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                                    child: const Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 14),
                           Text(
                             _cleanValue(profileData!["name"], fallback: widget.username),
                             style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.4,
                               color: AppColors.textPrimary(context),
                             ),
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
+                              color: primaryColor.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: primaryColor.withValues(alpha: 0.15)),
                             ),
                             child: Text(
                               widget.username,
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                              style: TextStyle(
+                                color: primaryColor,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 28),
 
                     // Personal Info
                     _sectionHeader(context, "Personal Information"),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     _detailsCard(context, [
                       _buildProfileRow(context, Icons.email_outlined, "Email", _cleanValue(profileData!["email"])),
                       _buildProfileRow(context, Icons.cake_outlined, "Date of Birth", _cleanValue(profileData!["dob"])),
                       _buildProfileRow(context, Icons.wc_outlined, "Gender", _cleanValue(profileData!["gender"])),
                       _buildProfileRow(context, Icons.bloodtype_outlined, "Blood Group", _cleanValue(profileData!["blood_group"])),
                     ]),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 22),
 
                     // Academic Info
                     _sectionHeader(context, "Academic Information"),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     _detailsCard(context, [
                       _buildProfileRow(context, Icons.school_outlined, "Program", _cleanValue(profileData!["program"])),
                       _buildProfileRow(context, Icons.account_tree_outlined, "Branch", _cleanValue(profileData!["branch"])),
@@ -200,22 +216,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfileRow(BuildContext context, IconData icon, String label, String value) {
     final displayValue = value.trim().isEmpty ? "Not available" : value.trim();
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(icon, size: 20, color: AppColors.textMuted(context)),
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: primaryColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 16, color: primaryColor),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(fontSize: 12, color: AppColors.textMuted(context))),
-                const SizedBox(height: 2),
+                Text(label, style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
+                const SizedBox(height: 1),
                 Text(
                   displayValue,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary(context)),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary(context)),
                 ),
               ],
             ),
@@ -229,9 +254,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Text(
       title,
       style: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: AppColors.textPrimary(context),
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.2,
+        color: AppColors.textSecondary(context),
       ),
     );
   }
@@ -240,17 +266,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardBg(context),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.cardBorder(context)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
+            color: Colors.black.withValues(alpha: AppColors.isDark(context) ? 0.2 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: Column(
         children: children,
       ),

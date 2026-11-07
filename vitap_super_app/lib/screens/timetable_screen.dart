@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../services/error_formatter.dart';
 import '../services/notification_service.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/glass_shimmer.dart';
 import 'notes_calendar_screen.dart';
 
 class TimetableScreen extends StatefulWidget {
@@ -165,92 +166,88 @@ class _TimetableScreenState extends State<TimetableScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final primaryColor = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       body: SafeArea(
         child: Column(
           children: [
-            // Header with subtle gradient
+            // Clean Modern Header
             Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.primary.withOpacity(0.04),
-                    Colors.transparent,
-                  ],
+                color: AppColors.scaffoldBg(context),
+                border: Border(
+                  bottom: BorderSide(color: AppColors.cardBorder(context), width: 0.5),
                 ),
               ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            "Timetable",
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary(context),
-                              letterSpacing: -0.3,
-                            ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Timetable",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary(context),
+                            letterSpacing: -0.3,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            currentSemester,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.textSecondary(context),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () async {
-                        final DateTime? picked = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => NotesCalendarScreen(initialDate: today),
-                          ),
-                        );
-                        if (picked != null) {
-                          setState(() {
-                            today = picked;
-                            _buildWeekDays();
-                          });
-                          _pageController.jumpToPage(selectedDayNotifier.value);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.cardBg(context),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.cardBorder(context)),
                         ),
-                        child: Icon(Icons.calendar_month,
-                            color: AppColors.primary, size: 20),
-                      ),
+                        const SizedBox(height: 2),
+                        Text(
+                          currentSemester,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary(context),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  GestureDetector(
+                    onTap: () async {
+                      final DateTime? picked = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => NotesCalendarScreen(initialDate: today),
+                        ),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          today = picked;
+                          _buildWeekDays();
+                        });
+                        _pageController.jumpToPage(selectedDayNotifier.value);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.cardBg(context),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.cardBorder(context)),
+                      ),
+                      child: Icon(Icons.calendar_month_rounded,
+                          color: primaryColor, size: 20),
+                    ),
+                  ),
+                ],
               ),
             ),
 
             // Day selector — pill-shaped
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   color: AppColors.cardBg(context),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppColors.cardBorder(context)),
                 ),
                 child: ValueListenableBuilder<int>(
@@ -270,17 +267,17 @@ class _TimetableScreenState extends State<TimetableScreen>
                               selectedDayNotifier.value = i;
                               _pageController.jumpToPage(i);
                             },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               decoration: BoxDecoration(
-                                gradient: isSelected ? AppColors.primaryGradient : null,
-                                color: isSelected ? null : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
+                                color: isSelected ? primaryColor : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
                                 boxShadow: isSelected
                                     ? [
                                         BoxShadow(
-                                          color: AppColors.primary.withOpacity(0.25),
-                                          blurRadius: 8,
+                                          color: primaryColor.withOpacity(0.2),
+                                          blurRadius: 6,
                                           offset: const Offset(0, 2),
                                         ),
                                       ]
@@ -291,12 +288,12 @@ class _TimetableScreenState extends State<TimetableScreen>
                                   Text(
                                     "${day.day}",
                                     style: TextStyle(
-                                      fontSize: 15,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.bold,
                                       color: isSelected
                                           ? Colors.white
                                           : isToday
-                                              ? AppColors.primary
+                                              ? primaryColor
                                               : AppColors.textPrimary(context),
                                     ),
                                   ),
@@ -307,7 +304,7 @@ class _TimetableScreenState extends State<TimetableScreen>
                                       fontSize: 11,
                                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                       color: isSelected
-                                          ? Colors.white70
+                                          ? Colors.white.withOpacity(0.85)
                                           : AppColors.textSecondary(context),
                                     ),
                                   ),
@@ -323,8 +320,6 @@ class _TimetableScreenState extends State<TimetableScreen>
               ),
             ),
 
-            const SizedBox(height: 4),
-
             // Class count indicator
             if (!isLoading)
               ValueListenableBuilder<int>(
@@ -332,21 +327,22 @@ class _TimetableScreenState extends State<TimetableScreen>
                 builder: (context, selectedIndex, _) {
                   final currentDayCount = _getFilteredTimetable(selectedIndex).length;
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.1),
+                            color: primaryColor.withOpacity(0.08),
                             borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: primaryColor.withOpacity(0.15)),
                           ),
                           child: Text(
                             "$currentDayCount ${currentDayCount == 1 ? 'class' : 'classes'}",
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
+                              color: primaryColor,
                             ),
                           ),
                         ),
@@ -372,7 +368,7 @@ class _TimetableScreenState extends State<TimetableScreen>
                       : filteredTT.isEmpty
                           ? RefreshIndicator(
                               onRefresh: () => fetchTimetable(forceRefresh: true),
-                              color: AppColors.primary,
+                              color: primaryColor,
                               child: ListView(
                                 physics: const AlwaysScrollableScrollPhysics(
                                     parent: BouncingScrollPhysics()),
@@ -386,6 +382,7 @@ class _TimetableScreenState extends State<TimetableScreen>
                                         style: TextStyle(
                                           color: AppColors.textSecondary(context),
                                           fontSize: 15,
+                                          fontWeight: FontWeight.w500,
                                         )),
                                   ),
                                   const SizedBox(height: 4),
@@ -401,7 +398,7 @@ class _TimetableScreenState extends State<TimetableScreen>
                             )
                           : RefreshIndicator(
                               onRefresh: () => fetchTimetable(forceRefresh: true),
-                              color: AppColors.primary,
+                              color: primaryColor,
                               child: ListView.builder(
                                 physics: const AlwaysScrollableScrollPhysics(
                                     parent: BouncingScrollPhysics()),
@@ -454,25 +451,26 @@ class _TimetableScreenState extends State<TimetableScreen>
     final type = (item["type"] ?? "LECTURE").toString().toUpperCase();
     final isLab = type.contains("LAB") || type.contains("PRACTICAL");
     final isActive = _isClassRunning(item["time"], item["end_time"], item["day"] ?? "");
-    final cardAccent = isLab ? AppColors.teal : AppColors.primary;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    final cardAccent = isLab ? AppColors.teal : primaryColor;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         border: isActive 
-          ? Border.all(color: AppColors.primary, width: 2)
+          ? Border.all(color: primaryColor, width: 1.5)
           : null,
         boxShadow: isActive ? [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.15),
-            blurRadius: 12,
-            spreadRadius: 1,
+            color: primaryColor.withOpacity(0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
           )
         ] : null,
       ),
       child: GlassCard(
-        accentColor: isActive ? AppColors.primary : cardAccent.withOpacity(0.5),
+        accentColor: isActive ? primaryColor : cardAccent.withOpacity(0.4),
         margin: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,23 +480,23 @@ class _TimetableScreenState extends State<TimetableScreen>
               children: [
                 // Type badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: (isLab ? AppColors.teal : AppColors.accent).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(8),
+                    color: (isLab ? AppColors.teal : cardAccent).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(isLab ? Icons.science_outlined : Icons.menu_book, 
-                          size: 14, color: isLab ? AppColors.teal : AppColors.accent),
+                      Icon(isLab ? Icons.science_outlined : Icons.menu_book_rounded, 
+                          size: 13, color: isLab ? AppColors.teal : cardAccent),
                       const SizedBox(width: 4),
                       Text(
                         type,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isLab ? AppColors.teal : AppColors.accent,
+                          color: isLab ? AppColors.teal : cardAccent,
                         ),
                       ),
                     ],
@@ -506,15 +504,15 @@ class _TimetableScreenState extends State<TimetableScreen>
                 ),
                 if (isActive)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      gradient: AppColors.primaryGradient,
-                      borderRadius: BorderRadius.circular(8),
+                      color: primaryColor,
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.play_circle_filled, size: 12, color: Colors.white),
+                        Icon(Icons.play_circle_fill_rounded, size: 12, color: Colors.white),
                         SizedBox(width: 4),
                         Text(
                           "LIVE",
@@ -522,7 +520,7 @@ class _TimetableScreenState extends State<TimetableScreen>
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
-                            letterSpacing: 1,
+                            letterSpacing: 0.8,
                           ),
                         ),
                       ],
@@ -537,7 +535,7 @@ class _TimetableScreenState extends State<TimetableScreen>
             Text(
               item["subject"] ?? "Unknown Subject",
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textPrimary(context),
               ),
@@ -549,9 +547,8 @@ class _TimetableScreenState extends State<TimetableScreen>
             Text(
               item["faculty"] ?? "Unknown Faculty",
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 color: AppColors.textSecondary(context),
-                fontStyle: FontStyle.italic,
               ),
             ),
 
@@ -564,11 +561,11 @@ class _TimetableScreenState extends State<TimetableScreen>
                   child: _chip(context, Icons.location_on_outlined, item["room"] ?? "-"),
                 ),
                 const SizedBox(width: 8),
-                _chip(context, Icons.tag, item["course_code"] ?? "-"),
+                _chip(context, Icons.tag_rounded, item["course_code"] ?? "-"),
               ],
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
 
             // Time + Slot row
             Row(
@@ -576,7 +573,7 @@ class _TimetableScreenState extends State<TimetableScreen>
                 Expanded(
                   child: _chip(
                     context,
-                    Icons.access_time, 
+                    Icons.access_time_rounded, 
                     "${_formatTime12Hour(item["time"]?.toString())} - ${_formatTime12Hour(item["end_time"]?.toString())}"
                   ),
                 ),
@@ -616,22 +613,22 @@ class _TimetableScreenState extends State<TimetableScreen>
 
   Widget _chip(BuildContext context, IconData icon, String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.scaffoldBg(context),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.cardBorder(context)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.textSecondary(context)),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: AppColors.textSecondary(context)),
+          const SizedBox(width: 5),
           Flexible(
             child: Text(
               text,
               style: TextStyle(
-                  fontSize: 12, color: AppColors.textSecondary(context)),
+                  fontSize: 11, color: AppColors.textSecondary(context)),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -642,43 +639,12 @@ class _TimetableScreenState extends State<TimetableScreen>
 
   Widget _buildSkeletonLoading() {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       itemCount: 4,
-      itemBuilder: (context, index) => Container(
-        margin: const EdgeInsets.only(bottom: 12),
+      itemBuilder: (context, index) => const GlassShimmer(
         height: 140,
-        decoration: BoxDecoration(
-          color: AppColors.cardBg(context).withOpacity(0.5),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.cardBorder(context)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(width: 80, height: 20, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.1), borderRadius: BorderRadius.circular(6))),
-                  Container(width: 40, height: 20, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.1), borderRadius: BorderRadius.circular(6))),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Container(width: 200, height: 18, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.1), borderRadius: BorderRadius.circular(4))),
-              const SizedBox(height: 8),
-              Container(width: 120, height: 14, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05), borderRadius: BorderRadius.circular(4))),
-              const Spacer(),
-              Row(
-                children: [
-                  Expanded(child: Container(height: 32, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05), borderRadius: BorderRadius.circular(10)))),
-                  const SizedBox(width: 8),
-                  Expanded(child: Container(height: 32, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05), borderRadius: BorderRadius.circular(10)))),
-                ],
-              )
-            ],
-          ),
-        ),
+        borderRadius: 14,
+        margin: EdgeInsets.only(bottom: 10),
       ),
     );
   }

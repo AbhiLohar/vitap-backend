@@ -343,14 +343,16 @@ class _VtopWebViewScreenState extends State<VtopWebViewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     // Build the auto-submit HTML form that POSTs to /vtop/content
     // This avoids loading any VTOP page (which would overwrite our JSESSIONID)
     final String autoSubmitHtml = _csrfToken != null ? '''
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body>
-<p style="text-align:center;margin-top:40%;font-family:sans-serif;color:#666;">Loading VTOP Dashboard...</p>
+<body style="background:#F7F8FA;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+<p style="text-align:center;font-family:sans-serif;color:#777F8C;font-size:14px;font-weight:500;">Loading VTOP Dashboard...</p>
 <form id="autoForm" method="POST" action="https://vtop.vitap.ac.in/vtop/content">
   <input type="hidden" name="_csrf" value="$_csrfToken">
   <input type="hidden" name="verifyMenu" value="true">
@@ -361,8 +363,8 @@ class _VtopWebViewScreenState extends State<VtopWebViewScreen> {
 ''' : '''
 <!DOCTYPE html>
 <html>
-<body>
-<p style="text-align:center;margin-top:40%;font-family:sans-serif;color:#666;">Login failed. Please go back and try again.</p>
+<body style="background:#F7F8FA;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+<p style="text-align:center;font-family:sans-serif;color:#D9534F;font-size:14px;font-weight:500;">Login failed. Please go back and try again.</p>
 </body>
 </html>
 ''';
@@ -370,10 +372,20 @@ class _VtopWebViewScreenState extends State<VtopWebViewScreen> {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
-        title: const Text('VTOP Portal'),
+        title: Text(
+          'VTOP Portal',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary(context),
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: IconThemeData(color: AppColors.textPrimary(context)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: Icon(Icons.refresh_rounded, color: AppColors.textPrimary(context)),
             onPressed: () {
               if (_controller != null && _csrfToken != null) {
                 // Re-navigate to dashboard on refresh
@@ -390,18 +402,48 @@ class _VtopWebViewScreenState extends State<VtopWebViewScreen> {
       ),
       body: _isInit 
         ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                Text(_statusMessage, style: const TextStyle(fontSize: 14)),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(primary),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    _statusMessage,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary(context),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    "Signing in to official VTOP portal...",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary(context),
+                    ),
+                  ),
+                ],
+              ),
             ),
           )
         : Column(
             children: [
-              if (_isLoading) const LinearProgressIndicator(),
+              if (_isLoading)
+                LinearProgressIndicator(
+                  minHeight: 2.5,
+                  backgroundColor: primary.withOpacity(0.12),
+                  valueColor: AlwaysStoppedAnimation<Color>(primary),
+                ),
               Expanded(
                 child: InAppWebView(
                   // Load a local HTML page that auto-submits the POST form

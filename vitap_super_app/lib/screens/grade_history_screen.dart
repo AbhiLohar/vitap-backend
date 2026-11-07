@@ -87,12 +87,12 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
 
   Color _getGradeColor(String grade) {
     grade = grade.toUpperCase().trim();
-    if (grade == 'S' || grade == 'A') return Colors.green.shade400;
-    if (grade == 'B') return Colors.lightGreen.shade400;
-    if (grade == 'C') return Colors.orange.shade400;
-    if (grade == 'D') return Colors.deepOrange.shade400;
-    if (grade == 'E' || grade == 'F' || grade == 'N') return Colors.red.shade400;
-    return Colors.grey.shade400;
+    if (grade == 'S' || grade == 'A') return AppColors.good;
+    if (grade == 'B') return const Color(0xFF2E7D32);
+    if (grade == 'C') return AppColors.warning;
+    if (grade == 'D') return const Color(0xFFE65100);
+    if (grade == 'E' || grade == 'F' || grade == 'N') return AppColors.danger;
+    return const Color(0xFF9CA3AF);
   }
 
   Future<void> _showCgpaCalculator() async {
@@ -128,7 +128,7 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
         context: context,
         backgroundColor: AppColors.scaffoldBg(context),
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         builder: (_) => _buildCgpaBottomSheet(cgpa, creditsEarned, creditsRegistered),
       );
@@ -136,27 +136,34 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
   }
 
   Widget _buildCgpaBottomSheet(String cgpa, String creditsEarned, String creditsRegistered) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.cardBorder(context), borderRadius: BorderRadius.circular(2))),
-          const SizedBox(height: 24),
-          const Icon(Icons.school, size: 64, color: AppColors.primary),
-          const SizedBox(height: 16),
-          Text("Your CGPA", style: TextStyle(fontSize: 20, color: AppColors.textSecondary(context))),
-          const SizedBox(height: 8),
-          Text(cgpa, style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: AppColors.primary)),
-          const SizedBox(height: 8),
-          Text("Credits Earned: $creditsEarned / $creditsRegistered", style: TextStyle(fontSize: 14, color: AppColors.textMuted(context))),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
+          Icon(Icons.school_rounded, size: 52, color: primaryColor),
+          const SizedBox(height: 12),
+          Text("Your CGPA", style: TextStyle(fontSize: 16, color: AppColors.textSecondary(context))),
+          const SizedBox(height: 6),
+          Text(cgpa, style: TextStyle(fontSize: 44, fontWeight: FontWeight.bold, color: primaryColor, letterSpacing: -1)),
+          const SizedBox(height: 6),
+          Text("Credits Earned: $creditsEarned / $creditsRegistered", style: TextStyle(fontSize: 13, color: AppColors.textMuted(context))),
+          const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
               onPressed: () => Navigator.pop(context),
-              child: const Text("Awesome!", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+              child: const Text("Done", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
             ),
           )
         ],
@@ -166,23 +173,42 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg(context),
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Grade History", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            Text("${allGrades.length} courses", style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context), fontWeight: FontWeight.normal)),
+            Text(
+              "Grade History",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+                color: AppColors.textPrimary(context),
+              ),
+            ),
+            Text(
+              "${allGrades.length} courses",
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context), fontWeight: FontWeight.normal),
+            ),
           ],
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.share_outlined),
+            icon: const Icon(Icons.share_rounded, size: 20),
             onPressed: _shareGrades,
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
@@ -200,42 +226,42 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
                     ),
                     child: TextField(
                       controller: _searchController,
-                      style: TextStyle(color: AppColors.textPrimary(context)),
+                      style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14),
                       decoration: InputDecoration(
                         hintText: "Search courses...",
-                        hintStyle: TextStyle(color: AppColors.textMuted(context)),
-                        prefixIcon: Icon(Icons.search, color: AppColors.textMuted(context)),
+                        hintStyle: TextStyle(color: AppColors.textMuted(context), fontSize: 14),
+                        prefixIcon: Icon(Icons.search_rounded, color: AppColors.textMuted(context), size: 20),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: AppColors.cardBg(context),
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: AppColors.cardBorder(context)),
                   ),
-                  child: Icon(Icons.filter_list, color: AppColors.textSecondary(context)),
+                  child: Icon(Icons.filter_list_rounded, color: AppColors.textSecondary(context), size: 20),
                 ),
               ],
             ),
           ),
           Expanded(
             child: isLoading
-                ? Center(child: CircularProgressIndicator(color: AppColors.primary))
+                ? Center(child: CircularProgressIndicator(color: primaryColor))
                 : RefreshIndicator(
                     onRefresh: () => _fetchGrades(forceSync: true),
-                    color: AppColors.primary,
+                    color: primaryColor,
                     child: filteredGrades.isEmpty
                         ? ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
                             children: [
                               SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-                              Icon(Icons.history_toggle_off, size: 48, color: AppColors.textMuted(context)),
+                              Icon(Icons.history_toggle_off_rounded, size: 48, color: AppColors.textMuted(context)),
                               const SizedBox(height: 12),
                               Center(child: Text("No grades found", style: TextStyle(color: AppColors.textSecondary(context)))),
                             ],
@@ -255,9 +281,10 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showCgpaCalculator,
-        backgroundColor: Colors.lightGreen.shade200,
-        icon: const Icon(Icons.calculate_outlined, color: Colors.black87),
-        label: const Text("Calculate CGPA", style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        backgroundColor: primaryColor,
+        elevation: 2,
+        icon: const Icon(Icons.calculate_rounded, color: Colors.white, size: 18),
+        label: const Text("Calculate CGPA", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
       ),
     );
   }
@@ -265,45 +292,57 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
   Widget _buildGradeCard(Map<String, dynamic> item) {
     final grade = item["grade"] ?? "-";
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.cardBg(context),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.cardBorder(context)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(AppColors.isDark(context) ? 0.2 : 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: _getGradeColor(grade),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              grade,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getGradeColor(grade),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  grade,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+              Text(
+                item["course_code"] ?? "",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary(context),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           Text(
             item["subject"] ?? "Unknown Subject",
             style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
               color: AppColors.textPrimary(context),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            item["course_code"] ?? "",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary(context),
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -318,17 +357,17 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: AppColors.scaffoldBg(context),
               borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.cardBorder(context)),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text("Course Type", style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
-                const SizedBox(height: 4),
-                Text(item["type"] ?? "-", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textSecondary(context))),
+                Text(item["type"] ?? "-", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textSecondary(context))),
               ],
             ),
           ),
@@ -339,22 +378,23 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
 
   Widget _buildInfoBox(IconData icon, String title, String value) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.scaffoldBg(context),
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.cardBorder(context)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(icon, size: 16, color: AppColors.textMuted(context)),
-          const SizedBox(width: 8),
+          Icon(icon, size: 14, color: AppColors.textMuted(context)),
+          const SizedBox(width: 6),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: TextStyle(fontSize: 11, color: AppColors.textMuted(context))),
-              const SizedBox(height: 2),
-              Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textSecondary(context))),
+              Text(title, style: TextStyle(fontSize: 10, color: AppColors.textMuted(context))),
+              const SizedBox(height: 1),
+              Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary(context))),
             ],
           ),
         ],

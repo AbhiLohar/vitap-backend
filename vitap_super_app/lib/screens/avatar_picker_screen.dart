@@ -43,14 +43,16 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
       decoration: BoxDecoration(
         color: AppColors.scaffoldBg(context),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -58,7 +60,7 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
           // Drag handle
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 8),
-            width: 40,
+            width: 36,
             height: 4,
             decoration: BoxDecoration(
               color: AppColors.cardBorder(context),
@@ -68,7 +70,7 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
 
           // Title
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             child: Row(
               children: [
                 Expanded(
@@ -78,12 +80,13 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
                       Text(
                         "Choose Avatar",
                         style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.3,
                           color: AppColors.textPrimary(context),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         "Select a character or upload your photo",
                         style: TextStyle(
@@ -101,7 +104,7 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
                     return AvatarService.buildAvatar(
                       choice: choice,
                       name: widget.name,
-                      size: 56,
+                      size: 52,
                     );
                   },
                 ),
@@ -121,7 +124,7 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
                     context,
                     icon: Icons.photo_library_outlined,
                     label: "Upload Photo",
-                    color: AppColors.teal,
+                    color: primary,
                     onTap: () async {
                       await AvatarService.instance.selectPhoto();
                       if (mounted) {
@@ -134,9 +137,9 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
                 Expanded(
                   child: _actionButton(
                     context,
-                    icon: Icons.delete_outline,
+                    icon: Icons.delete_outline_rounded,
                     label: "Remove",
-                    color: AppColors.red,
+                    color: AppColors.danger,
                     onTap: () async {
                       await AvatarService.instance.removeAvatar();
                       if (mounted) {
@@ -158,14 +161,14 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
               children: [
                 Expanded(child: Divider(color: AppColors.cardBorder(context))),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Text(
                     "OR PICK AN AVATAR",
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textMuted(context),
-                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary(context),
+                      letterSpacing: 0.8,
                     ),
                   ),
                 ),
@@ -174,14 +177,14 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
           // Avatar grid
           Flexible(
             child: Padding(
               padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
+                left: 20,
+                right: 20,
                 bottom: 24 + bottomPadding,
               ),
               child: GridView.builder(
@@ -189,9 +192,9 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
                 physics: const BouncingScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 4,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 0.85,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.88,
                 ),
                 itemCount: AvatarService.predefinedAvatars.length,
                 itemBuilder: (context, index) {
@@ -208,27 +211,18 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
                       }
                     },
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
+                      duration: const Duration(milliseconds: 180),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppColors.primary.withOpacity(0.1)
+                            ? primary.withOpacity(0.08)
                             : AppColors.cardBg(context),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: isSelected
-                              ? AppColors.primary
+                              ? primary
                               : AppColors.cardBorder(context),
-                          width: isSelected ? 2 : 1,
+                          width: isSelected ? 1.8 : 1,
                         ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: AppColors.primary.withOpacity(0.2),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ]
-                            : null,
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -239,27 +233,27 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
                               ClipOval(
                                 child: Image.network(
                                   AvatarService.getAvatarUrl(seed, size: 120),
-                                  width: 52,
-                                  height: 52,
+                                  width: 48,
+                                  height: 48,
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, __, ___) => Container(
-                                    width: 52,
-                                    height: 52,
+                                    width: 48,
+                                    height: 48,
                                     decoration: BoxDecoration(
-                                      gradient: AppColors.primaryGradient,
+                                      color: primary.withOpacity(0.1),
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(Icons.person, color: Colors.white, size: 28),
+                                    child: Icon(Icons.person_rounded, color: primary, size: 26),
                                   ),
                                   loadingBuilder: (_, child, progress) {
                                     if (progress == null) return child;
                                     return SizedBox(
-                                      width: 52,
-                                      height: 52,
+                                      width: 48,
+                                      height: 48,
                                       child: Center(
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          color: AppColors.primary,
+                                          color: primary,
                                         ),
                                       ),
                                     );
@@ -268,13 +262,13 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
                               ),
                               if (isSelected)
                                 Container(
-                                  width: 18,
-                                  height: 18,
-                                  decoration: const BoxDecoration(
-                                    color: AppColors.primary,
+                                  width: 16,
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    color: primary,
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.check, size: 12, color: Colors.white),
+                                  child: const Icon(Icons.check, size: 10, color: Colors.white),
                                 ),
                             ],
                           ),
@@ -283,9 +277,9 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
                             label,
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                               color: isSelected
-                                  ? AppColors.primary
+                                  ? primary
                                   : AppColors.textSecondary(context),
                             ),
                             overflow: TextOverflow.ellipsis,
@@ -312,18 +306,18 @@ class _AvatarPickerSheetState extends State<AvatarPickerSheet> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(14),
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withOpacity(0.2)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: color),
+            Icon(icon, size: 17, color: color),
             const SizedBox(width: 8),
             Text(
               label,

@@ -18,16 +18,9 @@ class StatBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            iconColor.withOpacity(0.08),
-            AppColors.scaffoldBg(context),
-          ],
-        ),
+        color: iconColor.withOpacity(0.06),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.cardBorder(context)),
       ),
@@ -35,12 +28,12 @@ class StatBox extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: iconColor, size: 20),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700,
               color: AppColors.textPrimary(context),
             ),
           ),

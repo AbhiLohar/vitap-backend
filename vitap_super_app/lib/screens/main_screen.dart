@@ -78,7 +78,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         SnackBar(
           content: const Text("Press back again to exit"),
           duration: const Duration(seconds: 2),
-          backgroundColor: AppColors.cardBg(context),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
@@ -90,6 +89,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final activeColor = Theme.of(context).colorScheme.primary;
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -108,15 +109,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           decoration: BoxDecoration(
             color: AppColors.cardBg(context),
             border: Border(
-              top: BorderSide(color: AppColors.cardBorder(context), width: 1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 10,
-                offset: const Offset(0, -2),
+              top: BorderSide(
+                color: AppColors.cardBorder(context),
+                width: 0.5,
               ),
-            ],
+            ),
           ),
           child: SafeArea(
             child: MediaQuery.withClampedTextScaling(
@@ -125,11 +122,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                 child: Row(
                   children: [
-                    _navItem(Icons.calendar_today, Icons.calendar_today_outlined, "Timetable", 0),
-                    _navItem(Icons.people, Icons.people_outline, "Attendance", 1),
-                    _navItem(Icons.menu_book, Icons.menu_book_outlined, "More", 2),
-                    _navItem(Icons.dashboard, Icons.dashboard_outlined, "Dashboard", 3),
-                    _navItem(Icons.settings, Icons.settings_outlined, "Settings", 4),
+                    _navItem(Icons.calendar_today, Icons.calendar_today_outlined, "Timetable", 0, activeColor),
+                    _navItem(Icons.people, Icons.people_outline, "Attendance", 1, activeColor),
+                    _navItem(Icons.menu_book, Icons.menu_book_outlined, "More", 2, activeColor),
+                    _navItem(Icons.home_rounded, Icons.home_outlined, "Home", 3, activeColor),
+                    _navItem(Icons.settings, Icons.settings_outlined, "Settings", 4, activeColor),
                   ],
                 ),
               ),
@@ -140,69 +137,57 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _navItem(IconData filledIcon, IconData outlinedIcon, String label, int index) {
+  Widget _navItem(IconData filledIcon, IconData outlinedIcon, String label, int index, Color activeColor) {
     final isSelected = _currentIndex == index;
+    final inactiveColor = AppColors.textMuted(context);
 
     return Expanded(
       child: GestureDetector(
         onTap: () {
           if (_currentIndex != index) {
+            HapticFeedback.selectionClick();
             setState(() => _currentIndex = index);
           }
         },
         behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                padding: EdgeInsets.symmetric(
-                  horizontal: isSelected ? 12 : 0,
-                  vertical: isSelected ? 4 : 0,
-                ),
-                decoration: BoxDecoration(
-                  color: isSelected ? AppColors.primary.withOpacity(0.12) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  isSelected ? filledIcon : outlinedIcon,
-                  size: 22,
-                  color: isSelected ? AppColors.primary : AppColors.textMuted(context),
-                ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              padding: EdgeInsets.symmetric(
+                horizontal: isSelected ? 16 : 0,
+                vertical: 4,
               ),
-              const SizedBox(height: 3),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: isSelected ? AppColors.primary : AppColors.textMuted(context),
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    ),
+              decoration: BoxDecoration(
+                color: isSelected ? activeColor.withOpacity(0.1) : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                isSelected ? filledIcon : outlinedIcon,
+                size: 22,
+                color: isSelected ? activeColor : inactiveColor,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isSelected ? activeColor : inactiveColor,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   ),
                 ),
               ),
-              const SizedBox(height: 2),
-              // Indicator dot
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                height: 3,
-                width: isSelected ? 16 : 0,
-                decoration: BoxDecoration(
-                  color: isSelected ? AppColors.primary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
