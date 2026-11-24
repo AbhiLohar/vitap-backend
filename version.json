@@ -1,9 +1,9 @@
 {
-  "version": "1.1.0",
-  "versionCode": 11,
-  "title": "Version 1.1.0 - Premium UI/UX Redesign",
-  "notes": "• Complete UI/UX Modernization: Redesigned all 20+ screens with a premium commercial aesthetic following Apple Human Interface Guidelines and Linear minimal style\n• New Design System: 8-point spacing grid, clean 14px card radii, refined color palette (#172554 Navy & #526DAB secondary), and dynamic light/dark/nightfall/sakura themes\n• Modern Bento Grid Dashboard: Personalized greeting, attendance overview, timetable preview, and quick access navigation\n• Redesigned Core Screens: Timetable, Attendance, Mess Menu, Outings, Marks, Exams, Profile, GPA, and Settings completely modernized\n• Zero Disruption to Data: All backend APIs, credentials, session management, and features preserved 100%",
-  "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.1.0/app-release.apk",
-  "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/tag/v1.1.0",
-  "publishedAt": "2026-11-07T14:45:00Z"
+  "version": "1.1.1",
+  "versionCode": 12,
+  "title": "Version 1.1.1 - Mess Menu Parser & Deduplication Fix",
+  "notes": "• Enhanced Mess Menu Parser: Added multi-column detection (Day + Dates), full range expansion (e.g. 22nd to 28th), and cycle tracking\n• Fixed Duplicate Meals: Prevented multiple weeks/cycles from stacking together onto the same day\n• Fixed Repeated Day Items: Isolated date-specific menus so days like Wednesday do not inherit Tuesday items\n• Stripped Mess Instructions: Automatically stops parsing at instruction sections and filters out policy rules from menu cards\n• Auto-Sanitize & Recovery: Added 'Clean & Deduplicate Menu' and 'Reset to Default Menu' actions to upload options",
+  "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.1.1/app-release.apk",
+  "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/tag/v1.1.1",
+  "publishedAt": "2026-11-24T16:30:00Z"
 }

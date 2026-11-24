@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -157,7 +158,11 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
       } else if (file.name.toLowerCase().endsWith('.csv')) {
         String? text;
         if (bytes != null && bytes.isNotEmpty) {
-          text = String.fromCharCodes(bytes);
+          try {
+            text = utf8.decode(bytes, allowMalformed: true);
+          } catch (_) {
+            text = String.fromCharCodes(bytes);
+          }
         } else if (file.path != null && file.path!.isNotEmpty) {
           text = await File(file.path!).readAsString();
         }
@@ -440,6 +445,84 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                 onTap: () {
                   Navigator.pop(context);
                   _pickAndParseFile(['csv']);
+                },
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: AppColors.cardBorder(context)),
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.auto_fix_high_outlined, color: AppColors.purple, size: 22),
+                ),
+                title: Text(
+                  'Clean & Deduplicate Menu',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary(context)),
+                ),
+                subtitle: Text(
+                  'Removes duplicate food items and policy instructions from current menu',
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  setState(() => _isLoading = true);
+                  await MessMenuService.cleanAndDeduplicateStoredMenus();
+                  await _loadMenu();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('✨ Cleaned duplicate items and removed instructions!'),
+                        backgroundColor: AppColors.purple,
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: AppColors.cardBorder(context)),
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.restart_alt_outlined, color: AppColors.warning, size: 22),
+                ),
+                title: Text(
+                  'Reset to Default Sample Menu',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary(context)),
+                ),
+                subtitle: Text(
+                  'Restores official VIT-AP sample weekly mess menu',
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary(context)),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  setState(() => _isLoading = true);
+                  await MessMenuService.loadDefaultMenus();
+                  await _loadMenu();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('🔄 Reset to default VIT-AP mess menu!'),
+                        backgroundColor: AppColors.teal,
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  }
                 },
               ),
               const SizedBox(height: 16),

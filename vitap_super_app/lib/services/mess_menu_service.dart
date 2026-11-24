@@ -59,7 +59,17 @@ class MessMenuService {
           mealsObj.forEach((mealKey, itemsObj) {
             final meal = mealKey.toString();
             if (itemsObj is List) {
-              menu[day]![meal] = itemsObj.map((e) => e.toString()).toList();
+              final seen = <String>{};
+              final cleanItems = <String>[];
+              for (final e in itemsObj) {
+                final str = e.toString().trim();
+                if (str.isEmpty) continue;
+                if (_isInstructionSentence(str)) continue;
+                if (seen.add(str.toLowerCase())) {
+                  cleanItems.add(str);
+                }
+              }
+              menu[day]![meal] = cleanItems;
             }
           });
         }
@@ -81,34 +91,57 @@ class MessMenuService {
     await prefs.remove('$_keyPrefix$messType');
   }
 
+  /// Clean, deduplicate and sanitize all stored menus on the device
+  static Future<void> cleanAndDeduplicateStoredMenus() async {
+    for (final messType in ['special', 'veg_nonveg']) {
+      final menu = await loadMenu(messType);
+      if (menu.isEmpty) continue;
+      final clean = <String, Map<String, List<String>>>{};
+      menu.forEach((key, meals) {
+        clean[key] = _deduplicateMealMap(meals);
+      });
+      await saveMenu(messType, clean);
+    }
+  }
+
   // ── Retrieval ──
 
-  /// Get menu for a day name or specific date number (e.g. dateNum = 8 for 8th of the month)
+  /// Get menu for a day name or specific date number (e.g. dateNum = 24 for 24th of the month)
   static Future<Map<String, List<String>>> getMenuForDayOrDate(
     String messType, {
     required String dayName,
     int? dateNum,
   }) async {
     final menu = await loadMenu(messType);
-    
-    // 1. Try date-specific key first (e.g. Date_8)
+    if (menu.isEmpty) return {};
+
+    // 1. Try date-specific key first (e.g. Date_24)
     if (dateNum != null) {
       final dateKey = 'Date_$dateNum';
       if (menu.containsKey(dateKey)) {
         final dateMenu = menu[dateKey]!;
-        bool hasItems = dateMenu.values.any((list) => list.isNotEmpty);
-        if (hasItems) {
-          return dateMenu;
+        if (_hasAnyMealItems(dateMenu)) {
+          return _deduplicateMealMap(dateMenu);
+        }
+      }
+
+      // If exact date key was not found, check if a cycle key matches this week
+      // (Cycle 1: days 1–7 & 15–21, Cycle 2: days 8–14 & 22–28)
+      final cycle = ((dateNum - 1) ~/ 7) % 2 + 1;
+      final cycleKey = '${dayName}_Cycle$cycle';
+      if (menu.containsKey(cycleKey)) {
+        final cycleMenu = menu[cycleKey]!;
+        if (_hasAnyMealItems(cycleMenu)) {
+          return _deduplicateMealMap(cycleMenu);
         }
       }
     }
 
-    // 2. Fall back to day name (e.g. 'Sat')
+    // 2. Fall back to day name (e.g. 'Tue', 'Wed')
     if (menu.containsKey(dayName)) {
       final dayMenu = menu[dayName]!;
-      bool hasItems = dayMenu.values.any((list) => list.isNotEmpty);
-      if (hasItems) {
-        return dayMenu;
+      if (_hasAnyMealItems(dayMenu)) {
+        return _deduplicateMealMap(dayMenu);
       }
     }
 
@@ -116,13 +149,36 @@ class MessMenuService {
     for (final key in menu.keys) {
       if (key.toLowerCase().startsWith(dayName.toLowerCase())) {
         final m = menu[key]!;
-        if (m.values.any((list) => list.isNotEmpty)) {
-          return m;
+        if (_hasAnyMealItems(m)) {
+          return _deduplicateMealMap(m);
         }
       }
     }
 
     return {};
+  }
+
+  static bool _hasAnyMealItems(Map<String, List<String>> mealMap) {
+    return mealMap.values.any((list) => list.isNotEmpty);
+  }
+
+  static Map<String, List<String>> _deduplicateMealMap(Map<String, List<String>> raw) {
+    final clean = <String, List<String>>{};
+    for (final meal in mealOrder) {
+      final items = raw[meal] ?? [];
+      final seen = <String>{};
+      final uniqueItems = <String>[];
+      for (final item in items) {
+        final trimmed = item.trim();
+        if (trimmed.isEmpty) continue;
+        if (_isInstructionSentence(trimmed)) continue;
+        if (seen.add(trimmed.toLowerCase())) {
+          uniqueItems.add(trimmed);
+        }
+      }
+      clean[meal] = uniqueItems;
+    }
+    return clean;
   }
 
   /// Legacy getter
@@ -168,7 +224,7 @@ class MessMenuService {
   // ── Excel Parsing ──
 
   /// Parse entire Excel workbook into mess types (e.g. 'veg_nonveg' -> menu, 'special' -> menu).
-  /// Reads all sheets in the Excel workbook.
+  /// Reads all valid sheets in the Excel workbook, skipping instruction or metadata sheets.
   static Map<String, Map<String, Map<String, List<String>>>> parseExcelWorkbook(List<int> bytes) {
     final result = <String, Map<String, Map<String, List<String>>>>{};
     try {
@@ -177,13 +233,30 @@ class MessMenuService {
 
       for (final sheetName in excel.tables.keys) {
         final sheet = excel.tables[sheetName]!;
+        final lowerSheet = sheetName.toLowerCase().trim();
+
+        // Skip non-menu sheets (instructions, rules, summary, etc.)
+        if (lowerSheet.contains('instruction') ||
+            lowerSheet.contains('guideline') ||
+            lowerSheet.contains('rule') ||
+            lowerSheet.contains('cover') ||
+            lowerSheet.contains('summary') ||
+            lowerSheet.contains('notice') ||
+            lowerSheet.contains('template') ||
+            lowerSheet.contains('feedback')) {
+          continue;
+        }
+
         final sheetMenu = parseSingleSheet(sheet);
         if (sheetMenu.isEmpty) continue;
 
-        final lowerSheet = sheetName.toLowerCase();
         if (lowerSheet.contains('special')) {
           result['special'] = sheetMenu;
-        } else if (lowerSheet.contains('veg') || lowerSheet.contains('non') || lowerSheet.contains('regular') || lowerSheet.contains('general') || lowerSheet.contains('normal')) {
+        } else if (lowerSheet.contains('veg') ||
+                   lowerSheet.contains('non') ||
+                   lowerSheet.contains('regular') ||
+                   lowerSheet.contains('general') ||
+                   lowerSheet.contains('normal')) {
           result['veg_nonveg'] = sheetMenu;
         } else {
           if (!result.containsKey('veg_nonveg')) {
@@ -212,31 +285,79 @@ class MessMenuService {
     try {
       int headerRow = -1;
       int dayCol = -1;
+      int dateCol = -1;
       int breakfastCol = -1;
       int lunchCol = -1;
       int snacksCol = -1;
       int dinnerCol = -1;
 
+      // Scan rows 0 to 15 to locate headers (accumulating to handle multi-row/merged headers)
       for (int r = 0; r < sheet.maxRows && r < 15; r++) {
         for (int c = 0; c < sheet.maxColumns; c++) {
-          final val = _cellValue(sheet, r, c).toLowerCase();
-          if (val.contains('day')) dayCol = c;
-          if (val.contains('breakfast')) breakfastCol = c;
-          if (val.contains('lunch')) lunchCol = c;
-          if (val.contains('snack')) snacksCol = c;
-          if (val.contains('dinner')) dinnerCol = c;
+          final val = _cellValue(sheet, r, c).toLowerCase().trim();
+          if (val.isEmpty) continue;
+
+          // Day column
+          if (dayCol < 0 &&
+              (val == 'day' ||
+               val == 'days' ||
+               val.contains('weekday') ||
+               val.contains('day name') ||
+               val.contains('day & date') ||
+               val.contains('day/date') ||
+               val.contains('days/dates') ||
+               val.contains('day & dates') ||
+               val.contains('days and dates'))) {
+            dayCol = c;
+          }
+
+          // Date column
+          if (dateCol < 0 &&
+              (val == 'date' ||
+               val == 'dates' ||
+               val == 'dt' ||
+               val.contains('date(s)') ||
+               val.contains('dates of month') ||
+               val.contains('dates of the month'))) {
+            dateCol = c;
+          }
+
+          // Meal columns
+          if (breakfastCol < 0 &&
+              (val.contains('breakfast') ||
+               val.contains('break-fast') ||
+               val.contains('tiffin') ||
+               val.contains('morning meal'))) {
+            breakfastCol = c;
+          }
+          if (lunchCol < 0 &&
+              (val.contains('lunch') ||
+               val.contains('afternoon meal'))) {
+            lunchCol = c;
+          }
+          if (snacksCol < 0 &&
+              (val.contains('snack') ||
+               val.contains('hi-tea') ||
+               val.contains('tea/coffee') ||
+               val.contains('refreshment') ||
+               val.contains('evening meal'))) {
+            snacksCol = c;
+          }
+          if (dinnerCol < 0 &&
+              (val.contains('dinner') ||
+               val.contains('night meal') ||
+               val.contains('supper'))) {
+            dinnerCol = c;
+          }
         }
-        if (dayCol >= 0 && breakfastCol >= 0) {
+
+        if (breakfastCol >= 0 && (dayCol >= 0 || dateCol >= 0 || lunchCol >= 0)) {
           headerRow = r;
           break;
         }
-        dayCol = -1;
-        breakfastCol = -1;
-        lunchCol = -1;
-        snacksCol = -1;
-        dinnerCol = -1;
       }
 
+      // Fallback: search for any cell containing 'breakfast'
       if (headerRow < 0) {
         for (int r = 0; r < sheet.maxRows && r < 15; r++) {
           for (int c = 0; c < sheet.maxColumns; c++) {
@@ -252,40 +373,88 @@ class MessMenuService {
         }
       }
 
-      if (headerRow < 0) return menu;
+      if (headerRow < 0 || breakfastCol < 0) return menu;
 
-      if (breakfastCol < 0) breakfastCol = dayCol + 1;
+      if (dayCol < 0) {
+        dayCol = (dateCol >= 0 && dateCol > 0)
+            ? dateCol - 1
+            : (breakfastCol > 0 ? breakfastCol - 1 : 0);
+      }
       if (lunchCol < 0) lunchCol = breakfastCol + 1;
       if (snacksCol < 0) snacksCol = lunchCol + 1;
       if (dinnerCol < 0) dinnerCol = snacksCol + 1;
 
       String currentDayName = '';
       List<int> currentDates = [];
+      int cycleCount = 1;
+      String? lastParsedDayName;
 
       for (int r = headerRow + 1; r < sheet.maxRows; r++) {
-        final dayCell = _cellValue(sheet, r, dayCol).trim();
-        final upperCell = dayCell.toUpperCase();
-
-        // Only stop if explicitly hitting MESS SERVICE INSTRUCTIONS header row
-        if (upperCell.contains('MESS SERVICE INSTRUCTIONS') || upperCell.contains('SERVICE INSTRUCTIONS')) {
+        // 1. Check if row is an instruction / terms section header — STOP immediately!
+        if (_isInstructionRow(sheet, r)) {
           break;
         }
 
-        if (dayCell.isNotEmpty) {
-          final normalized = _normalizeDayName(dayCell);
-          if (normalized.isNotEmpty) {
-            currentDayName = normalized;
-            currentDates = _extractDates(dayCell);
+        // 2. Extract day name and dates from columns left of breakfastCol
+        String rowDayName = '';
+        List<int> rowDates = [];
+
+        final colsToCheck = <int>{
+          if (dayCol >= 0 && dayCol < breakfastCol) dayCol,
+          if (dateCol >= 0 && dateCol < breakfastCol) dateCol,
+          for (int c = 0; c < breakfastCol; c++) c,
+        };
+
+        for (final c in colsToCheck) {
+          final cellText = _cellValue(sheet, r, c).trim();
+          if (cellText.isEmpty) continue;
+
+          // Day name check
+          if (rowDayName.isEmpty) {
+            final norm = _normalizeDayName(cellText);
+            if (norm.isNotEmpty) {
+              rowDayName = norm;
+            }
+          }
+
+          // Dates check
+          final extracted = _extractDates(cellText);
+          if (extracted.isNotEmpty) {
+            rowDates.addAll(extracted);
           }
         }
+        rowDates = rowDates.toSet().toList()..sort();
+
+        // 3. Update day name and cycle tracking
+        if (rowDayName.isNotEmpty) {
+          if (lastParsedDayName != null && rowDayName == 'Mon' && lastParsedDayName != 'Mon') {
+            cycleCount++;
+          }
+          lastParsedDayName = rowDayName;
+          currentDayName = rowDayName;
+          currentDates = rowDates;
+        } else if (rowDates.isNotEmpty) {
+          // If only dates are written on this row
+          currentDates = rowDates;
+        }
+
         if (currentDayName.isEmpty) continue;
 
+        // 4. Extract meal items
         final breakfast = _splitItems(_cellValue(sheet, r, breakfastCol));
         final lunch = _splitItems(_cellValue(sheet, r, lunchCol));
         final snacks = _splitItems(_cellValue(sheet, r, snacksCol));
         final dinner = _splitItems(_cellValue(sheet, r, dinnerCol));
 
-        if (breakfast.isEmpty && lunch.isEmpty && snacks.isEmpty && dinner.isEmpty) continue;
+        // Skip completely blank rows
+        if (breakfast.isEmpty && lunch.isEmpty && snacks.isEmpty && dinner.isEmpty) {
+          continue;
+        }
+
+        // Skip rows that consist solely of policy instructions
+        if (_isAllInstructions(breakfast, lunch, snacks, dinner)) {
+          continue;
+        }
 
         final mealData = {
           'Breakfast': breakfast,
@@ -294,26 +463,26 @@ class MessMenuService {
           'Dinner': dinner,
         };
 
-        // 1. Store by specific date numbers if extracted (e.g. Date_1, Date_8, Date_15, Date_29)
+        // 5. Store by specific date numbers (e.g. Date_3, Date_10, Date_17, Date_24)
         if (currentDates.isNotEmpty) {
-          for (int dateNum in currentDates) {
-            if (menu['Date_$dateNum'] == null) {
-              menu['Date_$dateNum'] = {
+          for (final dateNum in currentDates) {
+            final key = 'Date_$dateNum';
+            if (menu[key] == null) {
+              menu[key] = {
                 'Breakfast': List.from(breakfast),
                 'Lunch': List.from(lunch),
                 'Snacks': List.from(snacks),
                 'Dinner': List.from(dinner),
               };
             } else {
-              menu['Date_$dateNum']!['Breakfast']!.addAll(breakfast);
-              menu['Date_$dateNum']!['Lunch']!.addAll(lunch);
-              menu['Date_$dateNum']!['Snacks']!.addAll(snacks);
-              menu['Date_$dateNum']!['Dinner']!.addAll(dinner);
+              // Same date continuation row -> append deduplicated
+              _appendMealItems(menu[key]!, mealData);
             }
           }
         }
 
-        // 2. Also store under day name fallback ('Sat', 'Sun', etc.)
+        // 6. Store under day name fallback ('Tue', 'Wed', etc.)
+        // Never blindly stack multiple cycles into the same day key!
         if (menu[currentDayName] == null) {
           menu[currentDayName] = {
             'Breakfast': List.from(breakfast),
@@ -321,11 +490,22 @@ class MessMenuService {
             'Snacks': List.from(snacks),
             'Dinner': List.from(dinner),
           };
+        } else if (currentDates.isEmpty && rowDayName.isEmpty) {
+          // Continuation row for the SAME meal
+          _appendMealItems(menu[currentDayName]!, mealData);
         } else {
-          menu[currentDayName]!['Breakfast']!.addAll(breakfast);
-          menu[currentDayName]!['Lunch']!.addAll(lunch);
-          menu[currentDayName]!['Snacks']!.addAll(snacks);
-          menu[currentDayName]!['Dinner']!.addAll(dinner);
+          // Save under separate cycle key (e.g. Tue_Cycle2) to prevent duplicate meal lists
+          final cycleKey = '${currentDayName}_Cycle$cycleCount';
+          if (menu[cycleKey] == null) {
+            menu[cycleKey] = {
+              'Breakfast': List.from(breakfast),
+              'Lunch': List.from(lunch),
+              'Snacks': List.from(snacks),
+              'Dinner': List.from(dinner),
+            };
+          } else {
+            _appendMealItems(menu[cycleKey]!, mealData);
+          }
         }
       }
     } catch (e) {
@@ -337,18 +517,45 @@ class MessMenuService {
   static String _cellValue(xl.Sheet sheet, int row, int col) {
     if (row >= sheet.maxRows || col >= sheet.maxColumns || col < 0) return '';
     final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
-    return cell.value?.toString() ?? '';
+    final v = cell.value;
+    if (v == null) return '';
+    if (v is xl.TextCellValue) {
+      return v.value.toString().trim();
+    }
+    if (v is xl.DateCellValue) {
+      return '${v.day.toString().padLeft(2, '0')}/${v.month.toString().padLeft(2, '0')}/${v.year}';
+    }
+    if (v is xl.DateTimeCellValue) {
+      return '${v.day.toString().padLeft(2, '0')}/${v.month.toString().padLeft(2, '0')}/${v.year}';
+    }
+    return v.toString().trim();
   }
 
   /// Parse CSV text into a date-aware menu
   static Map<String, Map<String, List<String>>> parseCsvText(String csvText) {
     final menu = <String, Map<String, List<String>>>{};
     final lines = csvText.split('\n');
-    
+
     int headerIdx = -1;
-    for (int i = 0; i < lines.length; i++) {
-      final lower = lines[i].toLowerCase();
-      if (lower.contains('day') && lower.contains('breakfast')) {
+    int dayCol = 0;
+    int dateCol = -1;
+    int breakfastCol = 1;
+    int lunchCol = 2;
+    int snacksCol = 3;
+    int dinnerCol = 4;
+
+    for (int i = 0; i < lines.length && i < 15; i++) {
+      final cells = _splitCsvLine(lines[i]);
+      for (int c = 0; c < cells.length; c++) {
+        final val = cells[c].toLowerCase().trim();
+        if (val.contains('day')) dayCol = c;
+        if (val.contains('date')) dateCol = c;
+        if (val.contains('breakfast') || val.contains('break-fast') || val.contains('tiffin')) breakfastCol = c;
+        if (val.contains('lunch')) lunchCol = c;
+        if (val.contains('snack') || val.contains('hi-tea')) snacksCol = c;
+        if (val.contains('dinner') || val.contains('supper')) dinnerCol = c;
+      }
+      if (breakfastCol >= 0 && (dayCol >= 0 || dateCol >= 0)) {
         headerIdx = i;
         break;
       }
@@ -358,43 +565,117 @@ class MessMenuService {
 
     String currentDayName = '';
     List<int> currentDates = [];
+    int cycleCount = 1;
+    String? lastParsedDayName;
 
     for (int i = headerIdx + 1; i < lines.length; i++) {
       final line = lines[i].trim();
       if (line.isEmpty) continue;
 
       final upperLine = line.toUpperCase();
-      if (upperLine.contains('MESS SERVICE INSTRUCTIONS') || upperLine.contains('SERVICE INSTRUCTIONS')) {
+      if (upperLine.contains('MESS SERVICE INSTRUCTION') ||
+          upperLine.contains('SERVICE INSTRUCTION') ||
+          upperLine.contains('GENERAL INSTRUCTION') ||
+          upperLine.contains('SPECIAL INSTRUCTION') ||
+          upperLine.contains('RULES AND REGULATION') ||
+          upperLine.contains('TERMS AND CONDITION') ||
+          upperLine.startsWith('NOTE:') ||
+          upperLine.startsWith('NOTES:')) {
         break;
       }
 
       final cells = _splitCsvLine(line);
-      if (cells.length < 5) continue;
+      final maxCol = [breakfastCol, lunchCol, snacksCol, dinnerCol].reduce((a, b) => a > b ? a : b);
+      if (cells.length <= maxCol) continue;
 
-      final dayCell = cells[0].trim();
-      if (dayCell.isNotEmpty) {
-        final normalized = _normalizeDayName(dayCell);
-        if (normalized.isNotEmpty) {
-          currentDayName = normalized;
-          currentDates = _extractDates(dayCell);
+      String rowDayName = '';
+      List<int> rowDates = [];
+
+      final colsToCheck = <int>{
+        if (dayCol >= 0 && dayCol < cells.length) dayCol,
+        if (dateCol >= 0 && dateCol < cells.length) dateCol,
+        for (int c = 0; c < breakfastCol && c < cells.length; c++) c,
+      };
+
+      for (final c in colsToCheck) {
+        final cellText = cells[c].trim();
+        if (cellText.isEmpty) continue;
+
+        if (rowDayName.isEmpty) {
+          final norm = _normalizeDayName(cellText);
+          if (norm.isNotEmpty) rowDayName = norm;
         }
+
+        final extracted = _extractDates(cellText);
+        if (extracted.isNotEmpty) rowDates.addAll(extracted);
       }
+      rowDates = rowDates.toSet().toList()..sort();
+
+      if (rowDayName.isNotEmpty) {
+        if (lastParsedDayName != null && rowDayName == 'Mon' && lastParsedDayName != 'Mon') {
+          cycleCount++;
+        }
+        lastParsedDayName = rowDayName;
+        currentDayName = rowDayName;
+        currentDates = rowDates;
+      } else if (rowDates.isNotEmpty) {
+        currentDates = rowDates;
+      }
+
       if (currentDayName.isEmpty) continue;
 
+      final breakfast = _splitItems(cells[breakfastCol]);
+      final lunch = _splitItems(cells[lunchCol]);
+      final snacks = _splitItems(cells[snacksCol]);
+      final dinner = _splitItems(cells[dinnerCol]);
+
+      if (breakfast.isEmpty && lunch.isEmpty && snacks.isEmpty && dinner.isEmpty) continue;
+      if (_isAllInstructions(breakfast, lunch, snacks, dinner)) continue;
+
       final mealData = {
-        'Breakfast': _splitItems(cells[1]),
-        'Lunch': _splitItems(cells[2]),
-        'Snacks': _splitItems(cells[3]),
-        'Dinner': _splitItems(cells[4]),
+        'Breakfast': breakfast,
+        'Lunch': lunch,
+        'Snacks': snacks,
+        'Dinner': dinner,
       };
 
       if (currentDates.isNotEmpty) {
         for (int dateNum in currentDates) {
-          menu['Date_$dateNum'] = mealData;
+          final key = 'Date_$dateNum';
+          if (menu[key] == null) {
+            menu[key] = {
+              'Breakfast': List.from(breakfast),
+              'Lunch': List.from(lunch),
+              'Snacks': List.from(snacks),
+              'Dinner': List.from(dinner),
+            };
+          } else {
+            _appendMealItems(menu[key]!, mealData);
+          }
         }
       }
+
       if (menu[currentDayName] == null) {
-        menu[currentDayName] = mealData;
+        menu[currentDayName] = {
+          'Breakfast': List.from(breakfast),
+          'Lunch': List.from(lunch),
+          'Snacks': List.from(snacks),
+          'Dinner': List.from(dinner),
+        };
+      } else if (currentDates.isEmpty && rowDayName.isEmpty) {
+        _appendMealItems(menu[currentDayName]!, mealData);
+      } else {
+        final cycleKey = '${currentDayName}_Cycle$cycleCount';
+        if (menu[cycleKey] == null) {
+          menu[cycleKey] = {
+            'Breakfast': List.from(breakfast),
+            'Lunch': List.from(lunch),
+            'Snacks': List.from(snacks),
+            'Dinner': List.from(dinner),
+          };
+        } else {
+          _appendMealItems(menu[cycleKey]!, mealData);
+        }
       }
     }
     return menu;
@@ -419,33 +700,159 @@ class MessMenuService {
     return result;
   }
 
+  static void _appendMealItems(
+    Map<String, List<String>> target,
+    Map<String, List<String>> incoming,
+  ) {
+    for (final meal in mealOrder) {
+      final existing = target[meal] ?? [];
+      final seen = existing.map((e) => e.toLowerCase().trim()).toSet();
+      final toAdd = incoming[meal] ?? [];
+      for (final item in toAdd) {
+        final trimmed = item.trim();
+        if (trimmed.isEmpty) continue;
+        if (_isInstructionSentence(trimmed)) continue;
+        if (seen.add(trimmed.toLowerCase())) {
+          existing.add(trimmed);
+        }
+      }
+      target[meal] = existing;
+    }
+  }
+
+  static bool _isInstructionRow(xl.Sheet sheet, int row) {
+    for (int c = 0; c < sheet.maxColumns; c++) {
+      final cellText = _cellValue(sheet, row, c).toUpperCase().trim();
+      if (cellText.isEmpty) continue;
+
+      if (cellText.contains('MESS SERVICE INSTRUCTION') ||
+          cellText.contains('SERVICE INSTRUCTION') ||
+          cellText.contains('GENERAL INSTRUCTION') ||
+          cellText.contains('SPECIAL INSTRUCTION') ||
+          cellText.contains('IMPORTANT INSTRUCTION') ||
+          cellText.contains('INSTRUCTIONS TO') ||
+          cellText.contains('INSTRUCTIONS:') ||
+          cellText == 'INSTRUCTIONS' ||
+          cellText == 'INSTRUCTION' ||
+          cellText.startsWith('NOTE:') ||
+          cellText.startsWith('NOTES:') ||
+          cellText.contains('TERMS & CONDITIONS') ||
+          cellText.contains('TERMS AND CONDITIONS') ||
+          cellText.contains('RULES & REGULATIONS') ||
+          cellText.contains('RULES AND REGULATIONS') ||
+          cellText.contains('CATERER GUIDELINE') ||
+          cellText.contains('PENALTY CLAUSE') ||
+          cellText.contains('FEEDBACK / COMPLAINT') ||
+          cellText.contains('MESS COMMITTEE') ||
+          cellText.contains('FOOD COMMITTEE')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _isAllInstructions(
+    List<String> breakfast,
+    List<String> lunch,
+    List<String> snacks,
+    List<String> dinner,
+  ) {
+    final all = [...breakfast, ...lunch, ...snacks, ...dinner];
+    if (all.isEmpty) return false;
+    return all.every((item) => _isInstructionSentence(item));
+  }
+
   /// Check if a string is a policy instruction sentence
   static bool _isInstructionSentence(String text) {
-    final upper = text.toUpperCase().trim();
-    if (upper.isEmpty) return false;
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    final upper = trimmed.toUpperCase();
 
-    if (upper.contains('MESS SERVICE INSTRUCTIONS') ||
-        upper.contains('SERVICE INSTRUCTIONS') ||
-        upper.startsWith('INSTRUCTION')) {
+    // Headers and keywords
+    if (upper.contains('INSTRUCTION') ||
+        upper.contains('SERVICE INSTRUCTION') ||
+        upper.contains('RULES AND REGULATION') ||
+        upper.contains('TERMS AND CONDITION') ||
+        upper.contains('CATERER GUIDELINE') ||
+        upper.contains('MESS COMMITTEE') ||
+        upper.contains('FOOD COMMITTEE') ||
+        upper.contains('PENALTY') ||
+        upper.contains('FEEDBACK') ||
+        upper.contains('COMPLAINT') ||
+        upper.startsWith('NOTE:') ||
+        upper.startsWith('NOTE -') ||
+        upper.startsWith('NOTE :') ||
+        upper.startsWith('NOTICE:') ||
+        upper.startsWith('IMPORTANT:') ||
+        upper.startsWith('RULES:')) {
       return true;
     }
 
-    if (upper.contains('MUST BE SERVED') ||
-        upper.contains('WEIGHING MACHINE') ||
-        upper.contains('FUNCTIONALLY AVAILABLE') ||
-        upper.contains('SHOULD WEIGH') ||
-        upper.contains('PREPARED USING') ||
-        upper.contains('SHOULD BE KEPT') ||
-        upper.contains('DEPENDING ON THE SIZE SERVED') ||
-        upper.contains('BY THE CATERER') ||
-        upper.contains('NOT BE FROZEN DESSERT')) {
+    // Common policy phrases in mess contracts
+    final policyPhrases = [
+      'MUST BE SERVED',
+      'SHOULD BE SERVED',
+      'SHALL BE SERVED',
+      'MUST BE PROVIDED',
+      'SHOULD BE PROVIDED',
+      'SHALL BE PROVIDED',
+      'TO BE SERVED',
+      'TO BE PROVIDED',
+      'WEIGHING MACHINE',
+      'FUNCTIONALLY AVAILABLE',
+      'SHOULD WEIGH',
+      'MUST WEIGH',
+      'SHALL WEIGH',
+      'PREPARED USING',
+      'SHOULD BE KEPT',
+      'MUST BE KEPT',
+      'BY THE CATERER',
+      'NOT BE FROZEN DESSERT',
+      'STANDARD BRAND',
+      'QUALITY OF FOOD',
+      'STRICTLY PROHIBITED',
+      'UNLIMITED EXCEPT',
+      'PER STUDENT',
+      'MESS TIMING',
+      'BREAKFAST TIMING',
+      'LUNCH TIMING',
+      'DINNER TIMING',
+      'SNACKS TIMING',
+      'FOOD WASTE',
+      'CLEANLINESS',
+      'DISPOSABLE',
+      'CATERING SUPERVISOR',
+      'KITCHEN HYGIENE',
+      'FSSAI',
+      'VENDOR SHALL',
+      'CATERER SHALL',
+      'STUDENTS ARE REQUESTED',
+      'STUDENTS MUST',
+      'STUDENTS SHOULD',
+      'ENTRY ALLOWED',
+      'MESS CARD',
+      'FINE WILL BE LEVIED',
+      'FINE OF RS',
+    ];
+
+    for (final phrase in policyPhrases) {
+      if (upper.contains(phrase)) return true;
+    }
+
+    // Long descriptive rule sentence check
+    if (trimmed.length > 70 &&
+        (upper.contains(' SHOULD ') ||
+         upper.contains(' MUST ') ||
+         upper.contains(' SHALL ') ||
+         upper.contains(' WILL ') ||
+         upper.contains(' NOT '))) {
       return true;
     }
 
     return false;
   }
 
-  /// Split multi-line cell text into food items while filtering out instruction lines
+  /// Split multi-line cell text into food items while filtering out instruction lines and duplicates
   static List<String> _splitItems(String cell) {
     if (cell.trim().isEmpty) return [];
 
@@ -456,18 +863,26 @@ class MessMenuService {
       line = line.trim();
       if (line.isEmpty) continue;
 
-      // Filter out policy instruction sentences
       if (_isInstructionSentence(line)) continue;
 
-      // Clean leading item numbers like "1. ", "2. ", "1) ", "• ", "- "
-      String cleaned = line.replaceAll(RegExp(r'^[\d\•\-\*]+[\.\)\:]*\s*'), '').trim();
+      // Clean leading item numbers like "1. ", "2. ", "1) ", "• ", "- ", "* ", "(1) "
+      String cleaned = line.replaceAll(RegExp(r'^[\d\•\-\*\(\)]+[\.\)\:\-\s]+\s*'), '').trim();
 
       if (cleaned.isNotEmpty && !_isInstructionSentence(cleaned)) {
         items.add(cleaned);
       }
     }
 
-    return items;
+    // Deduplicate preserving order
+    final seen = <String>{};
+    final uniqueItems = <String>[];
+    for (final it in items) {
+      if (seen.add(it.toLowerCase())) {
+        uniqueItems.add(it);
+      }
+    }
+
+    return uniqueItems;
   }
 
   static String _normalizeDayName(String raw) {
@@ -482,17 +897,52 @@ class MessMenuService {
     return '';
   }
 
-  /// Extract date numbers from string (e.g. "Sat 1, 15, 29" -> [1, 15, 29])
+  /// Extract date numbers from string (e.g. "Sat 1, 15, 29", "1 - 7", "22nd to 28th", "24/11/2026")
   static List<int> _extractDates(String raw) {
-    final matches = RegExp(r'\b\d+\b').allMatches(raw);
-    final dates = <int>[];
-    for (final m in matches) {
-      final val = int.tryParse(m.group(0)!);
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return [];
+
+    final dates = <int>{};
+
+    // 1. Range regex: e.g. "1-7", "1 - 7", "1 to 7", "22 - 28", "22nd to 28th", "1st - 7th"
+    final rangeRegex = RegExp(
+      r'(\d{1,2})(?:st|nd|rd|th)?\s*(?:-|to|–|—)\s*(\d{1,2})(?:st|nd|rd|th)?',
+      caseSensitive: false,
+    );
+    for (final match in rangeRegex.allMatches(trimmed)) {
+      final start = int.tryParse(match.group(1) ?? '');
+      final end = int.tryParse(match.group(2) ?? '');
+      if (start != null && end != null && start >= 1 && end <= 31 && start <= end && (end - start) <= 10) {
+        for (int i = start; i <= end; i++) {
+          dates.add(i);
+        }
+      }
+    }
+
+    // 2. Full dates: e.g. "24/11/2026", "24-11-2026", "24.11.2026"
+    final fullDateRegex = RegExp(r'\b(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})\b');
+    for (final match in fullDateRegex.allMatches(trimmed)) {
+      final day = int.tryParse(match.group(1) ?? '');
+      if (day != null && day >= 1 && day <= 31) {
+        dates.add(day);
+      }
+    }
+
+    // Strip full dates and 4-digit years before checking standalone numbers
+    String sanitized = trimmed.replaceAll(fullDateRegex, ' ');
+    sanitized = sanitized.replaceAll(RegExp(r'\b20\d{2}\b'), ' ');
+
+    // 3. Standalone date numbers: e.g. "(3, 17)", "3, 17, 31", "10, 24", "3 & 17"
+    final numMatches = RegExp(r'\b(\d{1,2})(?:st|nd|rd|th)?\b', caseSensitive: false).allMatches(sanitized);
+    for (final m in numMatches) {
+      final val = int.tryParse(m.group(1) ?? '');
       if (val != null && val >= 1 && val <= 31) {
         dates.add(val);
       }
     }
-    return dates;
+
+    final sorted = dates.toList()..sort();
+    return sorted;
   }
 
   // ── Default VIT-AP Sample Menu ──
