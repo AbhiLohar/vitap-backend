@@ -1,9 +1,9 @@
 {
-  "version": "1.1.1",
-  "versionCode": 12,
-  "title": "Version 1.1.1 - Mess Menu Parser & Deduplication Fix",
-  "notes": "• Enhanced Mess Menu Parser: Added multi-column detection (Day + Dates), full range expansion (e.g. 22nd to 28th), and cycle tracking\n• Fixed Duplicate Meals: Prevented multiple weeks/cycles from stacking together onto the same day\n• Fixed Repeated Day Items: Isolated date-specific menus so days like Wednesday do not inherit Tuesday items\n• Stripped Mess Instructions: Automatically stops parsing at instruction sections and filters out policy rules from menu cards\n• Auto-Sanitize & Recovery: Added 'Clean & Deduplicate Menu' and 'Reset to Default Menu' actions to upload options",
-  "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.1.1/app-release.apk",
-  "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/tag/v1.1.1",
-  "publishedAt": "2026-11-24T16:30:00Z"
+  "version": "1.1.2",
+  "versionCode": 13,
+  "title": "Version 1.1.2 - Outing Fix, Mess Menu, Clear Errors & Contrast Polish",
+  "notes": "• Fixed Outing Application & Rejection Reasons: Improved VTOP form scraping, spacing-safe time/place matching, JS/HTML error extraction, and session retry\n• Fixed Mess Menu Excel Parser: Eliminated MESS TIMINGS legend shifts, cross-day leakage, duplicate cycles, and leaked instruction rows\n• Clear Plain-English Errors: Replaced technical codes/exceptions with understandable error messages across all screens & updates\n• UI Contrast Overhaul: Fixed unreadable dark-navy course codes, totals, badges, and buttons across Light, Dark, Nightfall & Sakura themes",
+  "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.1.2/app-release.apk",
+  "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/tag/v1.1.2",
+  "publishedAt": "2026-11-28T18:45:00Z"
 }
