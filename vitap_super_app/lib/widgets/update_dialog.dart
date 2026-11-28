@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
+import '../services/error_formatter.dart';
 import '../services/update_service.dart';
 
 class UpdateDialog extends StatefulWidget {
@@ -78,17 +79,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
       setState(() {
         _isDownloading = false;
         _isInstalling = false;
-        final rawError = e.toString().replaceFirst("Exception: ", "");
-        if (rawError.contains("ClientConnection closed") ||
-            rawError.contains("Connection closed") ||
-            rawError.contains("SocketException") ||
-            rawError.contains("ClientException") ||
-            rawError.contains("timeout") ||
-            rawError.contains("interrupted")) {
-          _errorMessage = "Network connection interrupted while downloading. Tap 'Retry' or 'Download via Browser'.";
-        } else {
-          _errorMessage = rawError;
-        }
+        _errorMessage = ErrorFormatter.format(
+          e,
+          fallback: "Could not download the update right now. Please tap 'Retry' or 'Download via Browser'.",
+        );
       });
     }
   }
@@ -111,12 +105,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
         return;
       }
 
-      // 2. Record installed version and launch native Package Installer
-      await UpdateService.recordInstalledVersion(widget.info.latestVersion);
+      // 2. Launch native Package Installer first; only record version if launch succeeds
       final launched = await UpdateService.installApk(file.path);
       if (!launched) {
-        throw Exception("Could not start installer");
+        throw Exception("Could not open the Android installer. Please tap 'Download via Browser' and open the downloaded file manually.");
       }
+      await UpdateService.recordInstalledVersion(widget.info.latestVersion);
 
       if (_dontAskAgain) {
         await UpdateService.ignoreVersion(widget.info.latestVersion);
@@ -131,7 +125,10 @@ class _UpdateDialogState extends State<UpdateDialog> {
       setState(() {
         _isDownloading = false;
         _isInstalling = false;
-        _errorMessage = "Installation failed: ${e.toString().replaceFirst('Exception: ', '')}";
+        _errorMessage = ErrorFormatter.format(
+          e,
+          fallback: "Could not start the app installer. Try enabling 'Install unknown apps' in Android Settings or tap 'Download via Browser'.",
+        );
       });
     }
   }
@@ -330,8 +327,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
                 icon: const Icon(Icons.settings_rounded, size: 18),
                 label: const Text("Open Settings to Allow"),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: AppColors.onPrimary(context),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -420,7 +417,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
                     width: 24,
                     child: Checkbox(
                       value: _dontAskAgain,
-                      activeColor: AppColors.primary,
+                      activeColor: Theme.of(context).colorScheme.primary,
+                      checkColor: AppColors.onPrimary(context),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                       onChanged: (val) => setState(() => _dontAskAgain = val ?? false),
                     ),
@@ -443,8 +441,8 @@ class _UpdateDialogState extends State<UpdateDialog> {
               ElevatedButton(
                 onPressed: _onUpdateNow,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: AppColors.onPrimary(context),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   elevation: 2,

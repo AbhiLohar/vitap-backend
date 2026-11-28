@@ -120,7 +120,7 @@ class AvatarService {
               child: Center(
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: AppColors.primary,
+                  color: Theme.of(context).colorScheme.primary,
                   value: loadingProgress.expectedTotalBytes != null
                       ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
                       : null,
@@ -154,14 +154,14 @@ class AvatarService {
         boxShadow: showBorder
             ? [
                 BoxShadow(
-                  color: AppColors.primary.withOpacity(0.3),
+                  color: AppColors.secondary.withOpacity(0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
               ]
             : null,
         border: showBorder
-            ? Border.all(color: AppColors.primary.withOpacity(0.3), width: 2)
+            ? Border.all(color: AppColors.secondary.withOpacity(0.35), width: 2)
             : null,
       ),
       clipBehavior: Clip.antiAlias,

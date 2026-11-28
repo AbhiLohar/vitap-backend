@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/error_formatter.dart';
 import '../widgets/glass_card.dart';
 
 class DigitalAssignmentsScreen extends StatefulWidget {
@@ -66,7 +67,18 @@ class _DigitalAssignmentsScreenState extends State<DigitalAssignmentsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ErrorFormatter.format(
+              e,
+              fallback: "Unable to load your digital assignments right now. Pull down to try again.",
+            )),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 

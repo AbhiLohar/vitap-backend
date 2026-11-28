@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/error_formatter.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_shimmer.dart';
 
@@ -18,6 +19,7 @@ class _CoursePageScreenState extends State<CoursePageScreen> {
   List _courses = [];
   bool _isLoading = true;
   String? _semesterId;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -26,7 +28,10 @@ class _CoursePageScreenState extends State<CoursePageScreen> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
       final prefs = await SharedPreferences.getInstance();
       _semesterId = prefs.getString('semesterId');
@@ -44,8 +49,20 @@ class _CoursePageScreenState extends State<CoursePageScreen> {
         });
       }
     } catch (e) {
+      final friendly = ErrorFormatter.format(
+        e,
+        fallback: "Unable to load your courses right now. Pull down to try again.",
+      );
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _errorMessage = friendly;
+        });
+        if (_courses.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(friendly), backgroundColor: Colors.redAccent),
+          );
+        }
       }
     }
   }
@@ -103,9 +120,10 @@ class _CoursePageScreenState extends State<CoursePageScreen> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              "No courses found",
+                              _errorMessage ?? "No courses found",
+                              textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 15,
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.textPrimary(context),
                               ),

@@ -202,7 +202,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       label: const Text("Share"),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.onPrimary(context),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
@@ -232,7 +232,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final semesters = await ApiService.getSemesters(widget.username);
       if (semesters.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not fetch semesters")));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("No semesters were returned by VTOP right now. Please try again in a moment.")),
+          );
+        }
         setState(() => isChangingSemester = false);
         return;
       }
@@ -714,7 +718,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 LogsService.add("Manual sync failed: $e");
                                 if (mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text("Sync failed: ${ErrorFormatter.format(e)}")),
+                                    SnackBar(
+                                      content: Text(ErrorFormatter.format(
+                                        e,
+                                        fallback: "Could not refresh your VTOP data right now. Please check your connection and try again.",
+                                      )),
+                                    ),
                                   );
                                 }
                               }

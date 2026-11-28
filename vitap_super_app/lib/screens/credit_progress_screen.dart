@@ -545,7 +545,7 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
                                 ),
                               ],
                             ),
-                            child: const Icon(Icons.add, color: Colors.white, size: 18),
+                            child: Icon(Icons.add, color: AppColors.onPrimary(context), size: 18),
                           ),
                         ),
                       ),
@@ -601,7 +601,7 @@ class _CreditProgressScreenState extends State<CreditProgressScreen> with Single
                     _earnedNum.toStringAsFixed(1),
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: AppColors.primary,
+                      color: primaryColor,
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
                     ),
@@ -682,6 +682,7 @@ class _CoursesBottomSheetState extends State<_CoursesBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
     final String name = widget.cat["category"] ?? "Category";
     final double required = double.tryParse(widget.cat["required"]?.toString() ?? "0") ?? 0;
     double earned = double.tryParse(widget.cat["earned"]?.toString() ?? "0") ?? 0;
@@ -754,13 +755,13 @@ class _CoursesBottomSheetState extends State<_CoursesBottomSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: primaryColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                    border: Border.all(color: primaryColor.withOpacity(0.3)),
                   ),
                   child: Text(
                     "${earned.toStringAsFixed(1)} / ${required.toStringAsFixed(0)} Cr",
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: primaryColor),
                   ),
                 ),
               ],
@@ -785,7 +786,7 @@ class _CoursesBottomSheetState extends State<_CoursesBottomSheet> {
                   decoration: InputDecoration(
                     hintText: "Search course code or title...",
                     hintStyle: TextStyle(fontSize: 12, color: AppColors.textSecondary(context)),
-                    prefixIcon: const Icon(Icons.search, size: 18, color: Colors.grey),
+                    prefixIcon: Icon(Icons.search, size: 18, color: AppColors.textMuted(context)),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear, size: 16),
@@ -840,10 +841,10 @@ class _CoursesBottomSheetState extends State<_CoursesBottomSheet> {
                             width: 76,
                             child: Text(
                               course["course_code"]?.toString() ?? "",
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
+                                color: primaryColor,
                               ),
                             ),
                           ),
@@ -868,7 +869,7 @@ class _CoursesBottomSheetState extends State<_CoursesBottomSheet> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                         decoration: BoxDecoration(
-                                          color: AppColors.primary.withOpacity(0.08),
+                                          color: primaryColor.withOpacity(0.12),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
                                         child: Text(

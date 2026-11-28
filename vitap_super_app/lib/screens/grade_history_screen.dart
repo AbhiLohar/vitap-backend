@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/error_formatter.dart';
 import 'package:share_plus/share_plus.dart';
 
 class GradeHistoryScreen extends StatefulWidget {
@@ -45,7 +46,18 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ErrorFormatter.format(
+              e,
+              fallback: "Unable to load your grade history right now. Pull down to try again.",
+            )),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -86,13 +98,14 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
   }
 
   Color _getGradeColor(String grade) {
+    final dark = AppColors.isDark(context);
     grade = grade.toUpperCase().trim();
-    if (grade == 'S' || grade == 'A') return AppColors.good;
-    if (grade == 'B') return const Color(0xFF2E7D32);
+    if (grade == 'S' || grade == 'A') return dark ? const Color(0xFF34D399) : AppColors.good;
+    if (grade == 'B') return dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
     if (grade == 'C') return AppColors.warning;
-    if (grade == 'D') return const Color(0xFFE65100);
+    if (grade == 'D') return dark ? const Color(0xFFFB923C) : const Color(0xFFC2410C);
     if (grade == 'E' || grade == 'F' || grade == 'N') return AppColors.danger;
-    return const Color(0xFF9CA3AF);
+    return AppColors.textMuted(context);
   }
 
   Future<void> _showCgpaCalculator() async {
@@ -117,7 +130,15 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
       } catch (e) {
         if (mounted) Navigator.pop(context);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to calculate CGPA")));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(ErrorFormatter.format(
+                e,
+                fallback: "Could not calculate your CGPA right now. Please try again.",
+              )),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
         }
         return;
       }
@@ -157,8 +178,8 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: primaryColor,
+                foregroundColor: AppColors.onPrimary(context),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
@@ -282,9 +303,10 @@ class _GradeHistoryScreenState extends State<GradeHistoryScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showCgpaCalculator,
         backgroundColor: primaryColor,
+        foregroundColor: AppColors.onPrimary(context),
         elevation: 2,
-        icon: const Icon(Icons.calculate_rounded, color: Colors.white, size: 18),
-        label: const Text("Calculate CGPA", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+        icon: Icon(Icons.calculate_rounded, color: AppColors.onPrimary(context), size: 18),
+        label: Text("Calculate CGPA", style: TextStyle(color: AppColors.onPrimary(context), fontWeight: FontWeight.w600, fontSize: 13)),
       ),
     );
   }

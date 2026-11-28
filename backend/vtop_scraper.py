@@ -3752,20 +3752,178 @@ class VTOPSession:
             return resp.content
         raise Exception("Failed to download PDF")
 
+    @staticmethod
+    def _clean_outing_notice(text: str) -> str:
+        """Normalize whitespace and return empty string for static VTOP boilerplate."""
+        if not text:
+            return ""
+        cleaned = re.sub(r"\s+", " ", text).strip()
+        if not cleaned or len(cleaned) < 4 or len(cleaned) > 320:
+            return ""
+        lower = cleaned.lower()
+        ignored_fragments = (
+            "disciplinary",
+            "logs will be",
+            "* mandatory",
+            "fields marked",
+            "select place",
+            "select time",
+            "weekend outing timing",
+            "general outing timing",
+        )
+        if any(frag in lower for frag in ignored_fragments):
+            return ""
+        if lower in ("error", "warning", "info", "alert", "ok", "cancel", "submit", "close"):
+            return ""
+        return cleaned
+
+    @staticmethod
+    def _resolve_select_option(options: list, target: str) -> str:
+        """Match user selection against VTOP <select> options ignoring spacing/case differences."""
+        raw = (target or "").strip()
+        if not raw or not options:
+            return raw
+        # 1. Exact value or text match
+        for opt in options:
+            val = (opt.get("value") or "").strip()
+            txt = (opt.get("text") or "").strip()
+            if val == raw or txt == raw:
+                return val or raw
+        # 2. Space-insensitive, case-insensitive match (e.g. '11:30 AM- 5:30PM' -> '11:30 AM - 5:30 PM')
+        compact_target = re.sub(r"\s+", "", raw).lower()
+        for opt in options:
+            val = (opt.get("value") or "").strip()
+            txt = (opt.get("text") or "").strip()
+            if not val and not txt:
+                continue
+            if re.sub(r"\s+", "", val).lower() == compact_target or re.sub(r"\s+", "", txt).lower() == compact_target:
+                return val or txt
+        # 3. Alphanumeric match (handles hyphen/colon spacing variations)
+        alnum_target = re.sub(r"[^a-z0-9]", "", raw.lower())
+        for opt in options:
+            val = (opt.get("value") or "").strip()
+            txt = (opt.get("text") or "").strip()
+            if not val and not txt:
+                continue
+            if re.sub(r"[^a-z0-9]", "", val.lower()) == alnum_target or re.sub(r"[^a-z0-9]", "", txt.lower()) == alnum_target:
+                return val or txt
+        return raw
+
+    def _extract_script_messages(self, html: str) -> list:
+        """Extract user-facing messages from inline swal/Swal.fire/bootbox/alert/toastr JS calls."""
+        messages = []
+        # Match swal("title", "msg", "icon") or alert("msg")
+        call_pattern = re.compile(
+            r"""(?:Swal\.fire|swal|bootbox\.alert|toastr\.(?:error|warning|info|success)|alert)\s*\(\s*(['"])((?:\\.|(?!\1).)+)\1(?:\s*,\s*(['"])((?:\\.|(?!\3).)+)\3)?(?:\s*,\s*(['"])((?:\\.|(?!\5).)+)\5)?""",
+            re.IGNORECASE | re.DOTALL,
+        )
+        for m in call_pattern.finditer(html):
+            part1 = m.group(2) or ""
+            part2 = m.group(4) or ""
+            part3 = (m.group(6) or "").lower()
+            combined = f"{part1}: {part2}".strip(": ").strip() if part2 and part2.lower() not in ("error", "warning", "success", "info") else part1.strip()
+            if not combined:
+                continue
+            if any(token in combined for token in ("$('", "$(\"", "document.", "function(", "return ")):
+                continue
+            cleaned = self._clean_outing_notice(combined)
+            if cleaned:
+                is_success = part3 == "success" or (
+                    any(kw in cleaned.lower() for kw in ("success", "applied", "saved", "deleted", "booked"))
+                    and not any(bad in cleaned.lower() for bad in ("error", "failed", "cannot", "not ", "already", "rejected", "closed"))
+                )
+                messages.append((is_success, cleaned))
+
+        # Match Swal.fire({ title: '...', text: '...', icon: 'error' })
+        obj_pattern = re.compile(
+            r"""(?:Swal\.fire|swal)\s*\(\s*\{(.*?)\}\s*\)""",
+            re.IGNORECASE | re.DOTALL,
+        )
+        for m in obj_pattern.finditer(html):
+            body = m.group(1)
+            title_m = re.search(r"""title\s*:\s*(['"])((?:\\.|(?!\1).)+)\1""", body, re.I)
+            text_m = re.search(r"""(?:text|html)\s*:\s*(['"])((?:\\.|(?!\1).)+)\1""", body, re.I)
+            icon_m = re.search(r"""(?:icon|type)\s*:\s*(['"])((?:\\.|(?!\1).)+)\1""", body, re.I)
+            title_val = BeautifulSoup(title_m.group(2), "lxml").get_text(" ", strip=True) if title_m else ""
+            text_val = BeautifulSoup(text_m.group(2), "lxml").get_text(" ", strip=True) if text_m else ""
+            icon_val = (icon_m.group(2) or "").lower() if icon_m else ""
+            combined = f"{title_val} {text_val}".strip()
+            cleaned = self._clean_outing_notice(combined)
+            if cleaned:
+                is_success = icon_val == "success"
+                messages.append((is_success, cleaned))
+        return messages
+
+    def _extract_dom_error_text(self, soup: BeautifulSoup) -> str:
+        """Find visible red/error/warning banners inside VTOP HTML (case-insensitive)."""
+        red_style_re = re.compile(
+            r"color\s*:\s*(?:red|crimson|maroon|darkred|#f00\b|#ff0000\b|#dc3545|#d9534f|#a94442|#c9302c|rgb\(\s*(?:1[5-9]\d|2\d\d)\s*,\s*[0-6]?\d\s*,\s*[0-6]?\d\s*\))",
+            re.IGNORECASE,
+        )
+        candidate_tags = ("span", "p", "div", "font", "h2", "h3", "h4", "h5", "strong", "label")
+
+        # 1. Semantic classes & common error element IDs
+        for el in soup.find_all(candidate_tags):
+            if el.find("form") or el.find("table"):
+                continue
+            classes = " ".join(el.get("class", [])).lower()
+            el_id = (el.get("id") or "").lower()
+            style = el.get("style") or ""
+            font_color = (el.get("color") or "").lower() if el.name == "font" else ""
+
+            is_error_node = (
+                any(cls in classes for cls in ("alert-danger", "alert-warning", "text-danger", "text-warning", "help-block-error", "invalid-feedback"))
+                or re.search(r"\berror\b", classes) is not None
+                or any(k in el_id for k in ("errmsg", "errormsg", "errormessage", "err_msg", "alertmsg", "statusmsg"))
+                or bool(red_style_re.search(style))
+                or font_color in ("red", "#ff0000", "#f00", "maroon", "crimson", "darkred")
+            )
+            if not is_error_node:
+                continue
+
+            cleaned = self._clean_outing_notice(el.get_text(" ", strip=True))
+            if not cleaned:
+                continue
+            lower = cleaned.lower()
+            # Never confuse a green/success message styled weirdly with an error
+            if "success" in lower and not any(b in lower for b in ("error", "fail", "not ", "cannot", "unable", "reject")):
+                continue
+            return cleaned
+        return ""
+
     async def _fetch_outing_form_hidden_fields(self, is_weekend=False) -> dict:
-        """Helper to fetch pre-filled student details from the outing application page."""
+        """Helper to fetch pre-filled student details and select options from the outing form."""
         url = ROUTES["outing"] if not is_weekend else "/vtop/hostel/StudentWeekendOuting"
         resp = await self._post_menu(url)
         soup = BeautifulSoup(resp.text, "lxml")
         fields = {}
-        
+
         # Extract fresh CSRF if available on the form page
         fresh_csrf = _find_csrf(resp.text)
         if fresh_csrf:
             self.post_login_csrf = fresh_csrf
-        
-        # Extract all input fields (hidden, text, etc.) by id and name
-        for inp in soup.find_all("input"):
+
+        # Locate the outing <form> specifically so later tables/modals don't overwrite hidden fields
+        form_container = None
+        for form in soup.find_all("form"):
+            form_id = (form.get("id") or "").lower()
+            form_action = (form.get("action") or "").lower()
+            if (
+                "outing" in form_id
+                or "outing" in form_action
+                or form.find(id=re.compile(r"^(?:outingDate|outDate|outPlace|placeOfVisit|applicationNo)$", re.I))
+                or form.find(attrs={"name": re.compile(r"^(?:outingDate|outDate|outPlace|placeOfVisit|applicationNo)$", re.I)})
+            ):
+                form_container = form
+                break
+
+        scope = form_container if form_container is not None else soup
+
+        raw_inputs = {}
+        for inp in scope.find_all("input"):
+            inp_type = (inp.get("type") or "").strip().lower()
+            if inp_type in ("submit", "button", "reset", "image"):
+                continue
             val = inp.get("value", "")
             field_id = inp.get("id")
             field_name = inp.get("name")
@@ -3773,41 +3931,90 @@ class VTOPSession:
                 fields[field_id] = val
             if field_name and field_name != "_csrf":
                 fields[field_name] = val
-        
-        # Also extract selected values from <select> elements
-        for sel in soup.find_all("select"):
-            selected = sel.find("option", selected=True)
-            val = selected.get("value", "") if selected else ""
+                raw_inputs[field_name] = val
+
+        select_options = {}
+        for sel in scope.find_all("select"):
+            opts = []
+            selected_val = ""
+            for opt in sel.find_all("option"):
+                val = opt.get("value", "")
+                txt = opt.get_text(" ", strip=True)
+                opts.append({"value": val, "text": txt})
+                if opt.has_attr("selected"):
+                    selected_val = val
             field_id = sel.get("id")
             field_name = sel.get("name")
             if field_id:
-                fields[field_id] = val
+                fields[field_id] = selected_val
+                select_options[field_id] = opts
             if field_name:
-                fields[field_name] = val
-        
+                fields[field_name] = selected_val
+                select_options[field_name] = opts
+
+        # Detect if the outing application form itself wasn't rendered (e.g. Day Scholar or window closed)
+        has_date_or_place = any(
+            k in fields or scope.find(id=k) or scope.find(attrs={"name": k})
+            for k in ("outPlace", "placeOfVisit", "outingDate", "outDate")
+        )
+        page_error = self._extract_dom_error_text(soup)
+        if not page_error:
+            for is_succ, js_msg in self._extract_script_messages(resp.text):
+                if not is_succ:
+                    page_error = js_msg
+                    break
+
+        try:
+            pre_rows = (
+                self._parse_weekend_outing_table(resp.text)
+                if is_weekend
+                else self._parse_outing_table(resp.text)
+            )
+        except Exception:
+            pre_rows = []
+        has_active_booking = any(
+            any(s in (r.get("status") or "").lower() for s in ("waiting", "pending", "approved", "applied"))
+            for r in pre_rows
+        )
+
         # Ensure student registration number is present
         fields.setdefault("regNo", self.registration_number)
         fields.setdefault("authorizedID", self.registration_number)
-        
-        print(f"[OUTING DEBUG] Form fields extracted: {fields}")
-        
+        fields["_raw_inputs"] = raw_inputs
+        fields["_select_options"] = select_options
+        fields["_pre_row_count"] = len(pre_rows)
+        fields["_has_active_booking"] = has_active_booking
+        fields["_page_error"] = page_error
+        fields["_form_missing"] = not has_date_or_place
+
         if not fields.get("applicationNo"):
-            print(f"[OUTING WARNING] applicationNo not found in form fields. Available keys: {list(fields.keys())}")
+            print(f"[OUTING WARNING] applicationNo not found in form fields. Keys: {list(raw_inputs.keys())}, form_missing={fields['_form_missing']}")
         return fields
 
     async def apply_general_outing(self, out_place: str, purpose: str, out_date: str, out_time: str, in_date: str, in_time: str) -> str:
         """Submit a General Outing."""
         try:
             fields = await self._fetch_outing_form_hidden_fields(is_weekend=False)
-            
+            if fields.get("_form_missing"):
+                reason = fields.get("_page_error") or (
+                    "General outing application form is currently unavailable on VTOP. "
+                    "Only eligible hostel students can apply when the portal allows it."
+                )
+                return f"Error: {reason}"
+
             # Times come as HH:MM
             out_parts = out_time.split(":") if ":" in out_time else [out_time, "00"]
             in_parts = in_time.split(":") if ":" in in_time else [in_time, "00"]
-            
+
             norm_out_date = _normalize_outing_date(out_date)
             norm_in_date = _normalize_outing_date(in_date)
-            
-            data = {
+
+            select_options = fields.get("_select_options", {})
+            place_opts = select_options.get("placeOfVisit") or select_options.get("outPlace") or []
+            resolved_place = self._resolve_select_option(place_opts, out_place)
+
+            data = dict(fields.get("_raw_inputs", {}))
+            data.update({
                 "authorizedID": self.registration_number,
                 "LeaveId": "",
                 "regNo": fields.get("regNo", self.registration_number),
@@ -3816,8 +4023,8 @@ class VTOPSession:
                 "gender": fields.get("gender", ""),
                 "hostelBlock": fields.get("hostelBlock", ""),
                 "roomNo": fields.get("roomNo", ""),
-                "placeOfVisit": out_place,
-                "purposeOfVisit": purpose,
+                "placeOfVisit": resolved_place,
+                "purposeOfVisit": purpose.strip(),
                 "outDate": norm_out_date,
                 "outTimeHr": out_parts[0].strip(),
                 "outTimeMin": out_parts[1].strip() if len(out_parts) > 1 else "00",
@@ -3826,28 +4033,32 @@ class VTOPSession:
                 "inTimeMin": in_parts[1].strip() if len(in_parts) > 1 else "00",
                 "parentContactNumber": fields.get("parentContactNumber", ""),
                 "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
-            }
-            
+            })
+
             headers = {
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "X-Requested-With": "XMLHttpRequest",
                 "Referer": "https://vtop.vitap.ac.in/vtop/hostel/StudentGeneralOuting",
                 "Origin": "https://vtop.vitap.ac.in",
             }
-            
+
             data["_csrf"] = self.post_login_csrf or self.csrf_token
-            print(f"[OUTING DEBUG] Submitting general outing: place={out_place}, outDate={norm_out_date}, outTime={out_time}, inDate={norm_in_date}, inTime={in_time}")
-            
+            print(f"[OUTING DEBUG] Submitting general outing: place={resolved_place}, outDate={norm_out_date}, outTime={out_time}, inDate={norm_in_date}, inTime={in_time}")
+
             resp = await self.client.post("/vtop/hostel/saveGeneralOutingForm", data=data, headers=headers)
             self._check_session_expired(resp)
-            
+
             resp_text = resp.text
             print(f"[OUTING DEBUG] Response status: {resp.status_code}, length: {len(resp_text)}")
             print(f"[OUTING DEBUG] Response preview: {resp_text[:500]}")
-            
-            result = self._parse_outing_response(resp_text)
+
+            result = self._parse_outing_response(
+                resp_text,
+                is_weekend=False,
+                pre_row_count=fields.get("_pre_row_count"),
+                has_active_booking=bool(fields.get("_has_active_booking")),
+            )
             print(f"[OUTING DEBUG] Parsed result: {result}")
-            
             return result
         except Exception as e:
             print(f"[OUTING DEBUG] Exception in apply_general_outing: {e}")
@@ -3857,10 +4068,20 @@ class VTOPSession:
         """Submit a Weekend Outing."""
         try:
             fields = await self._fetch_outing_form_hidden_fields(is_weekend=True)
-            
+            if fields.get("_form_missing"):
+                reason = fields.get("_page_error") or (
+                    "Weekend outing form is currently closed or unavailable on VTOP. "
+                    "Bookings are open only to hostel students during active weekend/holiday windows."
+                )
+                return f"Error: {reason}"
+
             norm_outing_date = _normalize_outing_date(out_date)
-            
-            data = {
+            select_options = fields.get("_select_options", {})
+            resolved_place = self._resolve_select_option(select_options.get("outPlace", []), out_place)
+            resolved_time = self._resolve_select_option(select_options.get("outTime", []), out_time)
+
+            data = dict(fields.get("_raw_inputs", {}))
+            data.update({
                 "authorizedID": self.registration_number,
                 "BookingId": "",
                 "regNo": fields.get("regNo", self.registration_number),
@@ -3869,119 +4090,184 @@ class VTOPSession:
                 "gender": fields.get("gender", ""),
                 "hostelBlock": fields.get("hostelBlock", ""),
                 "roomNo": fields.get("roomNo", ""),
-                "outPlace": out_place,
-                "purposeOfVisit": purpose,
+                "outPlace": resolved_place,
+                "purposeOfVisit": purpose.strip(),
                 "outingDate": norm_outing_date,
-                "outTime": out_time,
-                "contactNumber": contact_number,
+                "outTime": resolved_time,
+                "contactNumber": contact_number.strip(),
                 "parentContactNumber": fields.get("parentContactNumber", ""),
                 "x": datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
-            }
-            
+            })
+
             headers = {
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                 "X-Requested-With": "XMLHttpRequest",
                 "Referer": "https://vtop.vitap.ac.in/vtop/hostel/StudentWeekendOuting",
                 "Origin": "https://vtop.vitap.ac.in",
             }
-            
+
             data["_csrf"] = self.post_login_csrf or self.csrf_token
-            print(f"[OUTING DEBUG] Submitting weekend outing: place={out_place}, date={norm_outing_date}, time={out_time}")
-            
+            print(f"[OUTING DEBUG] Submitting weekend outing: place={resolved_place}, date={norm_outing_date}, time={resolved_time}")
+
             resp = await self.client.post("/vtop/hostel/saveOutingForm", data=data, headers=headers)
             self._check_session_expired(resp)
-            
+
             resp_text = resp.text
             print(f"[OUTING DEBUG] Weekend response status: {resp.status_code}, length: {len(resp_text)}")
             print(f"[OUTING DEBUG] Weekend response preview: {resp_text[:500]}")
-            
-            result = self._parse_outing_response(resp_text)
+
+            result = self._parse_outing_response(
+                resp_text,
+                is_weekend=True,
+                pre_row_count=fields.get("_pre_row_count"),
+                has_active_booking=bool(fields.get("_has_active_booking")),
+            )
             print(f"[OUTING DEBUG] Parsed weekend result: {result}")
-            
             return result
         except Exception as e:
             print(f"[OUTING DEBUG] Exception in apply_weekend_outing: {e}")
             raise Exception(f"Failed to apply for weekend outing: {e}")
 
-    def _parse_outing_response(self, html: str) -> str:
-        """Parse VTOP outing submit/delete response.
-        
-        Checks for:
-        1. Explicit error spans (red text, .error, .alert-danger)
-        2. Weekend success: green span with 'Successfully'/'Applied'/'Deleted'/'Saved'
-        3. General outing success: SweetAlert modal h2/p with 'Successfully'/'Applied'/'Saved'
-        4. Fallback h2 with success/error keywords
-        5. Form page returned without success message = rejected
-        6. Dashboard redirected = session expired / failed
-        7. Default fallback
-        """
+    def _parse_outing_response(
+        self,
+        html: str,
+        is_weekend: bool = False,
+        pre_row_count: int = None,
+        has_active_booking: bool = False,
+    ) -> str:
+        """Parse VTOP outing submit/delete response cleanly with detailed error extraction."""
+        if not html or not html.strip():
+            return "Error: VTOP sent an empty response. Please check your outing list before trying again."
+
+        # 0. Handle JSON payloads if VTOP returns JSON
+        stripped = html.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
+            try:
+                payload = json.loads(stripped)
+                msg = str(payload.get("message") or payload.get("msg") or payload.get("detail") or payload.get("error") or "").strip()
+                status_val = str(payload.get("status") or "").lower()
+                if msg:
+                    if "error" in status_val or "fail" in status_val or payload.get("error"):
+                        return f"Error: {msg}"
+                    if any(kw in msg.lower() for kw in ("success", "applied", "saved", "deleted", "booked")):
+                        return msg
+                    return f"Error: {msg}"
+            except Exception:
+                pass
+
         soup = BeautifulSoup(html, "lxml")
-        
-        # 1. Check for error messages (red text, error classes)
-        for span in soup.select("span[style*='color: red'], span[style*='color:red'], .error, .alert-danger, span.help-block-error"):
-            text = span.get_text(strip=True)
-            if text and "disciplinary" not in text.lower() and "logs will be" not in text.lower():
-                return f"Error: {text}"
-        
-        # Check for SweetAlert error modal
-        sweet_alert = soup.select_one("div.sweet-alert")
+
+        # 1. Explicit DOM error banners (case-insensitive red/hex/bootstrap error styles)
+        dom_err = self._extract_dom_error_text(soup)
+        if dom_err:
+            return f"Error: {dom_err}"
+
+        # 2. Inline JavaScript popups (swal / Swal.fire / bootbox / toastr / alert)
+        script_msgs = self._extract_script_messages(html)
+        for is_succ, js_msg in script_msgs:
+            if not is_succ:
+                return f"Error: {js_msg}"
+
+        # 3. SweetAlert1 / SweetAlert2 rendered DOM modals
+        sweet_alert = soup.select_one("div.sweet-alert, div.swal2-popup")
         if sweet_alert:
-            has_error_icon = bool(sweet_alert.select(".sa-error, .sa-warning, .error"))
-            h2 = sweet_alert.select_one("h2")
-            p = sweet_alert.select_one("p")
-            title_text = h2.get_text(strip=True) if h2 else ""
-            body_text = p.get_text(strip=True) if p else ""
-            
+            has_error_icon = bool(sweet_alert.select(".sa-error, .sa-warning, .swal2-error, .swal2-warning, .error"))
+            title_el = sweet_alert.select_one("h2, .swal2-title")
+            body_el = sweet_alert.select_one("p, .swal2-html-container")
+            title_text = title_el.get_text(" ", strip=True) if title_el else ""
+            body_text = body_el.get_text(" ", strip=True) if body_el else ""
             combined = f"{title_text} {body_text}".strip()
-            if has_error_icon or any(kw in combined.lower() for kw in ("error", "failed", "cannot", "invalid", "not allowed", "already applied")):
+            lower_combined = combined.lower()
+            if has_error_icon or any(kw in lower_combined for kw in ("error", "failed", "cannot", "invalid", "not allowed", "already", "closed", "rejected")):
                 return f"Error: {combined if combined else 'Request rejected by VTOP'}"
-            if any(kw in combined.lower() for kw in ("success", "applied", "saved", "deleted", "booked")):
+            if any(kw in lower_combined for kw in ("success", "applied", "saved", "deleted", "booked")):
                 return title_text or body_text or combined
 
-        # 2. Check for weekend outing success (green span)
-        for span in soup.select("span.col-md-12[style*='color: green'], span.col-md-12[style*='color:green'], span[style*='color: green'], span[style*='color:green']"):
-            text = span.get_text(strip=True)
-            if text and any(kw in text.lower() for kw in ("success", "applied", "saved", "deleted", "booked")):
-                return text
+        # 4. Success script popups
+        for is_succ, js_msg in script_msgs:
+            if is_succ:
+                return js_msg
 
-        # 3. Check for general outing success (SweetAlert modal h2 or p)
+        # 5. Green / Bootstrap success banners
+        green_style_re = re.compile(r"color\s*:\s*(?:green|darkgreen|#28a745|#198754|#3c763d|#008000)", re.IGNORECASE)
+        for el in soup.find_all(["span", "p", "div", "h4", "h5", "strong"]):
+            if el.find("form") or el.find("table"):
+                continue
+            classes = " ".join(el.get("class", [])).lower()
+            style = el.get("style") or ""
+            if green_style_re.search(style) or "alert-success" in classes or "text-success" in classes:
+                text = re.sub(r"\s+", " ", el.get_text(" ", strip=True)).strip()
+                if text and any(kw in text.lower() for kw in ("success", "applied", "saved", "deleted", "booked")):
+                    return text
+
+        # 6. SweetAlert success fallback
         if sweet_alert:
-            sweet_h2 = sweet_alert.select_one("h2")
-            if sweet_h2:
-                text = sweet_h2.get_text(strip=True)
-                if text:
-                    return text
-            sweet_p = sweet_alert.select_one("p")
-            if sweet_p:
-                text = sweet_p.get_text(strip=True)
-                if text:
-                    return text
-
-        # 4. Fallback: any h2 with success/error keywords
-        for h2 in soup.find_all("h2"):
-            text = h2.get_text(strip=True)
-            if text and any(kw in text.lower() for kw in ("successfully", "applied", "deleted", "saved", "booked")):
+            title_el = sweet_alert.select_one("h2, .swal2-title")
+            body_el = sweet_alert.select_one("p, .swal2-html-container")
+            text = (title_el.get_text(" ", strip=True) if title_el else "") or (body_el.get_text(" ", strip=True) if body_el else "")
+            if text:
                 return text
-            if text and any(kw in text.lower() for kw in ("error", "failed")):
+
+        # 7. Any h2/h3/h4 heading with clear status keywords
+        for h in soup.find_all(["h2", "h3", "h4"]):
+            text = re.sub(r"\s+", " ", h.get_text(" ", strip=True)).strip()
+            lower = text.lower()
+            if text and any(kw in lower for kw in ("successfully", "applied", "deleted", "saved", "booked")) and not any(b in lower for b in ("already", "cannot", "not ")):
+                return text
+            if text and any(kw in lower for kw in ("error", "failed", "rejected")):
                 return f"Error: {text}"
-        
-        # 5. If the outing form page was returned (silent failure — VTOP rejected the request)
-        if "outingForm" in html or "saveOutingForm" in html or "saveGeneralOutingForm" in html or "StudentWeekendOuting" in html or "StudentGeneralOuting" in html:
-            # Look for any colored span messages on the form
-            for span in soup.select("span.col-sm-12[style*='color'], span.col-md-12[style*='color'], span[style*='color']"):
-                text = span.get_text(strip=True)
-                if text and "disciplinary" not in text.lower() and "logs will be" not in text.lower():
-                    return f"Error: {text}"
-            return "Error: Submission was rejected by VTOP. Please verify your details or check if you already have an active outing."
-        
-        # 6. If VTOP redirected to dashboard/home page (session expired or invalid request)
+
+        # 8. If response returned the updated booking table with a strictly new row added, treat as success
+        if pre_row_count is not None:
+            try:
+                after_rows = self._parse_weekend_outing_table(html) if is_weekend else self._parse_outing_table(html)
+                if len(after_rows) > pre_row_count:
+                    return "Outing applied successfully"
+            except Exception:
+                pass
+
+        # 9. Outing form page silently re-rendered (VTOP rejected without an inline message)
+        if any(marker in html for marker in ("outingForm", "saveOutingForm", "saveGeneralOutingForm", "StudentWeekendOuting", "StudentGeneralOuting")):
+            # Check any leftover info/color spans that weren't matched strictly as red
+            for el in soup.find_all(["span", "p", "div"], style=re.compile(r"color\s*:", re.I)):
+                if el.find("form") or el.find("table"):
+                    continue
+                cleaned = self._clean_outing_notice(el.get_text(" ", strip=True))
+                if cleaned and not any(kw in cleaned.lower() for kw in ("success", "successfully")):
+                    return f"Error: {cleaned}"
+
+            if is_weekend:
+                if has_active_booking:
+                    return (
+                        "Error: VTOP did not accept this weekend outing. You already have a pending or active outing "
+                        "request, or this date's booking window is closed (Sunday closes Friday 11:59 PM; "
+                        "Monday closes Saturday 11:59 PM and is usually only open on holidays)."
+                    )
+                return (
+                    "Error: VTOP did not accept this weekend outing. Common reasons: "
+                    "(1) Monday outings are only open on declared holidays (and close Saturday 11:59 PM; Sunday outings close Friday 11:59 PM), "
+                    "(2) you already have an active outing, or "
+                    "(3) your hostel/parent contact details on VTOP are incomplete."
+                )
+            return (
+                "Error: VTOP did not accept this general outing. Common reasons: "
+                "(1) you already have an active or overlapping outing, "
+                "(2) the selected dates/times fall outside allowed hostel rules, or "
+                "(3) your hostel/parent contact details on VTOP are incomplete."
+            )
+
+        # 10. Dashboard/home redirect (session expired or invalid POST)
         page_text = soup.get_text(separator=" ", strip=True).lower()
-        is_dashboard = any(kw in page_text for kw in ("quick links", "sign out", "login history", "my info"))
-        if is_dashboard:
-            return "Error: VTOP did not process the outing request. Your session may have expired. Please pull-to-refresh and try again."
-            
-        # 7. Final fallback
-        return "Error: Unable to confirm outing submission from VTOP response. Please check outing history."
+        if any(kw in page_text for kw in ("quick links", "sign out", "login history", "my info")):
+            return "Error: Your VTOP session expired while submitting. Please pull down to refresh and try again."
+
+        # 11. Short plain-text response fallback
+        if "<html" not in html.lower() and len(stripped) < 250:
+            if any(kw in stripped.lower() for kw in ("success", "applied", "deleted", "saved", "booked")):
+                return stripped
+            return f"Error: {stripped}"
+
+        return "Error: VTOP returned an unrecognized response. Please refresh your outing list to confirm whether it was submitted."
 
     async def delete_general_outing(self, leave_id: str) -> str:
         from datetime import datetime, timezone
@@ -3998,7 +4284,8 @@ class VTOPSession:
         }
         data["_csrf"] = self.post_login_csrf or self.csrf_token
         resp = await self.client.post("/vtop/hostel/deleteGeneralOutingInfo", data=data, headers=headers)
-        return self._parse_outing_response(resp.text)
+        self._check_session_expired(resp)
+        return self._parse_outing_response(resp.text, is_weekend=False)
 
     async def delete_weekend_outing(self, booking_id: str) -> str:
         from datetime import datetime, timezone
@@ -4015,7 +4302,8 @@ class VTOPSession:
         }
         data["_csrf"] = self.post_login_csrf or self.csrf_token
         resp = await self.client.post("/vtop/hostel/deleteBookingInfo", data=data, headers=headers)
-        return self._parse_outing_response(resp.text)
+        self._check_session_expired(resp)
+        return self._parse_outing_response(resp.text, is_weekend=True)
 
     async def get_weekend_outing_status(self) -> list:
         """Fetch weekend outings (distinct from general outings)."""

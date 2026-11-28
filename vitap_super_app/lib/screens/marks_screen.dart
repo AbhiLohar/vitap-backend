@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/error_formatter.dart';
 import '../widgets/glass_shimmer.dart';
 
 class MarksScreen extends StatefulWidget {
@@ -65,7 +66,18 @@ class _MarksScreenState extends State<MarksScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ErrorFormatter.format(
+              e,
+              fallback: "Unable to load your marks right now. Pull down to try again.",
+            )),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -169,7 +181,7 @@ class _MarksScreenState extends State<MarksScreen> {
                             child: Text(
                               type,
                               style: TextStyle(
-                                color: isSelected ? Colors.white : AppColors.textSecondary(context),
+                                color: isSelected ? AppColors.onPrimary(context) : AppColors.textSecondary(context),
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                 fontSize: 13,
                               ),

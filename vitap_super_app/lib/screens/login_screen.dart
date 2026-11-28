@@ -416,7 +416,7 @@ class _LoginScreenState extends State<LoginScreen>
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                 blurRadius: 20,
                 offset: const Offset(0, -4),
               ),
@@ -492,13 +492,13 @@ class _LoginScreenState extends State<LoginScreen>
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.12),
+                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.calendar_today,
                                 size: 16,
-                                color: AppColors.primary,
+                                color: Theme.of(context).colorScheme.primary,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -851,27 +851,33 @@ class _LoginScreenState extends State<LoginScreen>
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+                            color: isDark
+                                ? const Color(0xFF1E293B).withValues(alpha: 0.65)
+                                : AppColors.cardBg(context),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: const Color(0xFF334155).withValues(alpha: 0.6),
+                              color: isDark
+                                  ? const Color(0xFF334155).withValues(alpha: 0.7)
+                                  : AppColors.cardBorder(context),
                               width: 1,
                             ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.system_update_alt_rounded,
                                 size: 13,
-                                color: Color(0xFF38BDF8),
+                                color: isDark ? const Color(0xFF38BDF8) : primaryColor,
                               ),
                               const SizedBox(width: 6),
                               Text(
                                 "v${UpdateService.currentAppVersion} • Check for update",
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: Color(0xFF94A3B8),
+                                  color: isDark
+                                      ? const Color(0xFFCBD5E1)
+                                      : AppColors.textSecondary(context),
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),

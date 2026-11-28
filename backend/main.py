@@ -8,6 +8,7 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
+import re
 import uvicorn
 from vtop_scraper import VTOPSession
 
@@ -42,11 +43,41 @@ def get_session(username: str) -> Optional[VTOPSession]:
         or sessions.get(username.strip().upper())
     )
 
+def _format_backend_error(e: Exception) -> str:
+    """Convert raw Python/httpx/VTOP exceptions into plain-English messages."""
+    raw = str(e).strip()
+    lower = raw.lower()
+    if "session expired" in lower or "not logged in" in lower:
+        return "Your VTOP session has expired. Please refresh or log in again."
+    if any(k in lower for k in ("timed out", "timeout", "readtimeout", "connecttimeout")):
+        return "VTOP took too long to respond. Please wait a few seconds and try again."
+    if any(k in lower for k in ("connecterror", "networkerror", "connection refused", "name resolution", "getaddrinfo", "ssl", "certificate", "reset by peer", "broken pipe", "remoteprotocolerror")):
+        return "Could not reach the VTOP server right now. VTOP may be down or busy—please try again shortly."
+    if "captcha" in lower:
+        return "Could not solve the VTOP captcha automatically. Please try again."
+
+    # Strip internal method prefixes so non-technical users see only the clear reason
+    cleaned = re.sub(
+        r"^(?:Failed to [^:]+|Weekend outing error|General outing error|Error)\s*:\s*",
+        "",
+        raw,
+        flags=re.IGNORECASE,
+    ).strip()
+    lower_clean = cleaned.lower()
+    if not cleaned or any(tech in lower_clean for tech in ("traceback", "httpx.", "attributeerror", "typeerror", "keyerror", "indexerror", "<html", "noneType".lower())):
+        return "Something went wrong while talking to VTOP. Please try again in a moment."
+    return cleaned
+
 def handle_exception(e: Exception):
+    print(f"[API ERROR] {type(e).__name__}: {e}")
     err_str = str(e).lower()
     if "session expired" in err_str or "not logged in" in err_str:
-        raise HTTPException(status_code=401, detail=str(e))
-    raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=401, detail="Your VTOP session has expired. Please refresh or log in again.")
+    if any(k in err_str for k in ("timed out", "timeout")):
+        raise HTTPException(status_code=504, detail=_format_backend_error(e))
+    if any(k in err_str for k in ("connecterror", "networkerror", "connection refused", "getaddrinfo", "ssl")):
+        raise HTTPException(status_code=503, detail=_format_backend_error(e))
+    raise HTTPException(status_code=500, detail=_format_backend_error(e))
 
 
 # ── Health & Debug ────────────────────────────────────────────────────────────
@@ -407,18 +438,38 @@ def is_outing_success(msg: str) -> bool:
     if not msg:
         return False
     msg_clean = msg.strip().lower()
-    # Explicit failure indicators mean failed
-    if (
-        msg_clean.startswith("error")
-        or "failed" in msg_clean
-        or "unable to" in msg_clean
-        or "rejected" in msg_clean
-        or "session expired" in msg_clean
-        or "check outing history" in msg_clean
-    ):
+    # Explicit failure indicators mean failed (checked BEFORE 'applied'/'booked')
+    failure_markers = (
+        "error",
+        "failed",
+        "unable to",
+        "rejected",
+        "did not accept",
+        "not accept",
+        "cannot",
+        "can't",
+        "not allowed",
+        "not eligible",
+        "already",
+        "closed",
+        "expired",
+        "invalid",
+        "missing",
+        "day scholar",
+        "not a hosteller",
+        "check outing history",
+        "verify your details",
+        "please try again",
+    )
+    if msg_clean.startswith("error") or any(marker in msg_clean for marker in failure_markers):
         return False
     # Explicit success indicators
-    return any(kw in msg_clean for kw in ("success", "applied", "saved", "deleted", "booked", "confirmed"))
+    return any(kw in msg_clean for kw in ("success", "successfully", "applied", "saved", "deleted", "booked", "confirmed", "submitted"))
+
+def _format_outing_result(msg: str) -> dict:
+    status = "success" if is_outing_success(msg) else "failed"
+    clean_msg = re.sub(r"^Error\s*:\s*", "", msg or "", flags=re.IGNORECASE).strip() if status == "failed" else msg
+    return {"status": status, "message": clean_msg}
 
 @app.get("/outing")
 async def outing(username: str):
@@ -451,8 +502,7 @@ async def outing_apply_general(
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.apply_general_outing(place, purpose, outDate, outTime, inDate, inTime)
-        status = "success" if is_outing_success(msg) else "failed"
-        return {"status": status, "message": msg}
+        return _format_outing_result(msg)
     except Exception as e:
         handle_exception(e)
 
@@ -466,8 +516,7 @@ async def outing_apply_weekend(
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.apply_weekend_outing(place, purpose, outDate, outTime, contact)
-        status = "success" if is_outing_success(msg) else "failed"
-        return {"status": status, "message": msg}
+        return _format_outing_result(msg)
     except Exception as e:
         handle_exception(e)
 
@@ -478,8 +527,7 @@ async def outing_delete_general(username: str = Form(...), leaveId: str = Form(.
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.delete_general_outing(leaveId)
-        status = "success" if is_outing_success(msg) else "failed"
-        return {"status": status, "message": msg}
+        return _format_outing_result(msg)
     except Exception as e:
         handle_exception(e)
 
@@ -490,8 +538,7 @@ async def outing_delete_weekend(username: str = Form(...), bookingId: str = Form
         raise HTTPException(status_code=401, detail="Not logged in")
     try:
         msg = await session.delete_weekend_outing(bookingId)
-        status = "success" if is_outing_success(msg) else "failed"
-        return {"status": status, "message": msg}
+        return _format_outing_result(msg)
     except Exception as e:
         handle_exception(e)
 
@@ -572,13 +619,13 @@ async def app_version():
         except Exception:
             pass
     return {
-        "version": "1.1.1",
-        "versionCode": 12,
-        "title": "Version 1.1.1 - Mess Menu Parser & Deduplication Fix",
-        "notes": "• Enhanced Mess Menu Parser: Added multi-column detection (Day + Dates), full range expansion (e.g. 22nd to 28th), and cycle tracking\n• Fixed Duplicate Meals: Prevented multiple weeks/cycles from stacking together onto the same day\n• Fixed Repeated Day Items: Isolated date-specific menus so days like Wednesday do not inherit Tuesday items\n• Stripped Mess Instructions: Automatically stops parsing at instruction sections and filters out policy rules from menu cards\n• Auto-Sanitize & Recovery: Added 'Clean & Deduplicate Menu' and 'Reset to Default Menu' actions to upload options",
-        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.1.1/app-release.apk",
-        "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/tag/v1.1.1",
-        "publishedAt": "2026-11-24T16:30:00Z"
+        "version": "1.1.2",
+        "versionCode": 13,
+        "title": "Version 1.1.2 - Outing Fix, Mess Menu, Clear Errors & Contrast Polish",
+        "notes": "• Fixed Outing Application & Rejection Reasons: Improved VTOP form scraping, spacing-safe time/place matching, JS/HTML error extraction, and session retry\n• Fixed Mess Menu Excel Parser: Eliminated MESS TIMINGS legend shifts, cross-day leakage, duplicate cycles, and leaked instruction rows\n• Clear Plain-English Errors: Replaced technical codes/exceptions with understandable error messages across all screens & updates\n• UI Contrast Overhaul: Fixed unreadable dark-navy course codes, totals, badges, and buttons across Light, Dark, Nightfall & Sakura themes",
+        "apkUrl": "https://github.com/AbhiLohar/vitap-backend/releases/download/v1.1.2/app-release.apk",
+        "releaseUrl": "https://github.com/AbhiLohar/vitap-backend/releases/tag/v1.1.2",
+        "publishedAt": "2026-11-28T18:00:00Z"
     }
 
 

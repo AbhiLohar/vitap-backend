@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/error_formatter.dart';
 
 class ExamScheduleScreen extends StatefulWidget {
   final String username;
@@ -81,7 +82,9 @@ class _ExamScheduleScreenState extends State<ExamScheduleScreen> {
         }
       );
       if (mounted) setState(() { examTypes = types; _sortExamTypes(); isTypesLoading = false; });
-    } catch (e) { if (mounted) setState(() => isTypesLoading = false); }
+    } catch (e) {
+      if (mounted) setState(() => isTypesLoading = false);
+    }
   }
 
   Future<void> _fetchAllSchedule({bool forceSync = false}) async {
@@ -102,7 +105,20 @@ class _ExamScheduleScreenState extends State<ExamScheduleScreen> {
         setState(() { allSchedule = data; isLoading = false; });
         _detectExamTypes(data);
       }
-    } catch (e) { if (mounted) setState(() => isLoading = false); }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ErrorFormatter.format(
+              e,
+              fallback: "Unable to load exam schedule right now. Pull down to try again.",
+            )),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   void _detectExamTypes(List data) {
@@ -203,7 +219,7 @@ class _ExamScheduleScreenState extends State<ExamScheduleScreen> {
                               child: Text(
                                 type['name'],
                                 style: TextStyle(
-                                  color: isSelected ? Colors.white : AppColors.textSecondary(context),
+                                  color: isSelected ? AppColors.onPrimary(context) : AppColors.textSecondary(context),
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                   fontSize: 13,
                                 ),
@@ -266,7 +282,7 @@ class _ExamScheduleScreenState extends State<ExamScheduleScreen> {
     String seatNum = item["seat_no"] ?? "-";
 
     String daysText = "";
-    Color badgeColor = Colors.grey;
+    Color badgeColor = AppColors.textSecondary(context);
     if (item["date"] != null && item["date"] != "-") {
       try {
         final parsedDate = DateFormat("dd-MMM-yyyy").parse(item["date"]);

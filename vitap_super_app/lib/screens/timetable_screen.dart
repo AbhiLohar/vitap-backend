@@ -291,7 +291,7 @@ class _TimetableScreenState extends State<TimetableScreen>
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
                                       color: isSelected
-                                          ? Colors.white
+                                          ? AppColors.onPrimary(context)
                                           : isToday
                                               ? primaryColor
                                               : AppColors.textPrimary(context),
@@ -304,7 +304,7 @@ class _TimetableScreenState extends State<TimetableScreen>
                                       fontSize: 11,
                                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                       color: isSelected
-                                          ? Colors.white.withOpacity(0.85)
+                                          ? AppColors.onPrimary(context).withOpacity(0.85)
                                           : AppColors.textSecondary(context),
                                     ),
                                   ),
@@ -509,17 +509,17 @@ class _TimetableScreenState extends State<TimetableScreen>
                       color: primaryColor,
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.play_circle_fill_rounded, size: 12, color: Colors.white),
-                        SizedBox(width: 4),
+                        Icon(Icons.play_circle_fill_rounded, size: 12, color: AppColors.onPrimary(context)),
+                        const SizedBox(width: 4),
                         Text(
                           "LIVE",
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: AppColors.onPrimary(context),
                             letterSpacing: 0.8,
                           ),
                         ),

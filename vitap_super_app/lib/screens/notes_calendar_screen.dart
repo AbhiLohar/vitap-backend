@@ -157,10 +157,14 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: AppColors.onPrimary(context),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: Text(existingNote != null ? "Update Note" : "Save Note", style: const TextStyle(color: Colors.white, fontSize: 16)),
+                        child: Text(
+                          existingNote != null ? "Update Note" : "Save Note",
+                          style: TextStyle(color: AppColors.onPrimary(context), fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ),
                   ],
@@ -324,7 +328,7 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
           style: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.2),
         ),
         backgroundColor: primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       body: Column(
@@ -340,7 +344,7 @@ class _NotesCalendarScreenState extends State<NotesCalendarScreen> {
               data: Theme.of(context).copyWith(
                 colorScheme: Theme.of(context).colorScheme.copyWith(
                   primary: primary,
-                  onPrimary: Colors.white,
+                  onPrimary: AppColors.onPrimary(context),
                   surface: AppColors.cardBg(context),
                   onSurface: AppColors.textPrimary(context),
                 ),

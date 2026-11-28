@@ -294,7 +294,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                           min: 50,
                           max: 100,
                           divisions: 10,
-                          activeColor: AppColors.primary,
+                          activeColor: Theme.of(context).colorScheme.primary,
                           onChanged: (val) {
                             setModalState(() { targetPercentage = val; });
                           },
@@ -571,7 +571,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                             : filteredSubjects.isEmpty && !hasCapstone
                                 ? RefreshIndicator(
                                     onRefresh: () => fetchAttendance(forceRefresh: true),
-                                    color: AppColors.primary,
+                                    color: primary,
                                     child: ListView(
                                       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                                       children: [
@@ -584,7 +584,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                   )
                                 : RefreshIndicator(
                                     onRefresh: () => fetchAttendance(forceRefresh: true),
-                                    color: AppColors.primary,
+                                    color: primary,
                                     child: ListView.builder(
                                       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                                       padding: const EdgeInsets.only(bottom: 20),
@@ -634,7 +634,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 Icon(
                   icon,
                   size: 14,
-                  color: isSelected ? Colors.white : AppColors.textSecondary(context),
+                  color: isSelected ? AppColors.onPrimary(context) : AppColors.textSecondary(context),
                 ),
                 const SizedBox(width: 4),
               ],
@@ -643,7 +643,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: isSelected ? Colors.white : AppColors.textSecondary(context),
+                  color: isSelected ? AppColors.onPrimary(context) : AppColors.textSecondary(context),
                 ),
               ),
             ],
@@ -986,7 +986,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                               Row(
                                 children: [
                                   Expanded(child: _capstoneStatItem("Present", present, AppColors.teal)),
-                                  Expanded(child: _capstoneStatItem("On Duty", onDuty, AppColors.primary)),
+                                  Expanded(child: _capstoneStatItem("On Duty", onDuty, Theme.of(context).colorScheme.primary)),
                                   Expanded(child: _capstoneStatItem("Absent", absent, AppColors.red)),
                                   Expanded(child: _capstoneStatItem("Total", total.toString(), AppColors.textPrimary(context))),
                                 ],
@@ -1100,7 +1100,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                 final statusColor = isPresent 
                                     ? AppColors.teal 
                                     : (isOD 
-                                        ? AppColors.primary 
+                                        ? Theme.of(context).colorScheme.primary 
                                         : (isAbsent 
                                             ? AppColors.red 
                                             : (isHoliday ? AppColors.textMuted(context) : AppColors.teal)));
@@ -1576,7 +1576,7 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
                 color: primary,
                 borderRadius: BorderRadius.circular(9),
               ),
-              labelColor: Colors.white,
+              labelColor: AppColors.onPrimary(context),
               unselectedLabelColor: AppColors.textSecondary(context),
               labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
@@ -1647,8 +1647,8 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
                 _detailFetched = false;
                 _fetchDetail();
               },
-              icon: const Icon(Icons.refresh, color: AppColors.primary),
-              label: const Text("Retry", style: TextStyle(color: AppColors.primary)),
+              icon: Icon(Icons.refresh, color: primary),
+              label: Text("Retry", style: TextStyle(color: primary)),
             ),
           ],
         ),
@@ -1658,13 +1658,13 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
     if (!_detailFetched) {
       // Auto-fetch when tab is first shown
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetchDetail());
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return Center(child: CircularProgressIndicator(color: primary));
     }
 
     if (_detailRecords.isEmpty) {
       return RefreshIndicator(
         onRefresh: () => _fetchDetail(forceSync: true),
-        color: AppColors.primary,
+        color: primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           children: [
@@ -1694,7 +1694,7 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
               const SizedBox(width: 8),
               _summaryChip(Icons.cancel, AppColors.red, "Absent: $absentCount"),
               const SizedBox(width: 8),
-              _summaryChip(Icons.class_, AppColors.primary, "Total: ${_detailRecords.length}"),
+              _summaryChip(Icons.class_, primary, "Total: ${_detailRecords.length}"),
             ],
           ),
         ),
@@ -1704,7 +1704,7 @@ class _AttendanceDetailBottomSheetState extends State<_AttendanceDetailBottomShe
           margin: const EdgeInsets.symmetric(horizontal: 20),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.08),
+            color: primary.withOpacity(0.1),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
           ),
           child: Row(

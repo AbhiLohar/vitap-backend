@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/error_formatter.dart';
 import '../widgets/glass_card.dart';
 
 class GPAScreen extends StatefulWidget {
@@ -183,7 +184,18 @@ class _GPAScreenState extends State<GPAScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ErrorFormatter.format(
+              e,
+              fallback: "Unable to load GPA analytics right now. Pull down to try again.",
+            )),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -569,22 +581,23 @@ class _GPAScreenState extends State<GPAScreen> {
   }
 
   Color _getGradeColor(String grade) {
+    final dark = AppColors.isDark(context);
     switch (grade.toUpperCase()) {
       case 'S':
       case 'A':
-        return AppColors.good;
+        return dark ? const Color(0xFF34D399) : AppColors.good;
       case 'B':
-        return const Color(0xFF2E7D32);
+        return dark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
       case 'C':
         return AppColors.warning;
       case 'D':
-        return const Color(0xFFE65100);
+        return dark ? const Color(0xFFFB923C) : const Color(0xFFC2410C);
       case 'E':
       case 'F':
       case 'N':
         return AppColors.danger;
       default:
-        return const Color(0xFF9CA3AF);
+        return AppColors.textMuted(context);
     }
   }
 }

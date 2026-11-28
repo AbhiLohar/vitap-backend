@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../config/api_config.dart';
 import '../widgets/update_dialog.dart';
+import 'error_formatter.dart';
 import 'notification_service.dart';
 
 class UpdateInfo {
@@ -40,8 +41,8 @@ class UpdateService {
   static const String repoName = "vitap-backend";
 
   // Central compile-time version for this app release
-  static const String currentAppVersion = "1.1.1";
-  static const int currentVersionCode = 12;
+  static const String currentAppVersion = "1.1.2";
+  static const int currentVersionCode = 13;
   static const String fallbackVersion = currentAppVersion;
 
   // Native Android package installer channel
@@ -126,17 +127,17 @@ class UpdateService {
       } catch (_) {}
     }
 
-    // 3. Check SharedPreferences for last recorded installed version (safeguard if user updated
-    // while app process was kept alive in background)
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final installedVer = prefs.getString(prefInstalledVersionKey)?.trim();
-      if (installedVer != null && installedVer.isNotEmpty) {
-        if (detectedVersion.isEmpty || compareVersions(installedVer, detectedVersion) > 0) {
+    // 3. Fallback to SharedPreferences ONLY if native/package version could not be detected.
+    // Never let a cached value override the real installed OS version.
+    if (detectedVersion.isEmpty) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final installedVer = prefs.getString(prefInstalledVersionKey)?.trim();
+        if (installedVer != null && installedVer.isNotEmpty) {
           detectedVersion = installedVer;
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
     // 4. If detected version is still empty or older than this binary's compiled version,
     // default to the compile-time currentAppVersion
@@ -222,7 +223,15 @@ class UpdateService {
 
           // HTTP 200 = Full file, HTTP 206 = Partial file (resumed)
           if (response.statusCode != 200 && response.statusCode != 206) {
-            throw Exception("Server responded with HTTP ${response.statusCode} while downloading update");
+            if (response.statusCode == 404 || response.statusCode == 410) {
+              attempt = maxRetries; // Don't waste time retrying a missing release asset
+              throw Exception("The update file could not be found on the server right now. Please try again shortly or tap 'Download via Browser'.");
+            }
+            if (response.statusCode == 403 || response.statusCode == 429) {
+              attempt = maxRetries;
+              throw Exception("Download limit reached on the server. Please try again in a few minutes or tap 'Download via Browser'.");
+            }
+            throw Exception("The update server is temporarily unavailable. Please try again or tap 'Download via Browser'.");
           }
 
           // If server returned 200 instead of 206, it restarted from 0
@@ -278,7 +287,7 @@ class UpdateService {
           // Stream ended prematurely without reaching totalBytes
           if (totalBytes > 0 && receivedBytes < totalBytes) {
             if (attempt >= maxRetries) {
-              throw Exception("Download interrupted: received $receivedBytes of $totalBytes bytes");
+              throw Exception("Download stopped before finishing because the network connection dropped. Please tap 'Retry' or 'Download via Browser'.");
             }
             await Future.delayed(Duration(milliseconds: 500 * attempt));
             continue;
@@ -612,7 +621,10 @@ class UpdateService {
       }
     } catch (e) {
       if (isManual && context.mounted) {
-        final message = e.toString().replaceFirst("Exception: ", "");
+        final message = ErrorFormatter.format(
+          e,
+          fallback: "Could not check for updates right now. Please check your internet connection and try again.",
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(

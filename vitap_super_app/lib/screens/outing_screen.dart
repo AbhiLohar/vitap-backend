@@ -67,7 +67,10 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Error loading outings: ${ErrorFormatter.format(e)}"),
+          content: Text(ErrorFormatter.format(
+            e,
+            fallback: "Unable to load your outings right now. Please pull down to refresh.",
+          )),
           backgroundColor: AppColors.red,
         ));
       }
@@ -146,21 +149,27 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
       }
 
       if (isSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Deleted successfully"),
-          backgroundColor: AppColors.primary,
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text("Deleted successfully"),
+          backgroundColor: AppColors.good,
         ));
         _loadData(forceRefresh: true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(res["message"] ?? "Failed to delete"),
+          content: Text(ErrorFormatter.format(
+            res["message"],
+            fallback: "Could not delete this outing right now. Please try again.",
+          )),
           backgroundColor: AppColors.red,
         ));
       }
     } catch (e) {
       Navigator.pop(context); // pop loading
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ErrorFormatter.format(e)),
+        content: Text(ErrorFormatter.format(
+          e,
+          fallback: "Could not delete this outing right now. Please try again.",
+        )),
         backgroundColor: AppColors.red,
       ));
     }
@@ -244,7 +253,7 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
             ),
             child: TabBar(
               controller: _tabController,
-              labelColor: Colors.white,
+              labelColor: AppColors.onPrimary(context),
               unselectedLabelColor: AppColors.textSecondary(context),
               labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
@@ -265,7 +274,7 @@ class _OutingScreenState extends State<OutingScreen> with SingleTickerProviderSt
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showApplyModal,
         backgroundColor: primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.onPrimary(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         icon: const Icon(Icons.add, size: 20),
         label: const Text(
@@ -627,26 +636,26 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
       // Determine success/failure: must be explicit success and no failure keywords
       final msgLower = msg.toLowerCase();
       bool isError = (statusStr != "success") ||
-          msgLower.startsWith("error") || 
-          msgLower.contains("failed") || 
-          msgLower.contains("unable to") || 
+          msgLower.startsWith("error") ||
+          msgLower.contains("failed") ||
+          msgLower.contains("unable to") ||
           msgLower.contains("rejected") ||
+          msgLower.contains("did not accept") ||
+          msgLower.contains("cannot") ||
+          msgLower.contains("closed") ||
           msgLower.contains("expired") ||
           msgLower.contains("check outing history");
 
       if (isError) {
         // Show error INSIDE the sheet — do NOT close it
-        String errorMsg = msg.isNotEmpty ? msg : "Failed to apply for outing";
-        // Clean "Error: " prefix for display
-        if (errorMsg.toLowerCase().startsWith("error:")) {
-          errorMsg = errorMsg.substring(6).trim();
-        } else if (errorMsg.toLowerCase().startsWith("error")) {
-          errorMsg = errorMsg.substring(5).trim();
-        }
+        final formattedError = ErrorFormatter.format(
+          msg.isNotEmpty ? msg : "Your outing request was not accepted by VTOP. Please check your details and try again.",
+          fallback: "Your outing request could not be submitted. Please check your details and try again.",
+        );
         if (mounted) {
           setState(() {
             _isSubmitting = false;
-            _errorMessage = errorMsg;
+            _errorMessage = formattedError;
           });
         }
         return; // DON'T close the sheet
@@ -672,7 +681,10 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
       if (mounted) {
         setState(() {
           _isSubmitting = false;
-          _errorMessage = ErrorFormatter.format(e);
+          _errorMessage = ErrorFormatter.format(
+            e,
+            fallback: "Could not submit your outing right now. Please check your internet connection and try again.",
+          );
         });
       }
     }
@@ -733,7 +745,10 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                     children: [
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => setState(() => _isWeekend = false),
+                          onTap: () => setState(() {
+                            _isWeekend = false;
+                            _errorMessage = null;
+                          }),
                           child: Container(
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
@@ -745,7 +760,7 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: !_isWeekend ? Colors.white : AppColors.textSecondary(context),
+                                color: !_isWeekend ? AppColors.onPrimary(context) : AppColors.textSecondary(context),
                               ),
                             ),
                           ),
@@ -753,7 +768,10 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                       ),
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => setState(() => _isWeekend = true),
+                          onTap: () => setState(() {
+                            _isWeekend = true;
+                            _errorMessage = null;
+                          }),
                           child: Container(
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
@@ -765,7 +783,7 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: _isWeekend ? Colors.white : AppColors.textSecondary(context),
+                                color: _isWeekend ? AppColors.onPrimary(context) : AppColors.textSecondary(context),
                               ),
                             ),
                           ),
@@ -842,7 +860,7 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            "Weekend outing can only be applied for Sunday (Deadline: Friday 11:59 PM) & Monday (Deadline: Sunday 11:59 PM).",
+                            "Weekend outings apply to Sundays (Deadline: Friday 11:59 PM) and eligible Holiday Mondays (Deadline: Saturday/Sunday 11:59 PM per hostel schedule).",
                             style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context), height: 1.3),
                           ),
                         ),
@@ -888,7 +906,15 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                       ),
                     ),
                     keyboardType: TextInputType.phone,
-                    validator: (v) => v!.isEmpty ? "Required" : null,
+                    validator: (v) {
+                      final trimmed = (v ?? '').trim();
+                      if (trimmed.isEmpty) return "Please enter your contact number";
+                      final digits = trimmed.replaceAll(RegExp(r'\D'), '');
+                      if (digits.length < 10) {
+                        return "Please enter a valid 10-digit mobile number";
+                      }
+                      return null;
+                    },
                   ),
                 ] else ...[
                   Row(
@@ -959,13 +985,13 @@ class _ApplyOutingSheetState extends State<_ApplyOutingSheet> {
                     onPressed: _isSubmitting ? null : _submit,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primary,
-                      foregroundColor: Colors.white,
+                      foregroundColor: AppColors.onPrimary(context),
                       elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     child: _isSubmitting
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text("Submit Application", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
+                        ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: AppColors.onPrimary(context), strokeWidth: 2))
+                        : Text("Submit Application", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.onPrimary(context))),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -1335,7 +1361,7 @@ class _OutingSuccessPageState extends State<_OutingSuccessPage>
                       icon: const Icon(Icons.arrow_back_rounded, size: 18),
                       label: const Text("Back to Outing Status"),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.primary,
+                        foregroundColor: Theme.of(context).colorScheme.primary,
                         textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                       ),
                     ),

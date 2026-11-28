@@ -25,6 +25,24 @@ class AppColors {
   static const Color red = Color(0xFFD9534F);
   static const Color amber = Color(0xFFD99A32);
 
+  /// Theme-aware primary accent color (navy in light, bright periwinkle in dark/nightfall)
+  static Color adaptivePrimary(BuildContext context) =>
+      Theme.of(context).colorScheme.primary;
+
+  /// High-contrast foreground color to sit on top of `colorScheme.primary` surfaces
+  static Color onPrimary(BuildContext context) {
+    final p = Theme.of(context).colorScheme.primary;
+    final lum = p.computeLuminance();
+    const darkInk = Color(0xFF0B1120);
+    final contrastWithDark = (lum + 0.05) / (darkInk.computeLuminance() + 0.05);
+    final contrastWithWhite = 1.05 / (lum + 0.05);
+    return contrastWithDark >= contrastWithWhite ? darkInk : Colors.white;
+  }
+
+  /// High-contrast green for dark & light surfaces alike
+  static Color adaptiveGreen(BuildContext context) =>
+      isDark(context) ? const Color(0xFF34D399) : const Color(0xFF15803D);
+
   // Text
   static Color textPrimary(BuildContext context) =>
       Theme.of(context).textTheme.bodyLarge?.color ??
@@ -79,8 +97,8 @@ class AppTheme {
     const Color cardBg = Color(0xFFFFFFFF);
     const Color border = Color(0xFFE8EAF0);
     const Color textPri = Color(0xFF171A23);
-    const Color textSec = Color(0xFF777F8C);
-    const Color textMut = Color(0xFF9CA3AF);
+    const Color textSec = Color(0xFF555D6B);
+    const Color textMut = Color(0xFF6B7280);
     const Color pri = Color(0xFF172554);
     const Color sec = Color(0xFF526DAB);
 
@@ -126,9 +144,16 @@ class AppTheme {
       dividerColor: border,
       colorScheme: const ColorScheme.light(
         primary: pri,
+        onPrimary: Colors.white,
         secondary: sec,
         surface: cardBg,
+        onSurface: textPri,
         error: Color(0xFFD9534F),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF172554),
+        contentTextStyle: GoogleFonts.inter(color: Colors.white, fontSize: 13.5),
+        behavior: SnackBarBehavior.floating,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -181,14 +206,14 @@ class AppTheme {
     const Color cardBg = Color(0xFF1A1D27);
     const Color border = Color(0xFF2A2D37);
     const Color textPri = Color(0xFFE8EAF0);
-    const Color textSec = Color(0xFF8A8F9C);
-    const Color textMut = Color(0xFF5A5F6B);
+    const Color textSec = Color(0xFF9EA5B5);
+    const Color textMut = Color(0xFF838A9B);
     const Color pri = Color(0xFF7B93C9);
     const Color sec = Color(0xFF8BA3D9);
 
     return base.copyWith(
       scaffoldBackgroundColor: scaffoldBg,
-      primaryColor: AppColors.primary,
+      primaryColor: pri,
       textTheme: GoogleFonts.interTextTheme(base.textTheme).copyWith(
         displayLarge: GoogleFonts.inter(color: textPri, fontWeight: FontWeight.w700),
         bodyLarge: GoogleFonts.inter(color: textPri),
@@ -218,7 +243,7 @@ class AppTheme {
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return Colors.white;
-          return const Color(0xFF5A5F6B);
+          return const Color(0xFF838A9B);
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return pri;
@@ -228,9 +253,16 @@ class AppTheme {
       dividerColor: border,
       colorScheme: const ColorScheme.dark(
         primary: pri,
+        onPrimary: Color(0xFF0B1120),
         secondary: sec,
         surface: cardBg,
+        onSurface: textPri,
         error: Color(0xFFD9534F),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF1E293B),
+        contentTextStyle: GoogleFonts.inter(color: Colors.white, fontSize: 13.5),
+        behavior: SnackBarBehavior.floating,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -257,7 +289,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: pri,
-          foregroundColor: Colors.white,
+          foregroundColor: const Color(0xFF0B1120),
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -283,14 +315,14 @@ class AppTheme {
     const Color cardBg = Color(0xFF12141C);
     const Color border = Color(0xFF1E2130);
     const Color textPri = Color(0xFFE2E4EB);
-    const Color textSec = Color(0xFF7E8494);
-    const Color textMut = Color(0xFF525766);
+    const Color textSec = Color(0xFF979EB0);
+    const Color textMut = Color(0xFF808798);
     const Color pri = Color(0xFF8BA3D9);
     const Color sec = Color(0xFF98ADE0);
 
     return base.copyWith(
       scaffoldBackgroundColor: scaffoldBg,
-      primaryColor: const Color(0xFF5B72A8),
+      primaryColor: pri,
       textTheme: GoogleFonts.interTextTheme(base.textTheme).copyWith(
         displayLarge: GoogleFonts.inter(color: textPri, fontWeight: FontWeight.w700),
         bodyLarge: GoogleFonts.inter(color: textPri),
@@ -320,7 +352,7 @@ class AppTheme {
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return Colors.white;
-          return const Color(0xFF525766);
+          return const Color(0xFF808798);
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return pri;
@@ -330,9 +362,16 @@ class AppTheme {
       dividerColor: border,
       colorScheme: const ColorScheme.dark(
         primary: pri,
+        onPrimary: Color(0xFF0B1120),
         secondary: sec,
         surface: cardBg,
+        onSurface: textPri,
         error: Color(0xFFD9534F),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF1E293B),
+        contentTextStyle: GoogleFonts.inter(color: Colors.white, fontSize: 13.5),
+        behavior: SnackBarBehavior.floating,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -359,7 +398,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: pri,
-          foregroundColor: Colors.white,
+          foregroundColor: const Color(0xFF0B1120),
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -385,9 +424,9 @@ class AppTheme {
     const Color cardBg = Colors.white;
     const Color border = Color(0xFFFFE4E8);
     const Color textPri = Color(0xFF4C1D55);
-    const Color textSec = Color(0xFF8B5670);
-    const Color textMut = Color(0xFFBE7A92);
-    const Color pri = Color(0xFFE8457C);
+    const Color textSec = Color(0xFF7B4461);
+    const Color textMut = Color(0xFF96566E);
+    const Color pri = Color(0xFFD62865);
     const Color sec = Color(0xFFF5A0BA);
 
     return base.copyWith(
@@ -422,7 +461,7 @@ class AppTheme {
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return Colors.white;
-          return const Color(0xFFBE7A92);
+          return const Color(0xFF96566E);
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return pri;
@@ -432,9 +471,16 @@ class AppTheme {
       dividerColor: border,
       colorScheme: const ColorScheme.light(
         primary: pri,
+        onPrimary: Colors.white,
         secondary: sec,
         surface: cardBg,
+        onSurface: textPri,
         error: Color(0xFFD9534F),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: const Color(0xFF4C1D55),
+        contentTextStyle: GoogleFonts.inter(color: Colors.white, fontSize: 13.5),
+        behavior: SnackBarBehavior.floating,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -468,7 +514,7 @@ class AppTheme {
           textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(color: pri),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: pri),
       tabBarTheme: TabBarThemeData(
         indicatorColor: pri,
         labelColor: pri,

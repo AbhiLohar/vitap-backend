@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
+import '../services/error_formatter.dart';
 import '../widgets/glass_card.dart';
 // PDF packages removed
 
@@ -16,6 +17,7 @@ class PaymentsScreen extends StatefulWidget {
 class _PaymentsScreenState extends State<PaymentsScreen> {
   List _payments = [];
   bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -24,15 +26,34 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Future<void> _loadData({bool forceRefresh = false}) async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
       final data = await ApiService.getPayments(widget.username, forceSync: forceRefresh);
-      setState(() {
-        _payments = data;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _payments = data;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
+      final friendly = ErrorFormatter.format(
+        e,
+        fallback: "Could not load your payment history right now. Pull down to try again.",
+      );
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = friendly;
+        });
+        if (_payments.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(friendly), backgroundColor: Colors.redAccent),
+          );
+        }
+      }
     }
   }
 
@@ -71,12 +92,31 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     children: [
                       SizedBox(height: MediaQuery.of(context).size.height * 0.3),
                       Center(
-                        child: Column(
-                          children: [
-                            Icon(Icons.receipt_long_outlined, size: 52, color: AppColors.textMuted(context)),
-                            const SizedBox(height: 14),
-                            Text("No payment records found", style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14)),
-                          ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            children: [
+                              Icon(
+                                _errorMessage != null ? Icons.cloud_off_rounded : Icons.receipt_long_outlined,
+                                size: 52,
+                                color: _errorMessage != null ? Colors.redAccent : AppColors.textMuted(context),
+                              ),
+                              const SizedBox(height: 14),
+                              Text(
+                                _errorMessage ?? "No payment records found",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14, height: 1.4),
+                              ),
+                              if (_errorMessage != null) ...[
+                                const SizedBox(height: 14),
+                                TextButton.icon(
+                                  onPressed: () => _loadData(forceRefresh: true),
+                                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                                  label: const Text("Try Again"),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                     ],

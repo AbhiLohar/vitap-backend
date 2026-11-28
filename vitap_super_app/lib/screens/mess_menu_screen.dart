@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../config/app_theme.dart';
 import '../widgets/glass_card.dart';
 import '../services/mess_menu_service.dart';
+import '../services/error_formatter.dart';
 
 class MessMenuScreen extends StatefulWidget {
   const MessMenuScreen({super.key});
@@ -73,6 +74,15 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
         setState(() {
           _hasMenu = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(ErrorFormatter.format(
+              e,
+              fallback: 'Unable to load the saved mess menu. You can clean or reset it from the menu options.',
+            )),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -151,11 +161,13 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
       Map<String, Map<String, Map<String, List<String>>>> allSheets = {};
       Map<String, Map<String, List<String>>> parsedSingle = {};
 
-      if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
-        if (bytes != null && bytes.isNotEmpty) {
-          allSheets = MessMenuService.parseExcelWorkbook(bytes);
+      final lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+        if (bytes == null || bytes.isEmpty) {
+          throw Exception('The selected Excel file could not be read or is empty.');
         }
-      } else if (file.name.toLowerCase().endsWith('.csv')) {
+        allSheets = MessMenuService.parseExcelWorkbookStrict(bytes);
+      } else if (lowerName.endsWith('.csv')) {
         String? text;
         if (bytes != null && bytes.isNotEmpty) {
           try {
@@ -166,15 +178,18 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
         } else if (file.path != null && file.path!.isNotEmpty) {
           text = await File(file.path!).readAsString();
         }
-        if (text != null && text.isNotEmpty) {
-          parsedSingle = MessMenuService.parseCsvText(text);
-          if (parsedSingle.isNotEmpty) {
-            allSheets = {
-              'veg_nonveg': parsedSingle,
-              'special': parsedSingle,
-            };
-          }
+        if (text == null || text.trim().isEmpty) {
+          throw Exception('The selected CSV file is empty or could not be read.');
         }
+        parsedSingle = MessMenuService.parseCsvText(text);
+        if (parsedSingle.isNotEmpty) {
+          allSheets = {
+            'veg_nonveg': parsedSingle,
+            'special': parsedSingle,
+          };
+        }
+      } else {
+        throw Exception('Unsupported file type. Please choose an .xlsx Excel file or a .csv file.');
       }
 
       setState(() => _isUploading = false);
@@ -183,7 +198,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('⚠️ Could not parse menu file. Ensure it has columns: Day, Breakfast, Lunch, Snacks, Dinner.'),
+              content: Text('No menu table was found in this file. Please ensure it has Day/Date, Breakfast, Lunch, Snacks, and Dinner columns.'),
               backgroundColor: Colors.orange,
               duration: Duration(seconds: 5),
             ),
@@ -199,8 +214,8 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
         _pendingFileName = file.name;
       });
 
-      final totalCount = allSheets.isNotEmpty 
-          ? allSheets.values.first.keys.length 
+      final totalCount = allSheets.isNotEmpty
+          ? allSheets.values.first.keys.length
           : parsedSingle.keys.length;
 
       if (mounted) {
@@ -213,12 +228,16 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
         );
       }
     } catch (e) {
-      setState(() => _isUploading = false);
       if (mounted) {
+        setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Error reading file: $e'),
+            content: Text(ErrorFormatter.format(
+              e,
+              fallback: 'Could not read this menu file. Make sure it is a valid .xlsx or .csv mess menu file.',
+            )),
             backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -257,7 +276,10 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Failed to save menu: $e'),
+            content: Text(ErrorFormatter.format(
+              e,
+              fallback: 'Could not save the uploaded mess menu. Please try again.',
+            )),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -337,7 +359,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: primary,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.onPrimary(context),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
@@ -707,7 +729,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                   label: const Text('Apply Changes', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: primary,
-                    foregroundColor: Colors.white,
+                    foregroundColor: AppColors.onPrimary(context),
                     padding: const EdgeInsets.symmetric(vertical: 11),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     elevation: 0,
@@ -806,7 +828,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: _messType == 'veg_nonveg' ? Colors.white : AppColors.textSecondary(context),
+                      color: _messType == 'veg_nonveg' ? AppColors.onPrimary(context) : AppColors.textSecondary(context),
                     ),
                   ),
                 ),
@@ -826,7 +848,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: _messType == 'special' ? Colors.white : AppColors.textSecondary(context),
+                      color: _messType == 'special' ? AppColors.onPrimary(context) : AppColors.textSecondary(context),
                     ),
                   ),
                 ),
@@ -878,7 +900,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                       dayName,
                       style: TextStyle(
                         fontSize: 11,
-                        color: isSelected ? Colors.white : AppColors.textSecondary(context),
+                        color: isSelected ? AppColors.onPrimary(context) : AppColors.textSecondary(context),
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                       ),
                     ),
@@ -887,7 +909,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                       '${date.day}',
                       style: TextStyle(
                         fontSize: 14,
-                        color: isSelected ? Colors.white : AppColors.textPrimary(context),
+                        color: isSelected ? AppColors.onPrimary(context) : AppColors.textPrimary(context),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1141,7 +1163,7 @@ class _MessMenuScreenState extends State<MessMenuScreen> {
                 label: const Text('Upload Mess Menu (Excel / CSV)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primary,
-                  foregroundColor: Colors.white,
+                  foregroundColor: AppColors.onPrimary(context),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   elevation: 0,
                   shape: RoundedRectangleBorder(

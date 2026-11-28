@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../config/app_theme.dart';
+import '../services/error_formatter.dart';
 
 /// A custom curve for realistic shake animation on invalid OTP input
 class _ShakeCurve extends Curve {
@@ -219,7 +220,10 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
         if (!mounted) return;
         setState(() {
           _isLoading = false;
-          _errorMessage = e.toString().replaceFirst("Exception: ", "");
+          _errorMessage = ErrorFormatter.format(
+            e,
+            fallback: "Could not verify the OTP right now. Please check the code and try again.",
+          );
         });
         _shakeController.forward(from: 0.0);
         HapticFeedback.heavyImpact();
@@ -282,12 +286,12 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final primary = theme.primaryColor;
-    final isDefaultPrimary = primary == AppColors.primary;
+    final primary = theme.colorScheme.primary;
+    final isDefaultPrimary = primary == AppColors.primary || primary.computeLuminance() > 0.18;
     final gradientColors = isDefaultPrimary
-        ? const [Color(0xFF172554), Color(0xFF526DAB)]
+        ? const [Color(0xFF172554), Color(0xFF3B5998)]
         : [primary, primary.withValues(alpha: 0.85)];
-    final focusGlowColor = isDefaultPrimary ? const Color(0xFF526DAB) : primary;
+    final focusGlowColor = primary;
 
     final cardBg = isDark ? const Color(0xFF0F1218) : Colors.white;
     final cardBorder = isDark
@@ -298,12 +302,12 @@ class _CyberOtpDialogState extends State<CyberOtpDialog>
             ? const Color(0xFFEF4444).withValues(alpha: 0.6)
             : const Color(0xFFE2E8F0));
     final titleColor = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
-    final subtitleColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final subtitleColor = isDark ? const Color(0xFFA0AEC0) : const Color(0xFF475569);
     final badgeBg = isDark ? const Color(0xFF141923) : const Color(0xFFF1F5F9);
     final badgeBorder = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
-    final badgeTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final hintColor = const Color(0xFF64748B);
-    final tipColor = isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8);
+    final badgeTextColor = isDark ? const Color(0xFFA0AEC0) : const Color(0xFF475569);
+    final hintColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final tipColor = isDark ? const Color(0xFF7D8A9E) : const Color(0xFF64748B);
     final dividerColor = isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1);
 
     return Dialog(

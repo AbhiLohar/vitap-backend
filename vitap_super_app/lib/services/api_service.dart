@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config/api_config.dart';
+import 'error_formatter.dart';
 
 class ApiService {
   static final String _baseUrl = ApiConfig.baseUrl;
@@ -13,6 +14,82 @@ class ApiService {
   static bool suppressOtpDialog = false;
   static bool _isRelogining = false;
 
+  static String _extractErrorMessage(
+    http.Response res, {
+    String fallback = "Could not complete your request right now. Please try again.",
+  }) {
+    String? rawDetail;
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map) {
+        final d = decoded['detail'] ?? decoded['message'] ?? decoded['error'];
+        if (d != null && d.toString().trim().isNotEmpty) {
+          rawDetail = d.toString().trim();
+        }
+      }
+    } catch (_) {}
+
+    if (res.statusCode == 401) {
+      return ErrorFormatter.format(
+        rawDetail ?? "Session expired",
+        fallback: "Your VTOP session has expired. Please pull down to refresh or log in again.",
+      );
+    }
+
+    return ErrorFormatter.format(
+      rawDetail ?? "HTTP ${res.statusCode}",
+      fallback: fallback,
+    );
+  }
+
+  static Map<String, dynamic> _decodeJsonMap(
+    http.Response res, {
+    String fallback = "The server sent an unexpected response. Please try again.",
+  }) {
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } on FormatException {
+      // Fall through to clear error below
+    }
+    throw Exception(fallback);
+  }
+
+  static Future<Map<String, dynamic>> _postFormWithRetry(
+    String path,
+    Map<String, String> body, {
+    Duration timeout = const Duration(seconds: 60),
+    String fallback = "Request could not be completed. Please try again.",
+    bool isRetry = false,
+  }) async {
+    try {
+      final res = await _client
+          .post(Uri.parse("$_baseUrl$path"), body: body)
+          .timeout(timeout);
+
+      if (res.statusCode == 200) {
+        return _decodeJsonMap(res, fallback: fallback);
+      }
+      if (res.statusCode == 401 && !isRetry) {
+        final ok = await _ensureSession();
+        if (ok) {
+          return _postFormWithRetry(
+            path,
+            body,
+            timeout: timeout,
+            fallback: fallback,
+            isRetry: true,
+          );
+        }
+        throw Exception("Your VTOP session has expired. Please refresh or log out and log in again.");
+      }
+      throw Exception(_extractErrorMessage(res, fallback: fallback));
+    } catch (e) {
+      throw Exception(ErrorFormatter.format(e, fallback: fallback));
+    }
+  }
+
   // ─── Auth ──────────────────────────────────────────────
 
   /// Single login call — backend auto-solves captcha
@@ -20,18 +97,28 @@ class ApiService {
     required String username,
     required String password,
   }) async {
-    final res = await _client.post(
-      Uri.parse("$_baseUrl/login"),
-      body: {"username": username, "password": password},
-    ).timeout(const Duration(seconds: 120)); // captcha retries need time
-    
-    final data = jsonDecode(res.body);
-    if (res.statusCode == 200) {
-      return data;
-    } else {
-      // Backend returned an error (401, 500, etc.)
-      final detail = data["detail"] ?? "Login failed. Please try again.";
-      throw Exception(detail);
+    try {
+      final res = await _client.post(
+        Uri.parse("$_baseUrl/login"),
+        body: {"username": username, "password": password},
+      ).timeout(const Duration(seconds: 120)); // captcha retries need time
+
+      if (res.statusCode == 200) {
+        return _decodeJsonMap(
+          res,
+          fallback: "Received an unreadable reply during login. Please try again.",
+        );
+      } else {
+        throw Exception(_extractErrorMessage(
+          res,
+          fallback: "Login failed. Please check your credentials and try again.",
+        ));
+      }
+    } catch (e) {
+      throw Exception(ErrorFormatter.format(
+        e,
+        fallback: "Login failed. Please check your internet connection and try again.",
+      ));
     }
   }
 
@@ -39,11 +126,27 @@ class ApiService {
     required String username,
     required String otp,
   }) async {
-    final res = await _client.post(
-      Uri.parse("$_baseUrl/verify-otp"),
-      body: {"username": username, "otp": otp},
-    ).timeout(const Duration(seconds: 30));
-    return jsonDecode(res.body);
+    try {
+      final res = await _client.post(
+        Uri.parse("$_baseUrl/verify-otp"),
+        body: {"username": username, "otp": otp},
+      ).timeout(const Duration(seconds: 30));
+      if (res.statusCode == 200) {
+        return _decodeJsonMap(
+          res,
+          fallback: "Could not verify the OTP response. Please try again.",
+        );
+      }
+      throw Exception(_extractErrorMessage(
+        res,
+        fallback: "OTP verification failed. Please check the code and try again.",
+      ));
+    } catch (e) {
+      throw Exception(ErrorFormatter.format(
+        e,
+        fallback: "OTP verification failed. Please try again.",
+      ));
+    }
   }
 
   static Future<void> logout(String username) async {
@@ -58,29 +161,58 @@ class ApiService {
   static Future<Map<String, dynamic>> resendOtp({
     required String username,
   }) async {
-    final res = await _client.post(
-      Uri.parse("$_baseUrl/resend-otp"),
-      body: {"username": username},
-    ).timeout(const Duration(seconds: 30));
-    return jsonDecode(res.body);
+    try {
+      final res = await _client.post(
+        Uri.parse("$_baseUrl/resend-otp"),
+        body: {"username": username},
+      ).timeout(const Duration(seconds: 30));
+      if (res.statusCode == 200) {
+        return _decodeJsonMap(
+          res,
+          fallback: "Could not resend OTP right now. Please try again.",
+        );
+      }
+      throw Exception(_extractErrorMessage(
+        res,
+        fallback: "Could not resend the OTP. Please wait a moment and try again.",
+      ));
+    } catch (e) {
+      throw Exception(ErrorFormatter.format(
+        e,
+        fallback: "Could not resend the OTP. Please try again.",
+      ));
+    }
   }
 
   // ─── Data ──────────────────────────────────────────────
 
   static Future<List> getSemesters(String username, {bool isRetry = false}) async {
-    final res = await _client.get(
-      Uri.parse("$_baseUrl/semesters?username=$username"),
-    ).timeout(const Duration(seconds: 60));
+    try {
+      final res = await _client.get(
+        Uri.parse("$_baseUrl/semesters?username=$username"),
+      ).timeout(const Duration(seconds: 60));
 
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body);
-      return data["semesters"] ?? [];
-    } else if (res.statusCode == 401 && !isRetry) {
-      await _ensureSession();
-      return getSemesters(username, isRetry: true);
-    } else {
-      final error = jsonDecode(res.body);
-      throw Exception(error["detail"] ?? "Failed to fetch semesters");
+      if (res.statusCode == 200) {
+        final data = _decodeJsonMap(
+          res,
+          fallback: "Unable to read your semester list from VTOP.",
+        );
+        return data["semesters"] ?? [];
+      } else if (res.statusCode == 401 && !isRetry) {
+        final ok = await _ensureSession();
+        if (ok) return getSemesters(username, isRetry: true);
+        throw Exception("Your VTOP session has expired. Please refresh or log out and log in again.");
+      } else {
+        throw Exception(_extractErrorMessage(
+          res,
+          fallback: "Unable to load semesters right now. Please try again.",
+        ));
+      }
+    } catch (e) {
+      throw Exception(ErrorFormatter.format(
+        e,
+        fallback: "Unable to load semesters right now. Please try again.",
+      ));
     }
   }
 
@@ -156,20 +288,17 @@ class ApiService {
         if (success) {
           return _backgroundRefresh(url, cacheKey, isSilent, onSync: onSync, isRetry: true);
         } else {
-          if (!isSilent) throw Exception("Session expired. Please log out and log in again.");
+          if (!isSilent) throw Exception("Your VTOP session has expired. Please log out and log in again.");
           return [];
         }
       } else {
-        if (!isSilent) throw Exception("Server returned error ${res.statusCode}: ${res.reasonPhrase}");
+        if (!isSilent) {
+          throw Exception(_extractErrorMessage(res));
+        }
       }
     } catch (e) {
       if (!isSilent) {
-        final errStr = e.toString().toLowerCase();
-        if (errStr.contains("socketexception") || errStr.contains("clientexception") || errStr.contains("network is unreachable") || errStr.contains("failed host lookup")) {
-           throw Exception("Network is slow or unreachable. Please check your internet connection.");
-        }
-        if (e is Exception) rethrow;
-        throw Exception("Connection error: $e");
+        throw Exception(ErrorFormatter.format(e));
       }
       print("Fetch error for $url: $e");
     }
@@ -257,20 +386,17 @@ class ApiService {
         if (success) {
           return _backgroundRefreshMap(url, cacheKey, isSilent, onSync: onSync, isRetry: true);
         } else {
-          if (!isSilent) throw Exception("Session expired. Please log out and log in again.");
+          if (!isSilent) throw Exception("Your VTOP session has expired. Please log out and log in again.");
           return {};
         }
       } else {
-        if (!isSilent) throw Exception("Server error ${res.statusCode}");
+        if (!isSilent) {
+          throw Exception(_extractErrorMessage(res));
+        }
       }
     } catch (e) {
       if (!isSilent) {
-        final errStr = e.toString().toLowerCase();
-        if (errStr.contains("socketexception") || errStr.contains("clientexception") || errStr.contains("network is unreachable") || errStr.contains("failed host lookup")) {
-           throw Exception("Network is slow or unreachable. Please check your internet connection.");
-        }
-        if (e is Exception) rethrow;
-        throw Exception("Connection error: $e");
+        throw Exception(ErrorFormatter.format(e));
       }
       print("Fetch error for $url: $e");
     }
@@ -314,20 +440,23 @@ class ApiService {
           if (success) {
             return fetchAndParse(isSilent: isSilent, isRetry: true);
           } else {
-            if (!isSilent) throw Exception("Session expired. Please log out and log in again.");
+            if (!isSilent) throw Exception("Your VTOP session has expired. Please log out and log in again.");
             return [];
           }
         } else {
-          if (!isSilent) throw Exception("Server returned error ${res.statusCode}");
+          if (!isSilent) {
+            throw Exception(_extractErrorMessage(
+              res,
+              fallback: "Could not load your attendance right now. Please try again.",
+            ));
+          }
         }
       } catch (e) {
         if (!isSilent) {
-          final errStr = e.toString().toLowerCase();
-          if (errStr.contains("socketexception") || errStr.contains("clientexception") || errStr.contains("network is unreachable") || errStr.contains("failed host lookup")) {
-            throw Exception("Network is slow or unreachable. Please check your internet connection.");
-          }
-          if (e is Exception) rethrow;
-          throw Exception("Connection error: $e");
+          throw Exception(ErrorFormatter.format(
+            e,
+            fallback: "Could not load your attendance right now. Please try again.",
+          ));
         }
         print("Fetch error for $url: $e");
       }
@@ -388,22 +517,32 @@ class ApiService {
         if (success) {
           final res2 = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 90));
           if (res2.statusCode == 200) {
-            final data = jsonDecode(res2.body);
-            final map = (data is Map && data.containsKey('capstone'))
+            final data = _decodeJsonMap(res2);
+            final map = (data.containsKey('capstone'))
                 ? Map<String, dynamic>.from(data['capstone'])
                 : Map<String, dynamic>.from(data);
             prefs.setString(cacheKey, jsonEncode(map));
             return map;
           }
+          throw Exception(_extractErrorMessage(
+            res2,
+            fallback: "Could not load capstone attendance right now.",
+          ));
         }
-        throw Exception("Session expired. Please log out and log in again.");
+        throw Exception("Your VTOP session has expired. Please log out and log in again.");
       }
-      throw Exception("Failed to fetch capstone attendance");
+      throw Exception(_extractErrorMessage(
+        res,
+        fallback: "Could not load capstone attendance right now.",
+      ));
     } catch (e) {
       if (cached != null) {
         try { return jsonDecode(cached) as Map<String, dynamic>; } catch (_) {}
       }
-      rethrow;
+      throw Exception(ErrorFormatter.format(
+        e,
+        fallback: "Could not load capstone attendance right now.",
+      ));
     }
   }
 
@@ -445,21 +584,31 @@ class ApiService {
         if (success) {
           final res2 = await _client.get(Uri.parse(url)).timeout(const Duration(seconds: 90));
           if (res2.statusCode == 200) {
-            final data = jsonDecode(res2.body);
+            final data = _decodeJsonMap(res2);
             final list = data["details"] ?? data["attendance_detail"] ?? [];
             prefs.setString(cacheKey, jsonEncode(list));
             return list;
           }
+          throw Exception(_extractErrorMessage(
+            res2,
+            fallback: "Could not load class-wise attendance details right now.",
+          ));
         }
-        throw Exception("Session expired. Please log out and log in again.");
+        throw Exception("Your VTOP session has expired. Please log out and log in again.");
       }
-      throw Exception("Failed to fetch attendance detail");
+      throw Exception(_extractErrorMessage(
+        res,
+        fallback: "Could not load class-wise attendance details right now.",
+      ));
     } catch (e) {
       // If fetch fails but we have cache, return it
       if (cached != null) {
         try { return jsonDecode(cached) as List; } catch (_) {}
       }
-      rethrow;
+      throw Exception(ErrorFormatter.format(
+        e,
+        fallback: "Could not load class-wise attendance details right now.",
+      ));
     }
   }
 
@@ -525,9 +674,9 @@ class ApiService {
     required String inDate,
     required String inTime,
   }) async {
-    final res = await _client.post(
-      Uri.parse("$_baseUrl/outing/apply/general"),
-      body: {
+    return _postFormWithRetry(
+      "/outing/apply/general",
+      {
         "username": username,
         "place": place,
         "purpose": purpose,
@@ -536,8 +685,9 @@ class ApiService {
         "inDate": inDate,
         "inTime": inTime,
       },
-    ).timeout(const Duration(seconds: 90));
-    return jsonDecode(res.body);
+      timeout: const Duration(seconds: 90),
+      fallback: "Could not submit your general outing request. Please check your connection and try again.",
+    );
   }
 
   static Future<Map<String, dynamic>> applyWeekendOuting({
@@ -548,9 +698,9 @@ class ApiService {
     required String outTime,
     required String contact,
   }) async {
-    final res = await _client.post(
-      Uri.parse("$_baseUrl/outing/apply/weekend"),
-      body: {
+    return _postFormWithRetry(
+      "/outing/apply/weekend",
+      {
         "username": username,
         "place": place,
         "purpose": purpose,
@@ -558,24 +708,27 @@ class ApiService {
         "outTime": outTime,
         "contact": contact,
       },
-    ).timeout(const Duration(seconds: 90));
-    return jsonDecode(res.body);
+      timeout: const Duration(seconds: 90),
+      fallback: "Could not submit your weekend outing request. Please check your connection and try again.",
+    );
   }
 
   static Future<Map<String, dynamic>> deleteGeneralOuting(String username, String leaveId) async {
-    final res = await _client.post(
-      Uri.parse("$_baseUrl/outing/delete/general"),
-      body: {"username": username, "leaveId": leaveId},
-    ).timeout(const Duration(seconds: 30));
-    return jsonDecode(res.body);
+    return _postFormWithRetry(
+      "/outing/delete/general",
+      {"username": username, "leaveId": leaveId},
+      timeout: const Duration(seconds: 45),
+      fallback: "Could not cancel this general outing right now. Please try again.",
+    );
   }
 
   static Future<Map<String, dynamic>> deleteWeekendOuting(String username, String bookingId) async {
-    final res = await _client.post(
-      Uri.parse("$_baseUrl/outing/delete/weekend"),
-      body: {"username": username, "bookingId": bookingId},
-    ).timeout(const Duration(seconds: 30));
-    return jsonDecode(res.body);
+    return _postFormWithRetry(
+      "/outing/delete/weekend",
+      {"username": username, "bookingId": bookingId},
+      timeout: const Duration(seconds: 45),
+      fallback: "Could not cancel this weekend outing right now. Please try again.",
+    );
   }
 
 
@@ -585,17 +738,31 @@ class ApiService {
     return _fetchListWithCache(url, 'courses_${username}_$semesterId', forceSync, onSync: onSync);
   }
 
-  static Future<List> searchFaculty(String username, String searchTerm) async {
+  static Future<List> searchFaculty(String username, String searchTerm, {bool isRetry = false}) async {
     // Search is dynamic, usually no cache or short cache
-    final res = await _client.get(
-      Uri.parse("$_baseUrl/faculty?username=$username&search_term=${Uri.encodeComponent(searchTerm)}"),
-    ).timeout(const Duration(seconds: 30));
-    
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body);
-      return data["faculty"] ?? [];
-    } else {
-      throw Exception("Failed to search faculty");
+    try {
+      final res = await _client.get(
+        Uri.parse("$_baseUrl/faculty?username=$username&search_term=${Uri.encodeComponent(searchTerm)}"),
+      ).timeout(const Duration(seconds: 30));
+
+      if (res.statusCode == 200) {
+        final data = _decodeJsonMap(res, fallback: "Could not read faculty search results.");
+        return data["faculty"] ?? [];
+      } else if (res.statusCode == 401 && !isRetry) {
+        final ok = await _ensureSession();
+        if (ok) return searchFaculty(username, searchTerm, isRetry: true);
+        throw Exception("Your VTOP session has expired. Please refresh or log out and log in again.");
+      } else {
+        throw Exception(_extractErrorMessage(
+          res,
+          fallback: "Could not search faculty right now. Please try again.",
+        ));
+      }
+    } catch (e) {
+      throw Exception(ErrorFormatter.format(
+        e,
+        fallback: "Could not search faculty right now. Please try again.",
+      ));
     }
   }
 
@@ -607,16 +774,30 @@ class ApiService {
     );
   }
 
-  static Future<Map<String, dynamic>> getFacultyDetails(String username, String empId) async {
-    final res = await _client.get(
-      Uri.parse("$_baseUrl/faculty/details?username=$username&emp_id=${Uri.encodeComponent(empId)}"),
-    ).timeout(const Duration(seconds: 30));
-    
-    if (res.statusCode == 200) {
-      final data = jsonDecode(res.body);
-      return data["details"] ?? {};
-    } else {
-      throw Exception("Failed to fetch faculty details");
+  static Future<Map<String, dynamic>> getFacultyDetails(String username, String empId, {bool isRetry = false}) async {
+    try {
+      final res = await _client.get(
+        Uri.parse("$_baseUrl/faculty/details?username=$username&emp_id=${Uri.encodeComponent(empId)}"),
+      ).timeout(const Duration(seconds: 30));
+
+      if (res.statusCode == 200) {
+        final data = _decodeJsonMap(res, fallback: "Could not read faculty details.");
+        return data["details"] ?? {};
+      } else if (res.statusCode == 401 && !isRetry) {
+        final ok = await _ensureSession();
+        if (ok) return getFacultyDetails(username, empId, isRetry: true);
+        throw Exception("Your VTOP session has expired. Please refresh or log out and log in again.");
+      } else {
+        throw Exception(_extractErrorMessage(
+          res,
+          fallback: "Could not load faculty details right now. Please try again.",
+        ));
+      }
+    } catch (e) {
+      throw Exception(ErrorFormatter.format(
+        e,
+        fallback: "Could not load faculty details right now. Please try again.",
+      ));
     }
   }
 
@@ -630,12 +811,28 @@ class ApiService {
     return _fetchListWithCache("$_baseUrl/payments?username=$username", 'payments_$username', forceSync, onSync: onSync);
   }
 
-  static Future<Map<String, dynamic>> getPaymentReceiptDetails(String username, String receiptId) async {
-    final response = await _client.get(Uri.parse("$_baseUrl/payments/receipt?username=$username&receipt_id=$receiptId"));
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      throw Exception('Failed to load payment receipt: ${response.statusCode}\nBody: ${response.body}');
+  static Future<Map<String, dynamic>> getPaymentReceiptDetails(String username, String receiptId, {bool isRetry = false}) async {
+    try {
+      final response = await _client
+          .get(Uri.parse("$_baseUrl/payments/receipt?username=$username&receipt_id=$receiptId"))
+          .timeout(const Duration(seconds: 45));
+      if (response.statusCode == 200) {
+        return _decodeJsonMap(response, fallback: "Could not read the payment receipt details.");
+      } else if (response.statusCode == 401 && !isRetry) {
+        final ok = await _ensureSession();
+        if (ok) return getPaymentReceiptDetails(username, receiptId, isRetry: true);
+        throw Exception("Your VTOP session has expired. Please refresh or log out and log in again.");
+      } else {
+        throw Exception(_extractErrorMessage(
+          response,
+          fallback: "Could not load this payment receipt right now. Please try again.",
+        ));
+      }
+    } catch (e) {
+      throw Exception(ErrorFormatter.format(
+        e,
+        fallback: "Could not load this payment receipt right now. Please try again.",
+      ));
     }
   }
 

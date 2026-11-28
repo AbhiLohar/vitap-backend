@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
 import '../services/api_service.dart';
 import '../services/avatar_service.dart';
+import '../services/error_formatter.dart';
 import 'avatar_picker_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   Map<String, dynamic>? profileData;
   bool isLoading = true;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -22,9 +24,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _fetchProfile();
   }
 
-  Future<void> _fetchProfile() async {
+  Future<void> _fetchProfile({bool forceSync = false}) async {
+    if (mounted) {
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
+    }
     try {
-      final data = await ApiService.getProfile(widget.username);
+      final data = await ApiService.getProfile(widget.username, forceSync: forceSync);
       if (mounted) {
         setState(() {
           profileData = data;
@@ -32,7 +40,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          errorMessage = ErrorFormatter.format(
+            e,
+            fallback: "Could not load your student profile right now. Please try again.",
+          );
+        });
+      }
     }
   }
 
@@ -69,7 +85,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : profileData == null || profileData!.isEmpty
-              ? Center(child: Text("Profile data not available", style: TextStyle(color: AppColors.textSecondary(context))))
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          errorMessage != null ? Icons.cloud_off_rounded : Icons.person_outline_rounded,
+                          size: 48,
+                          color: errorMessage != null ? Colors.redAccent : AppColors.textMuted(context),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          errorMessage ?? "Profile data not available",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 14, height: 1.4),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: () => _fetchProfile(forceSync: true),
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text("Try Again"),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   physics: const BouncingScrollPhysics(),
